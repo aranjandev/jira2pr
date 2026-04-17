@@ -6,8 +6,17 @@
 set -euo pipefail
 
 # Load unset vars from .env at repo root (if present)
+_env_file=""
 _repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -n "$_repo_root" && -f "$_repo_root/.env" ]]; then
+  _env_file="$_repo_root/.env"
+elif [[ -f .env ]]; then
+  _env_file=".env"
+elif [[ -f "$HOME/.jira2pr.env" ]]; then
+  _env_file="$HOME/.jira2pr.env"
+fi
+
+if [[ -n "$_env_file" ]]; then
   while IFS='=' read -r _k _v; do
     [[ -z "$_k" || "$_k" =~ ^[[:space:]]*# ]] && continue
     [[ "$_k" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
@@ -15,9 +24,9 @@ if [[ -n "$_repo_root" && -f "$_repo_root/.env" ]]; then
       _v="${_v#[\"']}" ; _v="${_v%[\"']}"
       export "${_k}=${_v}"
     fi
-  done < <(grep -E '^[^#].*=' "$_repo_root/.env" 2>/dev/null || true)
+  done < <(grep -E '^[^#].*=' "$_env_file" 2>/dev/null || true)
 fi
-unset _repo_root _k _v 2>/dev/null || true
+unset _repo_root _env_file _k _v 2>/dev/null || true
 
 usage() {
   echo "Usage: $0 <TICKET_KEY_OR_URL>"
@@ -109,18 +118,18 @@ echo "$HTTP_BODY" | jq '{
     if .fields.description then
       [.fields.description.content[]? |
         if .type == "paragraph" then
-          [.content[]?.text] | join("")
+          [.content[]?.text | select(type == "string")] | join("")
         elif .type == "heading" then
-          "\n## " + ([.content[]?.text] | join(""))
+          "\n## " + ([.content[]?.text | select(type == "string")] | join(""))
         elif .type == "bulletList" then
-          [.content[]? | "- " + ([.content[]?.content[]?.text] | join(""))] | join("\n")
+          [.content[]? | "- " + ([.content[]?.content[]?.text | select(type == "string")] | join(""))] | join("\n")
         elif .type == "orderedList" then
-          [.content[]? | [.content[]?.content[]?.text] | join("")] |
+          [.content[]? | [.content[]?.content[]?.text | select(type == "string")] | join("")] |
           to_entries | map("\(.key + 1). \(.value)") | join("\n")
         elif .type == "codeBlock" then
-          "```\n" + ([.content[]?.text] | join("")) + "\n```"
+          "```\n" + ([.content[]?.text | select(type == "string")] | join("")) + "\n```"
         else
-          [.content[]?.text // ""] | join("")
+          [.content[]?.text | select(type == "string")] | join("")
         end
       ] | join("\n")
     else
@@ -133,10 +142,10 @@ echo "$HTTP_BODY" | jq '{
     elif .fields.description then
       [.fields.description.content[]? |
         select(
-          (.type == "heading" and (.content[]?.text | test("acceptance|criteria|done|definition"; "i")))
+          (.type == "heading" and any(.content[]?.text; type == "string" and test("acceptance|criteria|done|definition"; "i")))
           or
-          (.type == "paragraph" and (.content[]?.text | test("acceptance|criteria|given|when|then"; "i")))
-        ) | [.content[]?.text] | join("")
+          (.type == "paragraph" and any(.content[]?.text; type == "string" and test("acceptance|criteria|given|when|then"; "i")))
+        ) | [.content[]?.text | select(type == "string")] | join("")
       ] | join("\n")
     else
       null

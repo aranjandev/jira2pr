@@ -1,84 +1,85 @@
 ---
 name: create-pull-request
-description: 'Creates a GitHub Pull Request with a structured description linking back to the JIRA ticket. Handles title formatting, body generation, labels, and draft mode. Use when ready to submit changes as a PR.'
-argument-hint: 'PR details (title, JIRA key, draft flag)'
+description: 'Creates a draft Pull Request using the canonical PR state schema from pr-description.instructions.md. Populates all initial blocks (Status, Links, Intent, Plan, Phase Log) and returns PR URL + PR number. Use when plan is approved and the orchestrator needs to create the initial draft PR.'
+argument-hint: 'PR details (title, JIRA key, ticket data for Intent/Plan)'
 ---
 
 # Create Pull Request
 
-Creates a well-structured GitHub PR that links to the JIRA ticket and clearly communicates what changed, why, and how.
+Creates an initial **draft** Pull Request using the canonical PR state document schema. The PR body is a live state document that will be updated at each workflow phase transition.
 
 ## When to Use
 
-- Changes are committed and pushed to a feature/bugfix branch
-- Ready to submit work for review
-- Asked to "create PR", "open pull request", "submit changes"
+- Plan phase is complete and approved by the user
+- Orchestrator is ready to record the plan as a draft PR
+- **NOT** for final submission — use the `update-pull-request` skill with `--undraft` for that
+
+## Primary Caller
+
+**orchestrator** — this skill is called directly by the orchestrator during the Plan phase, not by the pr-author agent.
 
 ## Prerequisites
 
-- `gh` CLI installed and authenticated (`gh auth login`)
-- Changes already committed and pushed to a remote branch
-- On the feature/bugfix branch (not main/master)
+- `curl`, `git`, `jq` installed
+- `GITHUB_TOKEN` or `BITBUCKET_TOKEN` set
+- On a feature/bugfix branch (not main/master)
+- Branch pushed to origin
+- Plan data available: ticket key, summary, intent, tasks, test strategy, risks
 
 ## Procedure
 
 1. **Verify readiness:**
    ```bash
-   # Ensure all changes are committed
    git status
-   # Ensure branch is pushed
-   git log --oneline origin/<branch>..<branch> 2>/dev/null
+   git log --oneline origin/$(git branch --show-current)..$(git branch --show-current) 2>/dev/null
    ```
+   Confirm on a feature/bugfix branch and branch is pushed.
 
-2. **Generate the PR title:**
+2. **Read the PR body template** from `.github/instructions/pr-description.instructions.md` — use the section below the `# PR Body Template` heading as the skeleton.
+
+3. **Populate the template blocks:**
+
+   | Block | Content |
+   |-------|---------|
+   | `PR_BLOCK:STATUS` | Phase: `Planning`, Draft: `true`, Last Updated: now (ISO 8601), Updated By: `orchestrator` |
+   | `PR_BLOCK:LINKS` | JIRA: ticket URL, Branch: current branch name, Design/Docs: from ticket or `N/A` |
+   | `PR_BLOCK:INTENT` | Problem, Desired Outcome, Non-Goals, Constraints — from JIRA ticket requirements |
+   | `PR_BLOCK:PLAN` | Tasks (with stable IDs T1, T2, ...), Test Strategy, Risks & Mitigations — from approved plan |
+   | `PR_BLOCK:PHASE_LOG` | First entry: current timestamp, `Planning`, `orchestrator`, "Draft PR created from approved plan" |
+   | `PR_BLOCK:REVIEW_SUMMARY` | Leave default placeholder (`Risk Level: —`) |
+   | `PR_BLOCK:DECISIONS_LOG` | Leave empty (commented template only) |
+   | `PR_BLOCK:OPEN_QUESTIONS` | Populate from ticket if any, otherwise leave empty |
+   | `PR_BLOCK:AGENT_NOTES` | Leave empty |
+
+   Replace `<TICKET_KEY>` in the title heading with the actual ticket key and a short descriptive title.
+
+4. **Generate the PR title:**
    - Format: `<type>(<scope>): <short description> [<TICKET_KEY>]`
    - Example: `feat(auth): add JWT token validation [PROJ-123]`
-   - The title should match the primary commit's conventional commit prefix
+   - The type should match the branch prefix (`feat/` → `feat`, `fix/` → `fix`)
 
-3. **Generate the PR body** using this template:
-   ```markdown
-   ## What
-   <!-- One-paragraph summary of the changes -->
-
-   ## Why
-   <!-- Link to JIRA ticket and explain the motivation -->
-   JIRA: <JIRA_URL>
-
-   ## How
-   <!-- Technical approach — key decisions, patterns used, tradeoffs -->
-
-   ## Testing
-   <!-- How the changes were tested — commands run, scenarios covered -->
-
-   ## Checklist
-   - [ ] Tests pass locally
-   - [ ] No new warnings or lint errors
-   - [ ] Self-reviewed the diff
-   - [ ] Acceptance criteria from ticket addressed
-   ```
-
-4. **Create the PR** using the script:
-   ```bash
-   ./.github/skills/create-pull-request/scripts/create_pr.sh \
-     --title "<PR_TITLE>" \
-     --body "<PR_BODY>" \
-     --labels "<label1,label2>" \
-     --draft
-   ```
-   Reference: [create_pr.sh](./scripts/create_pr.sh)
-
-   Or write the body to a temp file for complex content:
+5. **Write body to a temp file and create the PR:**
    ```bash
    cat > /tmp/pr_body.md << 'BODY'
-   <PR body content>
+   <populated PR body>
    BODY
-   ./.github/skills/create-pull-request/scripts/create_pr.sh \
+
+   ./.github/skills/create-pull-request/scripts/pr_helper.sh create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \
-     --labels "<labels>"
+     --draft \
+     --labels "<label1,label2>"
    ```
+   Reference: [pr_helper.sh](./scripts/pr_helper.sh)
 
-5. **Label conventions:**
+6. **Capture output:** The script prints two lines:
+   ```
+   PR_URL=https://github.com/owner/repo/pull/42
+   PR_NUMBER=42
+   ```
+   **Both values must be returned** to the orchestrator — the PR number is required for all subsequent `update-pull-request` calls.
+
+7. **Label conventions:**
    | Label | When |
    |-------|------|
    | `feature` | New feature |
@@ -86,17 +87,17 @@ Creates a well-structured GitHub PR that links to the JIRA ticket and clearly co
    | `refactor` | Code restructuring |
    | `dependencies` | Dependency updates |
 
-6. **Use `--draft`** when:
-   - Changes are not fully complete
-   - Seeking early feedback
-   - CI needs to pass first
+## Output Contract
 
-7. **Output:** The script prints the PR URL. Report this URL back to the user.
+The skill **must** return to the caller:
+- `PR_URL` — for user-facing reporting
+- `PR_NUMBER` — for subsequent update calls throughout the workflow
 
 ## Important
 
-- Always link the JIRA ticket in the PR body
-- The PR body should be readable by someone who hasn't seen the ticket
+- Always create as `--draft` — the PR is not ready for review at this point
+- Always link the JIRA ticket in the Links block
 - Include the ticket key in the PR title for automatic JIRA linking
 - Use `--dry-run` first if uncertain about the PR content
 - Never create a PR against main/master from main/master
+- The PR body must contain all `PR_BLOCK:*:BEGIN/END` boundary markers — downstream updates depend on them
