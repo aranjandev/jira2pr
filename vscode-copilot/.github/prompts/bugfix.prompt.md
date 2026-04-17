@@ -1,13 +1,15 @@
 ---
-description: "Bugfix workflow from a JIRA ticket to a submitted PR. Reads the bug ticket, reproduces the issue, identifies root cause, implements the fix with a regression test, and creates a Pull Request."
+description: "Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link. Reads the bug ticket (or PR state), reproduces the issue, identifies root cause, implements the fix with a regression test, and submits a Pull Request."
 agent: "orchestrator"
-argument-hint: "JIRA bug ticket URL or key (e.g., PROJ-456)"
+argument-hint: "JIRA bug ticket URL/key (e.g., PROJ-456) or PR URL/number (e.g., #42) to resume"
 ---
 
 # Bugfix Workflow
 
-Fix a bug end-to-end from a JIRA ticket.
+Fix a bug end-to-end, or resume a bugfix that was interrupted.
 
-Follow the canonical workflow defined in `workflows/bugfix.md`.
+Follow the canonical workflow defined in `workflows/bugfix.md`, starting from **Phase 0: Bootstrap**.
 
-Begin by asking for the JIRA ticket if not provided in the prompt.
+- If a **JIRA ticket** is provided: fresh start from Phase 1.
+- If a **PR link or number** is provided: fetch the PR state document, determine the current phase, and resume from the next phase.
+- If **neither** is provided: ask the user for a JIRA ticket key/URL or a PR link/number.
