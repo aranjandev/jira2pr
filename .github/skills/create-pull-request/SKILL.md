@@ -20,7 +20,8 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
 ## Prerequisites
 
-- `curl`, `git`, `jq` installed
+- Python 3.9+ available (`python3 --version`)
+- `git` installed
 - `GITHUB_TOKEN` or `BITBUCKET_TOKEN` set
 - On a feature/bugfix branch (not main/master)
 - Branch pushed to origin
@@ -60,17 +61,13 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
 5. **Write body to a temp file and create the PR:**
    ```bash
-   cat > /tmp/pr_body.md << 'BODY'
-   <populated PR body>
-   BODY
-
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh create \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \
      --draft \
      --labels "<label1,label2>"
    ```
-   Reference: [pr_helper.sh](./scripts/pr_helper.sh)
+   Reference: [pr_helper.py](./scripts/pr_helper.py)
 
 6. **Capture output:** The script prints two lines:
    ```

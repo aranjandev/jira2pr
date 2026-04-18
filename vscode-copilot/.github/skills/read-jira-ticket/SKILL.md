@@ -25,9 +25,9 @@ The following environment variables must be set:
 
 1. **Run the fetch script** to retrieve the ticket:
    ```bash
-   ./.github/skills/read-jira-ticket/scripts/fetch_jira.sh <TICKET_KEY_OR_URL>
+   python3 ./.github/skills/read-jira-ticket/scripts/fetch_jira.py <TICKET_KEY_OR_URL>
    ```
-   Reference: [fetch_jira.sh](./scripts/fetch_jira.sh)
+   Reference: [fetch_jira.py](./scripts/fetch_jira.py)
 
 2. **Parse the JSON output** and extract these sections:
 
@@ -67,6 +67,7 @@ The following environment variables must be set:
 
 4. **If the script fails:**
    - Check that env vars are set (`echo $JIRA_BASE_URL`, etc.)
+   - Verify Python 3 is available (`python3 --version`)
    - Verify the ticket key format (must be `PROJ-123` pattern)
    - Report the error clearly — do not fabricate ticket contents
 

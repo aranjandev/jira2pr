@@ -25,9 +25,9 @@ The following environment variables must be set:
 
 1. **Run the fetch script** to retrieve the ticket:
    ```bash
-   ./.github/skills/read-jira-ticket/scripts/fetch_jira.sh <TICKET_KEY_OR_URL>
+   python3 ./.github/skills/read-jira-ticket/scripts/fetch_jira.py <TICKET_KEY_OR_URL>
    ```
-   Reference: [fetch_jira.sh](./scripts/fetch_jira.sh)
+   Reference: [fetch_jira.py](./scripts/fetch_jira.py)
 
 2. **Parse the JSON output** and extract these sections:
 

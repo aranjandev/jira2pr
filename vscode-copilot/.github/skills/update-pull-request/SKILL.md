@@ -26,7 +26,8 @@ Updates the body of an existing draft PR at workflow phase transitions. Operates
 ## Prerequisites
 
 - Draft PR already exists with a known PR number
-- `curl`, `git`, `jq` installed
+- Python 3.9+ available (`python3 --version`)
+- `git` installed
 - `GITHUB_TOKEN` or `BITBUCKET_TOKEN` set
 - PR body contains all `PR_BLOCK:*:BEGIN/END` boundary markers
 
@@ -51,7 +52,7 @@ The caller must provide:
 ### Step 1: Fetch current PR body
 
 ```bash
-./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body \
+python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
   --pr-number <PR_NUMBER> > /tmp/pr_current_body.md
 ```
 
@@ -130,20 +131,15 @@ If not a duplicate, append a new entry:
 ### Step 5: Write updated body and push
 
 ```bash
-# Write the modified body to a temp file
-cat > /tmp/pr_updated_body.md << 'BODY'
-<updated PR body>
-BODY
-
-# Update the PR
-./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+# Write the modified body to a temp file, then update the PR
+python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
   --pr-number <PR_NUMBER> \
   --body-file /tmp/pr_updated_body.md
 ```
 
 If entering `Ready` phase (finalization):
 ```bash
-./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
   --pr-number <PR_NUMBER> \
   --body-file /tmp/pr_updated_body.md \
   --undraft
@@ -151,7 +147,7 @@ If entering `Ready` phase (finalization):
 
 If updating the title at finalization:
 ```bash
-./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
   --pr-number <PR_NUMBER> \
   --body-file /tmp/pr_updated_body.md \
   --title "<final title>" \
@@ -184,7 +180,7 @@ These rules are defined in detail in `pr-description.instructions.md`. The key p
 ## Important
 
 - Always use `fetch-body` to get the latest PR body before editing — never edit from a stale copy
-- The `pr_helper.sh` script lives at `.github/skills/create-pull-request/scripts/pr_helper.sh`
+- The `pr_helper.py` script lives at `.github/skills/create-pull-request/scripts/pr_helper.py`
 - Preserve all content outside boundary markers — human reviewers may have added comments
 - At finalization, the pr-author may remove the `Agent Notes` section if empty
-- Use `--dry-run` on `pr_helper.sh update` to preview changes before applying
+- Use `--dry-run` on `pr_helper.py update` to preview changes before applying

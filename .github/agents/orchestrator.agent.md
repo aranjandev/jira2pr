@@ -39,7 +39,7 @@ When the input is a PR link or number:
 1. **Extract the PR number** from the input.
 2. **Fetch the PR body:**
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body --pr-number <N>
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body --pr-number <N>
    ```
 3. **Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, this is not an agent-managed PR — report and stop.
 4. **Parse the PR state:**
@@ -55,12 +55,12 @@ When the input is a PR link or number:
 
 ## Workflows
 
-Workflow definitions live in `.github/workflows/`. Read the appropriate workflow file and follow it step-by-step. Every workflow begins with **Phase 0: Bootstrap** which handles both FRESH and RESUME modes.
+Workflow definitions live in `.github/agent-workflows/`. Read the appropriate workflow file and follow it step-by-step. Every workflow begins with **Phase 0: Bootstrap** which handles both FRESH and RESUME modes.
 
-| Ticket type | Workflow file                  |
-|-------------|-------------------------------|
-| Feature     | `workflows/feature.md`        |
-| Bug / Defect| `workflows/bugfix.md`         |
+| Ticket type | Workflow file                        |
+|-------------|-------------------------------------|
+| Feature     | `agent-workflows/feature.md`        |
+| Bug / Defect| `agent-workflows/bugfix.md`         |
 
 > **Review** is a standalone workflow handled by the `reviewer` agent directly — it does not go through the orchestrator.
 
