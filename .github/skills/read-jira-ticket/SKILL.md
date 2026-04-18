@@ -67,6 +67,7 @@ The following environment variables must be set:
 
 4. **If the script fails:**
    - Check that env vars are set (`echo $JIRA_BASE_URL`, etc.)
+   - Verify Python 3 is available (`python3 --version`)
    - Verify the ticket key format (must be `PROJ-123` pattern)
    - Report the error clearly — do not fabricate ticket contents
 
