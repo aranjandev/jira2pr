@@ -1,6 +1,6 @@
 ---
 name: create-pull-request
-description: 'Creates a draft Pull Request using the canonical PR state schema from pr-description.instructions.md. Populates all initial blocks (Status, Links, Intent, Plan, Phase Log) and returns PR URL + PR number. Use when plan is approved and the orchestrator needs to create the initial draft PR.'
+description: 'Creates a draft Pull Request using the canonical PR state schema from pr-description.instructions.md. Populates all initial blocks (Status, Links, Intent, Plan, Phase Log) and returns PR URL + PR number. Use after the feature/bugfix branch has been created and pushed, immediately before entering implementation.'
 argument-hint: 'PR details (title, JIRA key, ticket data for Intent/Plan)'
 ---
 
@@ -10,13 +10,13 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
 ## When to Use
 
-- Plan phase is complete and approved by the user
-- Orchestrator is ready to record the plan as a draft PR
+- Branch has been created and pushed to origin
+- Orchestrator is ready to open a draft PR to track the implementation
 - **NOT** for final submission — use the `update-pull-request` skill with `--undraft` for that
 
 ## Primary Caller
 
-**orchestrator** — this skill is called directly by the orchestrator during the Plan phase, not by the pr-author agent.
+**orchestrator** — this skill is called directly by the orchestrator during the Branch phase (after `git-operations`), not by the pr-author agent.
 
 ## Prerequisites
 
@@ -42,11 +42,11 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
    | Block | Content |
    |-------|---------|
-   | `PR_BLOCK:STATUS` | Phase: `Planning`, Draft: `true`, Last Updated: now (ISO 8601), Updated By: `orchestrator` |
-   | `PR_BLOCK:LINKS` | JIRA: ticket URL, Branch: current branch name, Design/Docs: from ticket or `N/A` |
+   | `PR_BLOCK:STATUS` | Phase: `Implementing`, Draft: `true`, Last Updated: now (ISO 8601), Updated By: `orchestrator` |
+   | `PR_BLOCK:LINKS` | JIRA: ticket URL, Branch: current branch name (already created), Design/Docs: from ticket or `N/A` |
    | `PR_BLOCK:INTENT` | Problem, Desired Outcome, Non-Goals, Constraints — from JIRA ticket requirements |
    | `PR_BLOCK:PLAN` | Tasks (with stable IDs T1, T2, ...), Test Strategy, Risks & Mitigations — from approved plan |
-   | `PR_BLOCK:PHASE_LOG` | First entry: current timestamp, `Planning`, `orchestrator`, "Draft PR created from approved plan" |
+   | `PR_BLOCK:PHASE_LOG` | First entry: current timestamp, `Implementing`, `orchestrator`, "Branch created, draft PR created, entering implementation" |
    | `PR_BLOCK:REVIEW_SUMMARY` | Leave default placeholder (`Risk Level: —`) |
    | `PR_BLOCK:DECISIONS_LOG` | Leave empty (commented template only) |
    | `PR_BLOCK:OPEN_QUESTIONS` | Populate from ticket if any, otherwise leave empty |
