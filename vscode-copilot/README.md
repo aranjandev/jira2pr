@@ -1,69 +1,59 @@
-# AI Coder Helpers — VSCode + Copilot Setup
+# jira2pr Template for VS Code + GitHub Copilot
 
-A template for setting up VS Code Copilot agents that can perform end-to-end feature development: read a JIRA ticket, plan, implement, review, and submit a Pull Request.
+This folder contains a complete, copy-ready configuration for running an end-to-end JIRA-to-PR workflow in VS Code with Copilot agents.
 
-## How It Works
+The key design goal is durability: Pull Requests are used as a live workflow state document so work can resume after interruptions.
+
+## Workflow Overview
 
 ```
-User runs /feature PROJ-123
-        │
-        ▼
-┌─────────────────┐
-│  Orchestrator    │ (Tier-2: Claude Sonnet)
-│  agent           │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         │
-┌────────┐    │
-│ JIRA   │    │  1. Read ticket → structured requirements
-│ Reader │    │     (Tier-0: GPT-4o mini)
-└────┬───┘    │
-     │        │
-     ▼        │
- [Plan &      │  2. Create branch, plan implementation,
-  Implement]  │     write code, run tests
-              │
-    ┌─────────┘
-    ▼
-┌────────┐
-│Reviewer│       3. Analyze changes for risks & quality
-│        │          (Tier-3: Claude Opus)
-└────┬───┘
-     │
-     ▼
-┌────────┐
-│  PR    │       4. Commit, push, create Pull Request
-│ Author │          (Tier-1: Claude Haiku)
-└────────┘
+/feature KAN-123
+   -> Orchestrator
+   -> JIRA Reader (requirements)
+   -> Plan + draft PR state document
+   -> Branch + implementation
+   -> Reviewer (risk analysis)
+   -> PR Author (commit/push/finalize)
 ```
+
+### Resume Behavior (Core Capability)
+
+The `/feature` prompt supports two entry modes:
+
+- Fresh start: `/feature PROJ-123` or `/feature https://.../browse/PROJ-123`
+- Resume run: `/feature <PR-URL-or-number>`
+
+When resuming, the orchestrator:
+
+1. Fetches PR body content.
+2. Validates canonical `PR_BLOCK:*:BEGIN/END` markers.
+3. Reads the current `Status` phase (`Planning`, `Implementing`, `Reviewing`, `Ready`).
+4. Continues from the next workflow step.
+5. Appends a resume event to `Phase Log` when appropriate.
+
+This prevents lost progress across terminal crashes, model timeouts, or interrupted sessions.
 
 ## Prerequisites
 
-- **VS Code** with GitHub Copilot extension
-- **GitHub CLI** (`gh`) — [Install](https://cli.github.com)
-  ```bash
-  gh auth login
-  ```
-- **curl** and **jq** — for JIRA API calls and JSON processing
-  ```bash
-  brew install jq  # macOS
-  ```
+- VS Code with GitHub Copilot Chat
+- GitHub CLI (`gh`) authenticated for your repository
+- `curl` and `jq`
+
+```bash
+gh auth login
+brew install jq
+```
 
 ## Setup
 
-### 1. Copy into your project
-
-Copy the `.github/` directory and `.env.example` from `vscode-copilot/` into your project root:
+### 1. Copy Template Files
 
 ```bash
 cp -r vscode-copilot/.github /path/to/your/project/
 cp vscode-copilot/.env.example /path/to/your/project/.env
 ```
 
-### 2. Set environment variables
-
-Edit the `.env` file you just copied and fill in your values:
+### 2. Configure Environment Variables
 
 ```bash
 JIRA_BASE_URL=https://yourcompany.atlassian.net
@@ -72,132 +62,128 @@ JIRA_API_TOKEN=your-jira-api-token
 GITHUB_TOKEN=your-github-token
 ```
 
-Then add `.env` to your project's `.gitignore`:
+Add `.env` to `.gitignore`:
 
 ```bash
 echo '.env' >> .gitignore
 ```
 
-> **Get a JIRA API token:** [Atlassian Account → Security → API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
->
-> **Get a GitHub token:** Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) with *Pull requests: Read & Write* on your repo, or run `gh auth login` to use the GitHub CLI instead.
+### 3. Customize Instructions
 
-### 3. Customize project instructions
+Update `.github/copilot-instructions.md` and replace all `<!-- CUSTOMIZE -->` sections with project-specific details:
 
-Edit `.github/copilot-instructions.md` — fill in all `<!-- CUSTOMIZE -->` sections with your project's:
-- Language and framework
-- Architecture overview
-- Build, test, and lint commands
-- Coding conventions
+- architecture
+- coding conventions
+- build, test, lint commands
+- environment constraints
 
-### 4. Customize coding standards
+### 4. Customize Coding Standards
 
-Edit `.github/instructions/coding-standards.instructions.md`:
-- Adjust the `applyTo` glob to match your project's languages
-- Fill in naming conventions, patterns, and anti-patterns
+Update `.github/instructions/coding-standards.instructions.md`:
 
-### 5. Adjust model tiers (optional)
+- adjust `applyTo` globs to match your languages
+- define naming, testing, and error-handling conventions
 
-Edit `.github/model-tiers.json` to change which models are assigned to each tier:
+### 5. Optional: Adjust Model Tiers
 
-```json
-{
-  "tiers": {
-    "0": { "model": "GPT-4o mini (copilot)", "description": "Cheapest" },
-    "1": { "model": "Claude Haiku 3.5 (copilot)", "description": "Light" },
-    "2": { "model": "Claude Sonnet 4 (copilot)", "description": "Strong" },
-    "3": { "model": "Claude Opus 4 (copilot)", "description": "Highest" }
-  }
-}
-```
+Edit `.github/model-tiers.json` and re-apply:
 
-Then apply:
 ```bash
 ./.github/scripts/apply_model_tiers.sh
 ```
 
 ## Usage
 
-### Feature development
-In VS Code Copilot Chat, type:
-```
+### Feature Workflow
+
+```text
 /feature PROJ-123
 ```
+
 or
-```
+
+```text
 /feature https://yourcompany.atlassian.net/browse/PROJ-123
 ```
 
-### Bug fix
+Resume an interrupted feature by PR:
+
+```text
+/feature https://github.com/owner/repo/pull/42
 ```
+
+or
+
+```text
+/feature 42
+```
+
+### Bugfix Workflow
+
+```text
 /bugfix PROJ-456
 ```
 
-### Code review (current changes)
-```
+### Review Current Changes
+
+```text
 /review
 ```
 
-### Use agents directly
-Select an agent from the Copilot agent picker:
-- **Orchestrator** — full end-to-end workflow
-- **JIRA Reader** — just read and interpret a ticket
-- **Reviewer** — just review current changes
-- **PR Author** — just commit, push, and create a PR
-
-## Directory Structure
+## Canonical Structure
 
 ```
 .github/
-├── copilot-instructions.md          # Project-wide AI instructions
-├── model-tiers.json                 # Tier → model mapping
+├── copilot-instructions.md
+├── model-tiers.json
 ├── scripts/
-│   └── apply_model_tiers.sh         # Patches agent model fields
+│   └── apply_model_tiers.sh
 ├── agents/
-│   ├── orchestrator.agent.md        # Tier-2 — end-to-end workflow
-│   ├── jira-reader.agent.md         # Tier-0 — ticket parsing
-│   ├── reviewer.agent.md            # Tier-3 — code review (read-only)
-│   └── pr-author.agent.md          # Tier-1 — commit & PR creation
+│   ├── orchestrator.agent.md
+│   ├── jira-reader.agent.md
+│   ├── reviewer.agent.md
+│   ├── pr-author.agent.md
+│   └── explorer.agent.md
 ├── skills/
-│   ├── read-jira-ticket/            # JIRA API integration
-│   ├── git-operations/              # Branch, commit, push
-│   ├── create-pull-request/         # GitHub PR creation
-│   ├── summarize-changes/           # Diff analysis
-│   └── identify-risks/              # Risk assessment
+│   ├── read-jira-ticket/
+│   ├── git-operations/
+│   ├── create-pull-request/
+│   ├── update-pull-request/
+│   ├── summarize-changes/
+│   └── identify-risks/
 ├── prompts/
-│   ├── feature.prompt.md            # /feature slash command
-│   ├── bugfix.prompt.md             # /bugfix slash command
-│   └── review.prompt.md             # /review slash command
-└── instructions/
-    ├── coding-standards.instructions.md
-    └── commit-conventions.instructions.md
+│   ├── feature.prompt.md
+│   ├── bugfix.prompt.md
+│   └── review.prompt.md
+├── instructions/
+│   ├── coding-standards.instructions.md
+│   ├── commit-conventions.instructions.md
+│   └── pr-description.instructions.md
+└── workflows/
+    ├── feature.md
+    └── bugfix.md
 ```
 
-## Model Tiers
+## PR State Document Summary
 
-Agents are assigned model tiers based on task complexity:
+The canonical PR body uses bounded blocks that support safe machine updates:
 
-| Tier | Default Model | Used By | Rationale |
-|------|--------------|---------|-----------|
-| 0 | GPT-4o mini | JIRA Reader | Simple extraction & formatting |
-| 1 | Claude Haiku 3.5 | PR Author | Templated, formulaic output |
-| 2 | Claude Sonnet 4 | Orchestrator | Planning & code generation |
-| 3 | Claude Opus 4 | Reviewer | Deep analysis & reasoning |
+- `Status` and `Links`: mutable blocks replaced per phase
+- `Intent`: immutable after plan approval (scope changes require a Decisions Log entry)
+- `Phase Log` and `Decisions Log`: append-only history
+- `Review Summary`: populated after self-review
 
-To change models, edit `model-tiers.json` and run `apply_model_tiers.sh`. Agent files contain `<!-- tier: N -->` comments that the script uses to determine which model to assign.
+Because updates are block-scoped and idempotent, retries and resume operations remain safe.
 
-## Customization Guide
+## Model Tiers (Default)
 
-| What | Where | When |
-|------|-------|------|
-| Project conventions | `copilot-instructions.md` | Always customize first |
-| Language-specific rules | `coding-standards.instructions.md` | Adjust `applyTo` glob + rules |
-| Commit format | `commit-conventions.instructions.md` | If you use a different convention |
-| Model choices | `model-tiers.json` + `apply_model_tiers.sh` | To swap models or save costs |
-| JIRA field mapping | `skills/read-jira-ticket/scripts/fetch_jira.sh` | If custom fields differ |
-| Branch naming | `skills/git-operations/scripts/git_helper.sh` | If you use different conventions |
-| PR template | `skills/create-pull-request/SKILL.md` | To match your team's PR format |
+| Tier | Typical Agent | Purpose |
+|------|---------------|---------|
+| 0 | JIRA Reader | extraction and structuring |
+| 1 | PR Author | commit/push/finalization |
+| 2 | Orchestrator | planning and implementation |
+| 3 | Reviewer | deep quality/risk analysis |
 
 ## License
 
-Apache License 2.0 — see [LICENSE](../LICENSE).
+Apache License 2.0. See [LICENSE](../LICENSE).

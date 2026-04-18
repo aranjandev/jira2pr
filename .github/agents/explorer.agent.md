@@ -2,7 +2,7 @@
 description: "Lightweight research agent for technical investigation. Searches the web, evaluates packages/libraries, compares algorithms, and summarizes API documentation. Use this agent when implementation requires researching unfamiliar domains, choosing between libraries, or understanding external APIs before planning."
 name: "Explore"
 tools: [read, search, fetch]
-model: "GPT-4o mini (copilot)"
+model: "Claude Haiku 3.5 (copilot)"
 argument-hint: "Research query, e.g., 'best Python library for streaming second-order statistics'"
 user-invocable: true
 ---
