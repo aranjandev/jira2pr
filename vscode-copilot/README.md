@@ -1,11 +1,11 @@
-# AI Coder Helpers — VSCode + Copilot Setup
+# jira2pr — VS Code + Copilot Setup
 
-A template for setting up VS Code Copilot agents that can perform end-to-end feature development: read a JIRA ticket, plan, implement, review, and submit a Pull Request.
+A template for setting up VS Code Copilot agents that can perform end-to-end feature development: read a JIRA ticket, plan, implement, self-review, and submit a Pull Request.
 
 ## How It Works
 
 ```
-User runs /feature PROJ-123
+User runs /feature PROJ-123  (or /feature <PR-URL> to resume)
         │
         ▼
 ┌─────────────────┐
@@ -21,22 +21,40 @@ User runs /feature PROJ-123
 └────┬───┘    │
      │        │
      ▼        │
- [Plan &      │  2. Create branch, plan implementation,
-  Implement]  │     write code, run tests
+ [Plan &      │  2. Approve plan → draft PR created as live
+  Draft PR]   │     state document (Status: Planning)
+              │
+    ┌─────────┘
+    ▼
+ [Branch &    │  3. Create branch → PR updated
+  Implement]  │     (Status: Implementing)
               │
     ┌─────────┘
     ▼
 ┌────────┐
-│Reviewer│       3. Analyze changes for risks & quality
+│Reviewer│       4. Analyze changes for risks & quality
 │        │          (Tier-3: Claude Opus)
-└────┬───┘
+└────┬───┘           PR updated (Status: Reviewing)
      │
      ▼
 ┌────────┐
-│  PR    │       4. Commit, push, create Pull Request
+│  PR    │       5. Commit, push, mark PR ready for review
 │ Author │          (Tier-1: Claude Haiku)
-└────────┘
+└────────┘           PR finalized (Status: Ready)
 ```
+
+### PR as Live State Document
+
+A key feature of this workflow is that the **PR body is a live state document**, not just a description. After the plan is approved, a draft PR is created immediately. The PR body is divided into machine-writable sections (bounded by `<!-- PR_BLOCK:*:BEGIN/END -->` markers) that the Orchestrator updates at each phase transition:
+
+| Section | Mutability | Purpose |
+|---------|------------|--------|
+| Status | Mutable | Current phase, draft flag, last updated timestamp |
+| Links | Mutable | JIRA ticket URL, branch name |
+| Intent | Immutable | Problem, desired outcome, non-goals, constraints |
+| Plan | Mutable | Task list (with stable IDs T1, T2, ...), test strategy, risks |
+| Phase Log | Append-only | Audit trail of every phase transition |
+| Review Summary | Mutable | Risk level, findings, resolutions from self-review |
 
 ## Prerequisites
 
@@ -143,7 +161,24 @@ Select an agent from the Copilot agent picker:
 - **Orchestrator** — full end-to-end workflow
 - **JIRA Reader** — just read and interpret a ticket
 - **Reviewer** — just review current changes
-- **PR Author** — just commit, push, and create a PR
+- **PR Author** — just commit, push, and finalize a PR
+
+### Resume an interrupted session
+If the Orchestrator was interrupted (crash, session timeout, or manual stop), pass the existing PR link or number instead of a JIRA key:
+```
+/feature https://github.com/yourorg/yourrepo/pull/42
+```
+or
+```
+/feature #42
+```
+The Orchestrator will:
+1. Fetch the PR body and determine the current phase from the Status block
+2. Restore the task list from the Plan block
+3. Append a "Resumed" entry to the Phase Log
+4. Continue from exactly where work stopped
+
+No work is lost — the PR body is the single source of truth for the workflow state.
 
 ## Directory Structure
 
