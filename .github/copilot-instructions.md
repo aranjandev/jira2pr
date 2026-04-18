@@ -18,7 +18,7 @@ This repo curates ready-to-use configuration files that enable AI coding agents 
   - `vscode-copilot/` — Complete VS Code + GitHub Copilot agent setup (agents, skills, prompts, workflows, instructions, scripts)
   - `.github/` — This repo's own Copilot config (used when developing this repo itself)
 - Each setup folder mirrors the structure expected by its target tool:
-  - `vscode-copilot/.github/` contains `agents/`, `skills/`, `prompts/`, `workflows/`, `instructions/`, `scripts/`, `model-tiers.json`, and `copilot-instructions.md`
+  - `vscode-copilot/.github/` contains `agents/`, `skills/`, `prompts/`, `agent-workflows/`, `instructions/`, `scripts/`, `model-tiers.json`, and `copilot-instructions.md`
 - Future setup folders (e.g., `claude-code/`, `cursor/`) will follow the same pattern: self-contained, copy-and-customize
 
 ## Build and Test

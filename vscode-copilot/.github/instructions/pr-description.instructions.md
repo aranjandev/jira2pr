@@ -37,7 +37,7 @@ Valid values: `Planning` · `Implementing` · `Reviewing` · `Ready`
 
 Updates are **phase-level only** — no task-level churn in the PR body.
 
-### Feature Workflow (`workflows/feature.md`)
+### Feature Workflow (`agent-workflows/feature.md`)
 
 | Workflow Phase | PR Phase | PR Action | Actor |
 |----------------|----------|-----------|-------|
@@ -47,7 +47,7 @@ Updates are **phase-level only** — no task-level churn in the PR body.
 | Phase 5: Self-review complete | `Reviewing` | **UPDATE** Status → `Reviewing`. Populate Review Summary. Append Phase Log. | orchestrator |
 | Phase 6: Submit | `Ready` | **FINALIZE**: sanitize all sections, set Draft → `false`, Status → `Ready`. Append Phase Log. | pr-author |
 
-### Bugfix Workflow (`workflows/bugfix.md`)
+### Bugfix Workflow (`agent-workflows/bugfix.md`)
 
 | Workflow Phase | PR Phase | PR Action | Actor |
 |----------------|----------|-----------|-------|
