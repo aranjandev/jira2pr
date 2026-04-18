@@ -27,7 +27,7 @@ You handle the commit-and-submit stage of a workflow. You take completed code ch
 - A draft PR must already exist with a known PR number
 - If no PR number is provided, look up the open PR for the current branch:
   ```bash
-  ./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body --pr-number <N>
+  python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body --pr-number <N>
   ```
   Or find it via the GitHub API by branch name.
 
@@ -35,7 +35,7 @@ You handle the commit-and-submit stage of a workflow. You take completed code ch
 
 ### Step 1: Assess Current State
 ```bash
-./.github/skills/git-operations/scripts/git_helper.sh status
+./.github/skills/git-operations/scripts/git_helper.py status
 ```
 - Confirm you're on a feature/bugfix branch, NOT main/master
 - Check what files have changed
@@ -48,14 +48,14 @@ You handle the commit-and-submit stage of a workflow. You take completed code ch
 
 If all changes are a single logical unit:
 ```bash
-./.github/skills/git-operations/scripts/git_helper.sh commit "feat(scope): description
+./.github/skills/git-operations/scripts/git_helper.py commit "feat(scope): description
 
 Refs: PROJ-123"
 ```
 
 ### Step 3: Push
 ```bash
-./.github/skills/git-operations/scripts/git_helper.sh push
+./.github/skills/git-operations/scripts/git_helper.py push
 ```
 
 ### Step 4: Finalize PR
@@ -63,7 +63,7 @@ Use the `update-pull-request` skill to finalize the existing draft PR:
 
 1. **Fetch current PR body:**
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
      --pr-number <PR_NUMBER> > /tmp/pr_current_body.md
    ```
 
@@ -76,7 +76,7 @@ Use the `update-pull-request` skill to finalize the existing draft PR:
    - Status → `Ready`, Draft → `false`
    - Append Phase Log: "PR finalized and marked ready for review"
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
      --pr-number <PR_NUMBER> \
      --body-file /tmp/pr_updated_body.md \
      --undraft
@@ -84,7 +84,7 @@ Use the `update-pull-request` skill to finalize the existing draft PR:
 
 4. Optionally update the PR title if needed:
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
      --pr-number <PR_NUMBER> \
      --body-file /tmp/pr_updated_body.md \
      --title "<final title>" \

@@ -21,9 +21,9 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
 
 1. Run the git helper script:
    ```bash
-   ./.github/skills/git-operations/scripts/git_helper.sh create-branch <TICKET_KEY> <TYPE>
+   python3 ./.github/skills/git-operations/scripts/git_helper.py create-branch <TICKET_KEY> <TYPE>
    ```
-   Reference: [git_helper.sh](./scripts/git_helper.sh)
+   Reference: [git_helper.py](./scripts/git_helper.py)
 
 2. **Branch naming convention:**
    - Format: `<type>/<ticket-key-lowercase>`
@@ -39,7 +39,7 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
 
 1. Run:
    ```bash
-   ./.github/skills/git-operations/scripts/git_helper.sh commit "<MESSAGE>"
+   python3 ./.github/skills/git-operations/scripts/git_helper.py commit "<MESSAGE>"
    ```
 
 2. **Commit message format** (Conventional Commits):
@@ -71,7 +71,7 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
 
 1. Run:
    ```bash
-   ./.github/skills/git-operations/scripts/git_helper.sh push
+   python3 ./.github/skills/git-operations/scripts/git_helper.py push
    ```
 
 2. Sets upstream tracking automatically on first push.
@@ -80,7 +80,7 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
 
 1. Run:
    ```bash
-   ./.github/skills/git-operations/scripts/git_helper.sh status
+   python3 ./.github/skills/git-operations/scripts/git_helper.py status
    ```
 
 2. Shows: current branch, upstream tracking, ahead/behind counts, changed files.

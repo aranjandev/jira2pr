@@ -17,7 +17,7 @@ Determine whether this is a fresh start or a resume, then route accordingly.
 
 1. **Fetch PR body:**
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
      --pr-number <PR_NUMBER> > /tmp/pr_current_body.md
    ```
 2. **Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, report "This PR does not use the canonical schema — cannot resume" and stop.
@@ -73,7 +73,7 @@ Determine whether this is a fresh start or a resume, then route accordingly.
    - Create as `--draft`.
    - **Store the returned `PR_NUMBER`** — it is required for all subsequent updates.
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh create \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<type>(<scope>): <description> [<TICKET_KEY>]" \
      --body-file /tmp/pr_body.md \
      --draft --labels "bugfix"
@@ -83,7 +83,7 @@ Determine whether this is a fresh start or a resume, then route accordingly.
 
 8. **Create a bugfix branch** using the git-operations skill:
    ```bash
-   ./.github/skills/git-operations/scripts/git_helper.sh create-branch <TICKET_KEY> fix
+   python3 ./.github/skills/git-operations/scripts/git_helper.py create-branch <TICKET_KEY> fix
    ```
 
 9. **Update PR** using the `update-pull-request` skill:
@@ -91,7 +91,7 @@ Determine whether this is a fresh start or a resume, then route accordingly.
    - Links → add Branch name
    - Append Phase Log: "Branch created, entering implementation"
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh update \
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
      --pr-number <PR_NUMBER> --body-file /tmp/pr_body.md
    ```
 

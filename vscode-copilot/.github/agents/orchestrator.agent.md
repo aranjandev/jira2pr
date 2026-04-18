@@ -39,7 +39,7 @@ When the input is a PR link or number:
 1. **Extract the PR number** from the input.
 2. **Fetch the PR body:**
    ```bash
-   ./.github/skills/create-pull-request/scripts/pr_helper.sh fetch-body --pr-number <N>
+   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body --pr-number <N>
    ```
 3. **Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, this is not an agent-managed PR — report and stop.
 4. **Parse the PR state:**

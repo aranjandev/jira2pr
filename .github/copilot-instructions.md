@@ -26,8 +26,11 @@ This repo curates ready-to-use configuration files that enable AI coding agents 
 This repo has no build step or runtime dependencies. Validation is manual:
 
 ```bash
-# Verify shell scripts are syntactically valid
-bash -n vscode-copilot/.github/scripts/*.sh
+# Verify Python scripts are syntactically valid
+python3 -m py_compile vscode-copilot/.github/scripts/apply_model_tiers.py
+python3 -m py_compile vscode-copilot/.github/skills/git-operations/scripts/git_helper.py
+python3 -m py_compile vscode-copilot/.github/skills/read-jira-ticket/scripts/fetch_jira.py
+python3 -m py_compile vscode-copilot/.github/skills/create-pull-request/scripts/pr_helper.py
 
 # Check JSON is valid
 python3 -m json.tool vscode-copilot/.github/model-tiers.json > /dev/null
