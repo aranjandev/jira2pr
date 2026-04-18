@@ -47,6 +47,8 @@ User runs /feature PROJ-123  (or /feature <PR-URL> to resume)
 
 A key feature of this workflow is that the **PR body is a live state document**, not just a description. After the plan is approved, a draft PR is created immediately. The PR body is divided into machine-writable sections (bounded by `<!-- PR_BLOCK:*:BEGIN/END -->` markers) that the Orchestrator updates at each phase transition:
 
+> **Key sections** — see `.github/instructions/pr-description.instructions.md` for the full schema.
+
 | Section | Mutability | Purpose |
 |---------|------------|--------|
 | Status | Mutable | Current phase, draft flag, last updated timestamp |
@@ -131,7 +133,7 @@ Edit `.github/model-tiers.json` to change which models are assigned to each tier
 
 Then apply:
 ```bash
-./.github/scripts/apply_model_tiers.sh
+python3 ./.github/scripts/apply_model_tiers.py
 ```
 
 ## Usage
@@ -175,7 +177,7 @@ or
 The Orchestrator will:
 1. Fetch the PR body and determine the current phase from the Status block
 2. Restore the task list from the Plan block
-3. Append a "Resumed" entry to the Phase Log
+3. Record a resume event in the Phase Log (idempotent — no duplicate entries)
 4. Continue from exactly where work stopped
 
 No work is lost — the PR body is the single source of truth for the workflow state.
@@ -187,16 +189,21 @@ No work is lost — the PR body is the single source of truth for the workflow s
 ├── copilot-instructions.md          # Project-wide AI instructions
 ├── model-tiers.json                 # Tier → model mapping
 ├── scripts/
-│   └── apply_model_tiers.sh         # Patches agent model fields
+│   └── apply_model_tiers.py         # Patches agent model fields
+├── agent-workflows/
+│   ├── feature.md                   # End-to-end feature workflow definition
+│   └── bugfix.md                    # End-to-end bugfix workflow definition
 ├── agents/
 │   ├── orchestrator.agent.md        # Tier-2 — end-to-end workflow
 │   ├── jira-reader.agent.md         # Tier-0 — ticket parsing
+│   ├── explorer.agent.md            # Tier-1 — research & codebase exploration
 │   ├── reviewer.agent.md            # Tier-3 — code review (read-only)
-│   └── pr-author.agent.md          # Tier-1 — commit & PR creation
+│   └── pr-author.agent.md           # Tier-1 — commit & PR finalization
 ├── skills/
 │   ├── read-jira-ticket/            # JIRA API integration
 │   ├── git-operations/              # Branch, commit, push
-│   ├── create-pull-request/         # GitHub PR creation
+│   ├── create-pull-request/         # Draft PR creation
+│   ├── update-pull-request/         # PR state transitions
 │   ├── summarize-changes/           # Diff analysis
 │   └── identify-risks/              # Risk assessment
 ├── prompts/
@@ -205,7 +212,8 @@ No work is lost — the PR body is the single source of truth for the workflow s
 │   └── review.prompt.md             # /review slash command
 └── instructions/
     ├── coding-standards.instructions.md
-    └── commit-conventions.instructions.md
+    ├── commit-conventions.instructions.md
+    └── pr-description.instructions.md  # Canonical PR state document schema
 ```
 
 ## Model Tiers
@@ -219,7 +227,7 @@ Agents are assigned model tiers based on task complexity:
 | 2 | Claude Sonnet 4 | Orchestrator | Planning & code generation |
 | 3 | Claude Opus 4 | Reviewer | Deep analysis & reasoning |
 
-To change models, edit `model-tiers.json` and run `apply_model_tiers.sh`. Agent files contain `<!-- tier: N -->` comments that the script uses to determine which model to assign.
+To change models, edit `model-tiers.json` and run `apply_model_tiers.py`. Agent files contain `<!-- tier: N -->` comments that the script uses to determine which model to assign.
 
 ## Customization Guide
 
@@ -228,9 +236,9 @@ To change models, edit `model-tiers.json` and run `apply_model_tiers.sh`. Agent 
 | Project conventions | `copilot-instructions.md` | Always customize first |
 | Language-specific rules | `coding-standards.instructions.md` | Adjust `applyTo` glob + rules |
 | Commit format | `commit-conventions.instructions.md` | If you use a different convention |
-| Model choices | `model-tiers.json` + `apply_model_tiers.sh` | To swap models or save costs |
-| JIRA field mapping | `skills/read-jira-ticket/scripts/fetch_jira.sh` | If custom fields differ |
-| Branch naming | `skills/git-operations/scripts/git_helper.sh` | If you use different conventions |
+| Model choices | `model-tiers.json` + `apply_model_tiers.py` | To swap models or save costs |
+| JIRA field mapping | `skills/read-jira-ticket/scripts/fetch_jira.py` | If custom fields differ |
+| Branch naming | `skills/git-operations/scripts/git_helper.py` | If you use different conventions |
 | PR template | `skills/create-pull-request/SKILL.md` | To match your team's PR format |
 
 ## License
