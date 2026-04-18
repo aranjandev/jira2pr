@@ -61,6 +61,10 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
 5. **Write body to a temp file and create the PR:**
    ```bash
+   cat > /tmp/pr_body.md << 'BODY'
+   <populated PR body>
+   BODY
+
    python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \

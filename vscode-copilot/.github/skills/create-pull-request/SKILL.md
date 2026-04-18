@@ -32,7 +32,7 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 1. **Verify readiness:**
    ```bash
    git status
-   git log --oneline origin/$(git branch --show-current)..$(git branch --show-current)
+   git log --oneline origin/$(git branch --show-current)..$(git branch --show-current) 2>/dev/null
    ```
    Confirm on a feature/bugfix branch and branch is pushed.
 
