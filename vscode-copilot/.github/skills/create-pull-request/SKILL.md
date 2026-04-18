@@ -60,11 +60,26 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
    - The type should match the branch prefix (`feat/` → `feat`, `fix/` → `fix`)
 
 5. **Write body to a temp file and create the PR:**
-   ```bash
-   cat > /tmp/pr_body.md << 'BODY'
-   <populated PR body>
-   BODY
 
+   Heredocs are unreliable in agent shell environments. Always write the PR body via a Python script instead:
+
+   ```python
+   # /tmp/pr_body.py — run with: python3 /tmp/pr_body.py
+   body = """\
+   <populated PR body — paste full markdown here, escaping any backslashes as \\\\ and triple-quotes as \'\'\'>"
+   """
+   with open("/tmp/pr_body.md", "w") as f:
+       f.write(body)
+   print("Written to /tmp/pr_body.md")
+   ```
+
+   Create and run the script:
+   ```bash
+   python3 /tmp/pr_body.py
+   ```
+
+   Then create the PR:
+   ```bash
    python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \
@@ -99,6 +114,7 @@ The skill **must** return to the caller:
 - Always create as `--draft` — the PR is not ready for review at this point
 - Always link the JIRA ticket in the Links block
 - Include the ticket key in the PR title for automatic JIRA linking
+- Always use the `pr_body.py` Python script approach to write `/tmp/pr_body.md` — never use heredocs (they break in agent shell environments)
 - Use `--dry-run` first if uncertain about the PR content
 - Never create a PR against main/master from main/master
 - The PR body must contain all `PR_BLOCK:*:BEGIN/END` boundary markers — downstream updates depend on them
