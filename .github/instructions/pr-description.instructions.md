@@ -41,8 +41,7 @@ Updates are **phase-level only** — no task-level churn in the PR body.
 
 | Workflow Phase | PR Phase | PR Action | Actor |
 |----------------|----------|-----------|-------|
-| Phase 2: Plan approved | `Planning` | **CREATE** draft PR. Populate: Status, Links, Intent, Plan. Append Phase Log. | orchestrator |
-| Phase 3: Branch created | `Implementing` | **UPDATE** Status → `Implementing`. Add Branch link. Append Phase Log. | orchestrator |
+| Phase 3: Branch created | `Implementing` | **CREATE** draft PR. Populate: Status (`Implementing`), Links (include Branch), Intent, Plan. Append Phase Log. | orchestrator |
 | Phase 4: Implementation complete | `Implementing` | Append Phase Log entry (implementation done signal). No status change. | orchestrator |
 | Phase 5: Self-review complete | `Reviewing` | **UPDATE** Status → `Reviewing`. Populate Review Summary. Append Phase Log. | orchestrator |
 | Phase 6: Submit | `Ready` | **FINALIZE**: sanitize all sections, set Draft → `false`, Status → `Ready`. Append Phase Log. | pr-author |
@@ -51,8 +50,7 @@ Updates are **phase-level only** — no task-level churn in the PR body.
 
 | Workflow Phase | PR Phase | PR Action | Actor |
 |----------------|----------|-----------|-------|
-| Phase 3: Plan approved | `Planning` | **CREATE** draft PR. Populate: Status, Links, Intent (include root cause), Plan. Append Phase Log. | orchestrator |
-| Phase 4: Branch created | `Implementing` | **UPDATE** Status → `Implementing`. Add Branch link. Append Phase Log. | orchestrator |
+| Phase 4: Branch created | `Implementing` | **CREATE** draft PR. Populate: Status (`Implementing`), Links (include Branch), Intent (include root cause), Plan. Append Phase Log. | orchestrator |
 | Phase 5: Implementation complete | `Implementing` | Append Phase Log entry (fix applied). No status change. | orchestrator |
 | Phase 6: Self-review complete | `Reviewing` | **UPDATE** Status → `Reviewing`. Populate Review Summary. Append Phase Log. | orchestrator |
 | Phase 7: Submit | `Ready` | **FINALIZE**: sanitize all sections, set Draft → `false`, Status → `Ready`. Append Phase Log. | pr-author |
@@ -133,7 +131,7 @@ Agents may re-run phase transitions (e.g., after a crash or retry). The followin
 
 | Field | Value |
 |-------|-------|
-| Phase | `Planning` |
+| Phase | `Implementing` |
 | Draft | `true` |
 | Last Updated | <YYYY-MM-DDTHH:MM:SSZ> |
 | Updated By | <agent-name> |
@@ -147,7 +145,7 @@ Agents may re-run phase transitions (e.g., after a crash or retry). The followin
 | Resource | Value |
 |----------|-------|
 | JIRA | <ticket-url> |
-| Branch | _pending_ |
+| Branch | <branch-name> |
 | Design / Docs | N/A |
 
 <!-- PR_BLOCK:LINKS:END -->
