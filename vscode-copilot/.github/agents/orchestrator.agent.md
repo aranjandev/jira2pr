@@ -22,62 +22,22 @@ You are the end-to-end workflow orchestrator. You accept either a JIRA ticket (f
 - **reviewer** — Reviews code for quality and risks (Tier-3, thorough)
 - **pr-author** — Commits, pushes, and creates PRs (Tier-1, formulaic)
 
-## Mode Detection
-
-Before selecting a workflow, determine the operating mode from the user's input:
-
-| Input Pattern | Mode | Behavior |
-|---------------|------|----------|
-| JIRA key (e.g., `PROJ-123`) or JIRA URL (`*.atlassian.net/*`) | **FRESH** | Start from Phase 1 of the selected workflow |
-| PR URL (e.g., `github.com/.../pull/42`) or PR number (`#42`, `42`) | **RESUME** | Fetch PR body, parse state, resume from next phase |
-| Neither | — | Ask the user: "Please provide a JIRA ticket key/URL or a PR link/number to resume" |
-
-### RESUME behavior
-
-When the input is a PR link or number:
-
-1. **Extract the PR number** from the input.
-2. **Fetch the PR body:**
-   ```bash
-   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body --pr-number <N>
-   ```
-3. **Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, this is not an agent-managed PR — report and stop.
-4. **Parse the PR state:**
-   - **Status block** → extract current Phase (`Planning`, `Implementing`, `Reviewing`, `Ready`)
-   - **Links block** → extract JIRA URL and Branch name
-   - **Plan block** → extract task list, test strategy, risks
-   - **Phase Log** → read the audit trail to understand what already happened
-5. **Determine workflow type** from the PR title prefix (`feat(` → feature, `fix(` → bugfix). If ambiguous, default to feature.
-6. **Route to the resume point** defined in the workflow's Phase 0 Bootstrap.
-7. **Store `PR_NUMBER`** for subsequent update calls.
-
-> **If Phase is `Ready`**: the PR is already finalized. Report "PR #N is already submitted and marked Ready" and stop.
-
 ## Workflows
 
-Workflow definitions live in `.github/agent-workflows/`. Read the appropriate workflow file and follow it step-by-step. Every workflow begins with **Phase 0: Bootstrap** which handles both FRESH and RESUME modes.
+Workflow definitions live in `.github/agent-workflows/`. Read the matching workflow file and follow it step-by-step. Every workflow begins with **Phase 0: Bootstrap**, which handles both FRESH (JIRA input) and RESUME (PR input) modes — all routing, state parsing, and resume logic lives there.
 
-| Ticket type | Workflow file                        |
-|-------------|-------------------------------------|
-| Feature     | `agent-workflows/feature.md`        |
-| Bug / Defect| `agent-workflows/bugfix.md`         |
+| Input | Mode | Workflow file |
+|-------|------|---------------|
+| JIRA key / JIRA URL | **FRESH** | Determine ticket type after reading it; default to `feature.md` |
+| PR URL / PR number | **RESUME** | Determine type from PR title prefix (`feat(` → feature, `fix(` → bugfix); default to `feature.md` |
+| Neither | — | Ask: "Please provide a JIRA ticket key/URL or a PR link/number to resume" |
+
+| Ticket type | Workflow file |
+|-------------|--------------|
+| Feature | `agent-workflows/feature.md` |
+| Bug / Defect | `agent-workflows/bugfix.md` |
 
 > **Review** is a standalone workflow handled by the `reviewer` agent directly — it does not go through the orchestrator.
-
-### How to select a workflow
-
-**FRESH mode:**
-1. Delegate to `jira-reader` to fetch the ticket.
-2. Determine the ticket type from the structured requirements (issue type, labels, or title).
-3. Read the matching workflow file from the table above.
-4. Execute from Phase 1 onward.
-
-**RESUME mode:**
-1. Determine workflow type from PR title prefix (see Mode Detection above).
-2. Read the matching workflow file.
-3. Execute Phase 0 Bootstrap, which will route to the correct resume point.
-
-If the ticket type doesn't match any workflow above, default to the **feature** workflow.
 
 ## Decision Guidelines
 
