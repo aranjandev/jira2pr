@@ -98,3 +98,10 @@ coverage/
 tmp/
 temp/
 
+# -----------------------------
+# Miscellaneous
+# -----------------------------
+tmp/
+temp/
+output/
+out/

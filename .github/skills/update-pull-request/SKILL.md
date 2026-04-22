@@ -1,12 +1,14 @@
 ---
 name: update-pull-request
-description: 'Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks, following the canonical PR state schema and idempotency rules from pr-description.instructions.md. Use when transitioning between workflow phases (branching, implementation complete, review complete, finalization).'
+description: 'Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks. Use when transitioning between workflow phases.'
 argument-hint: 'PR number, target phase, actor, summary, and optional block content'
 ---
 
 # Update Pull Request
 
 Updates the body of an existing draft PR at workflow phase transitions. Operates on the canonical PR state document using boundary markers (`PR_BLOCK:*:BEGIN/END`) for safe, idempotent edits.
+
+> **Schema reference:** Block definitions, mutability rules, and idempotency rules are defined in [`pr-schema.instructions.md`](../../instructions/pr-schema.instructions.md). The PR body template is in [`pr-template.instructions.md`](../../instructions/pr-template.instructions.md).
 
 ## When to Use
 
@@ -58,75 +60,22 @@ python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
 
 ### Step 2: Validate boundary markers
 
-Scan `/tmp/pr_current_body.md` for all expected markers:
-- `PR_BLOCK:STATUS:BEGIN` / `PR_BLOCK:STATUS:END`
-- `PR_BLOCK:LINKS:BEGIN` / `PR_BLOCK:LINKS:END`
-- `PR_BLOCK:INTENT:BEGIN` / `PR_BLOCK:INTENT:END`
-- `PR_BLOCK:PLAN:BEGIN` / `PR_BLOCK:PLAN:END`
-- `PR_BLOCK:PHASE_LOG:BEGIN` / `PR_BLOCK:PHASE_LOG:END`
-- `PR_BLOCK:REVIEW_SUMMARY:BEGIN` / `PR_BLOCK:REVIEW_SUMMARY:END`
-- `PR_BLOCK:DECISIONS_LOG:BEGIN` / `PR_BLOCK:DECISIONS_LOG:END`
-- `PR_BLOCK:OPEN_QUESTIONS:BEGIN` / `PR_BLOCK:OPEN_QUESTIONS:END`
-- `PR_BLOCK:AGENT_NOTES:BEGIN` / `PR_BLOCK:AGENT_NOTES:END`
-
-**If any marker pair is missing or malformed: STOP and report the error.** Do not guess where to write.
+Scan `/tmp/pr_current_body.md` and confirm all `PR_BLOCK:*:BEGIN/END` pairs from the template exist. **If any marker pair is missing or malformed: STOP and report the error.** Do not guess where to write.
 
 ### Step 3: Update MUTABLE blocks
 
-Replace the **entire content** between `BEGIN` and `END` markers for each block being updated.
+Replace the **entire content** between `BEGIN` and `END` markers for each block being updated. Use the structure from the PR template in `pr-template.instructions.md`.
 
-#### Status Block (always updated)
-Replace content between `PR_BLOCK:STATUS:BEGIN` and `PR_BLOCK:STATUS:END` with:
-```markdown
-<!-- MUTABLE | owners: orchestrator, pr-author | updated-at: each phase transition -->
-
-| Field | Value |
-|-------|-------|
-| Phase | `<target-phase>` |
-| Draft | `<true or false>` |
-| Last Updated | <current ISO 8601 timestamp> |
-| Updated By | <actor> |
-```
-
-#### Links Block (when entering `Implementing`)
-Replace content between `PR_BLOCK:LINKS:BEGIN` and `PR_BLOCK:LINKS:END` — update Branch from `_pending_` to the actual branch name:
-```markdown
-<!-- MUTABLE | owners: orchestrator | set-at: creation, updated-at: branch phase -->
-
-| Resource | Value |
-|----------|-------|
-| JIRA | <existing-ticket-url> |
-| Branch | `<branch-name>` |
-| Design / Docs | <existing-value> |
-```
-
-#### Review Summary Block (when entering `Reviewing`)
-Replace content between `PR_BLOCK:REVIEW_SUMMARY:BEGIN` and `PR_BLOCK:REVIEW_SUMMARY:END` with the reviewer's findings.
+- **Status Block** (always updated): Set Phase, Draft, Last Updated (ISO 8601), Updated By.
+- **Links Block** (when entering `Implementing`): Update Branch to actual branch name.
+- **Review Summary Block** (when entering `Reviewing`): Populate with reviewer's findings.
 
 ### Step 4: Append to APPEND-ONLY blocks
 
-#### Phase Log
+Apply idempotency rules from `pr-schema.instructions.md` before appending.
 
-**Idempotency check:** Read the existing Phase Log table rows. If the **last row** has the same Phase value as the target phase, this is a duplicate — **do not append**.
-
-If not a duplicate, append a new row:
-```
-| <ISO timestamp> | `<target-phase>` | <actor> | <summary> |
-```
-
-#### Decisions Log (only if scope changed)
-
-**Idempotency check:** Scan existing entries. If an entry with the same **date + title** exists, **do not append**.
-
-If not a duplicate, append a new entry:
-```markdown
-### <YYYY-MM-DD> — <Decision Title>
-- **Decision:** <what was decided>
-- **Rationale:** <why>
-- **Alternatives Considered:** <what else was evaluated>
-- **Impact:** <what this changes>
-- **Triggered By:** <phase-name / finding / user-request>
-```
+- **Phase Log:** Dedupe by last row's Phase value — do not append if duplicate. Append: `| <ISO timestamp> | \`<target-phase>\` | <actor> | <summary> |`
+- **Decisions Log** (only if scope changed): Dedupe by date + title. Use the entry template from the PR body template.
 
 ### Step 5: Write updated body and push
 
@@ -166,16 +115,6 @@ Report the PR URL back to the caller. If the update failed, report the error and
 | `Implementing` (impl done) | No change | No | Yes | No | No |
 | `Reviewing` | Phase → `Reviewing` | No | Yes | Yes (populate) | No |
 | `Ready` (finalize) | Phase → `Ready`, Draft → `false` | No | Yes | Sanitize | Yes |
-
-## Idempotency Rules Summary
-
-These rules are defined in detail in `pr-description.instructions.md`. The key points for this skill:
-
-1. **Status block**: full overwrite — re-running produces identical output (timestamp may differ, acceptable).
-2. **Phase Log**: dedupe by last row's Phase value — do not append if duplicate.
-3. **Decisions Log**: dedupe by date + title — do not append if duplicate.
-4. **Boundary markers**: never remove, reorder, or nest. If missing, stop and report.
-5. **Content outside markers**: do not modify (owned by humans or pr-author finalizer).
 
 ## Important
 

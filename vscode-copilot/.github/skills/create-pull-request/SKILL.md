@@ -1,12 +1,14 @@
 ---
 name: create-pull-request
-description: 'Creates a draft Pull Request using the canonical PR state schema from pr-description.instructions.md. Populates all initial blocks (Status, Links, Intent, Plan, Phase Log) and returns PR URL + PR number. Use after the feature/bugfix branch has been created and pushed, immediately before entering implementation.'
+description: 'Creates a draft Pull Request using the canonical PR body template. Populates all initial blocks and returns PR URL + PR number. Use after the branch has been created and pushed.'
 argument-hint: 'PR details (title, JIRA key, ticket data for Intent/Plan)'
 ---
 
 # Create Pull Request
 
-Creates an initial **draft** Pull Request using the canonical PR state document schema. The PR body is a live state document that will be updated at each workflow phase transition.
+Creates an initial **draft** Pull Request using the canonical PR body template. The PR body is a live state document that will be updated at each workflow phase transition.
+
+> **Schema reference:** Block definitions and mutability rules are in [`pr-schema.instructions.md`](../../instructions/pr-schema.instructions.md). The body template is in [`pr-template.instructions.md`](../../instructions/pr-template.instructions.md).
 
 ## When to Use
 
@@ -36,21 +38,15 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
    ```
    Confirm on a feature/bugfix branch and branch is pushed.
 
-2. **Read the PR body template** from `.github/instructions/pr-description.instructions.md` — use the section below the `# PR Body Template` heading as the skeleton.
+2. **Read the PR body template** from `.github/instructions/pr-template.instructions.md` — use the section below the `# PR Body Template` heading as the skeleton.
 
-3. **Populate the template blocks:**
-
-   | Block | Content |
-   |-------|---------|
-   | `PR_BLOCK:STATUS` | Phase: `Implementing`, Draft: `true`, Last Updated: now (ISO 8601), Updated By: `orchestrator` |
-   | `PR_BLOCK:LINKS` | JIRA: ticket URL, Branch: current branch name (already created), Design/Docs: from ticket or `N/A` |
-   | `PR_BLOCK:INTENT` | Problem, Desired Outcome, Non-Goals, Constraints — from JIRA ticket requirements |
-   | `PR_BLOCK:PLAN` | Tasks (with stable IDs T1, T2, ...), Test Strategy, Risks & Mitigations — from approved plan |
-   | `PR_BLOCK:PHASE_LOG` | First entry: current timestamp, `Implementing`, `orchestrator`, "Branch created, draft PR created, entering implementation" |
-   | `PR_BLOCK:REVIEW_SUMMARY` | Leave default placeholder (`Risk Level: —`) |
-   | `PR_BLOCK:DECISIONS_LOG` | Leave empty (commented template only) |
-   | `PR_BLOCK:OPEN_QUESTIONS` | Populate from ticket if any, otherwise leave empty |
-   | `PR_BLOCK:AGENT_NOTES` | Leave empty |
+3. **Populate the template blocks** using plan data from the orchestrator:
+   - **STATUS**: Phase `Implementing`, Draft `true`, timestamp, `orchestrator`
+   - **LINKS**: JIRA ticket URL, branch name, design docs (or `N/A`)
+   - **INTENT**: Problem, Desired Outcome, Non-Goals, Constraints — from JIRA ticket
+   - **PLAN**: Tasks (stable IDs T1, T2, ...), Test Strategy, Risks — from approved plan
+   - **PHASE_LOG**: First entry: `"Branch created, draft PR created, entering implementation"`
+   - All other blocks: leave at template defaults (empty or placeholder)
 
    Replace `<TICKET_KEY>` in the title heading with the actual ticket key and a short descriptive title.
 
@@ -61,25 +57,11 @@ Creates an initial **draft** Pull Request using the canonical PR state document 
 
 5. **Write body to a temp file and create the PR:**
 
-   Heredocs are unreliable in agent shell environments. Always write the PR body via a Python script instead:
-
-   ```python
-   # /tmp/pr_body.py — run with: python3 /tmp/pr_body.py
-   body = """\
-   <populated PR body — paste full markdown here, escaping any backslashes as \\\\ and triple-quotes as \\'\\'\\'>"
-   """
-   with open("/tmp/pr_body.md", "w") as f:
-       f.write(body)
-   print("Written to /tmp/pr_body.md")
-   ```
-
-   Create and run the script:
-   ```bash
-   python3 /tmp/pr_body.py
-   ```
+   > **Shell tip:** Heredocs are unreliable in agent shell environments. Write the PR body via a Python script instead (write string to `/tmp/pr_body.md`).
 
    Then create the PR:
    ```bash
+   python3 /tmp/pr_body.py  # writes /tmp/pr_body.md
    python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \

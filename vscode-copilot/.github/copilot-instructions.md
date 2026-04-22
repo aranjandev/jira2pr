@@ -1,66 +1,61 @@
 # Project Instructions
 
-<!-- CUSTOMIZE: Replace this entire file with your project-specific instructions. The sections below are templates — fill in each one with details relevant to your codebase. -->
+## Overview
+
+This repo curates ready-to-use configuration files that enable AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a Pull Request. Each top-level folder contains a complete setup for a specific tool/IDE combination. End users copy the relevant setup folder into their project, customize the templates, and start using agents immediately.
 
 ## Code Style
 
-<!-- CUSTOMIZE: Describe your language, formatting, and naming conventions. Reference key files that exemplify your patterns. -->
-
-- Language: Shell script, Python <!-- e.g., TypeScript, Python, Java -->
-- Formatter: <!-- e.g., Prettier, Black, google-java-format -->
-- Linting: <!-- e.g., ESLint, Ruff, Checkstyle -->
-- Key patterns to follow: see <!-- path/to/exemplary/file -->
+- Languages: Markdown, Shell script (Bash/Zsh), Python, JSON
+- Formatter: None enforced — keep Markdown clean and consistent with existing files
+- Shell scripts: Use `set -euo pipefail`, quote variables, prefer `$()` over backticks
+- Key patterns to follow: see `vscode-copilot/.github/` for the canonical example of a setup folder
 
 ## Architecture
 
-<!-- CUSTOMIZE: Describe major components, service boundaries, and the reasoning behind structural decisions. -->
-
-- Project type: <!-- e.g., monorepo, microservice, monolith -->
+- Project type: Multi-folder template collection (not a runnable application)
 - Key directories:
-  - `src/` — <!-- purpose -->
-  - `tests/` — <!-- purpose -->
-- Data flow: <!-- brief description of request lifecycle -->
+  - `vscode-copilot/` — Complete VS Code + GitHub Copilot agent setup (agents, skills, prompts, workflows, instructions, scripts)
+  - `.github/` — This repo's own Copilot config (used when developing this repo itself)
+- Each setup folder mirrors the structure expected by its target tool:
+  - `vscode-copilot/.github/` contains `agents/`, `skills/`, `prompts/`, `agent-workflows/`, `instructions/`, `scripts/`, `model-tiers.json`, and `copilot-instructions.md`
+- Future setup folders (e.g., `claude-code/`, `cursor/`) will follow the same pattern: self-contained, copy-and-customize
 
 ## Build and Test
 
-<!-- CUSTOMIZE: Commands the agent should use. Be explicit — agents will attempt to run these. -->
+This repo has no build step or runtime dependencies. Validation is manual:
 
 ```bash
-# Install dependencies
-# <!-- e.g., npm install, pip install -r requirements.txt -->
+# Verify Python scripts are syntactically valid
+python3 -m py_compile vscode-copilot/.github/scripts/apply_model_tiers.py
+python3 -m py_compile vscode-copilot/.github/skills/git-operations/scripts/git_helper.py
+python3 -m py_compile vscode-copilot/.github/skills/read-jira-ticket/scripts/fetch_jira.py
+python3 -m py_compile vscode-copilot/.github/skills/create-pull-request/scripts/pr_helper.py
 
-# Run tests
-# <!-- e.g., npm test, pytest -->
-
-# Build
-# <!-- e.g., npm run build, make -->
-
-# Lint
-# <!-- e.g., npm run lint, ruff check . -->
+# Check JSON is valid
+python3 -m json.tool vscode-copilot/.github/model-tiers.json > /dev/null
 ```
 
 ## Conventions
 
-<!-- CUSTOMIZE: Patterns that differ from common practices. Include specific examples so the agent doesn't guess. -->
-
-- Error handling: <!-- e.g., "Use Result types, never throw exceptions" -->
-- API responses: <!-- e.g., "Always wrap in { data, error, meta } envelope" -->
-- Database: <!-- e.g., "All queries go through the repository layer" -->
-- Testing: <!-- e.g., "Unit tests co-located with source files as *.test.ts" -->
+- All template files that users must customize contain `<!-- CUSTOMIZE: ... -->` comment markers explaining what to fill in
+- Agent files (`.agent.md`) include YAML frontmatter with `description`, `tools`, and `model` fields
+- Skill files live in `skills/<skill-name>/SKILL.md` with structured sections (Description, When to Use, Steps, Output Format)
+- Instruction files (`.instructions.md`) include YAML frontmatter with `description` and `applyTo` globs
+- Prompt files (`.prompt.md`) are user-facing entry points (e.g., `/feature`, `/bugfix`)
+- Workflow files define multi-step sequences for GitHub Actions or agent orchestration
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) — see `.github/instructions/commit-conventions.instructions.md`
+- Keep template content generic and project-agnostic; users fill in specifics
 
 ## Dependencies
 
-<!-- CUSTOMIZE: Rules about adding or upgrading dependencies. -->
-
-- Allowed package registries: <!-- e.g., npm, PyPI -->
-- Approval required for new dependencies: <!-- yes/no, process -->
-- Pinning strategy: <!-- e.g., exact versions, caret ranges -->
+- No runtime dependencies
+- Shell scripts require `curl`, `jq`, `gh` (GitHub CLI) — documented in each setup's README
+- No package registries; this is pure configuration
 
 ## Environment
 
-<!-- CUSTOMIZE: Required environment variables and how to set them up. -->
-
-- Required env vars for the agent tools:
+- Required env vars for the agent tools (used when developing/testing this repo):
   - `JIRA_API_TOKEN` — Personal access token for JIRA REST API
   - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
   - GitHub CLI (`gh`) must be authenticated via `gh auth login`
