@@ -42,30 +42,13 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
    python3 ./.github/skills/git-operations/scripts/git_helper.py commit "<MESSAGE>"
    ```
 
-2. **Commit message format** (Conventional Commits):
-   ```
-   <type>(<scope>): <short description>
-
-   <optional body — what and why, not how>
-
-   <optional footer — e.g., Refs: PROJ-123>
-   ```
+2. **Commit message format:** Follow the rules in [`commit-conventions.instructions.md`](../../instructions/commit-conventions.instructions.md).
 
 3. **Commit strategy — atomic commits:**
    - One commit per logical change (not per file)
    - Each commit should be independently buildable
    - Group related changes: e.g., new function + its tests = one commit
    - Separate refactoring from feature work
-
-4. **Type mapping:**
-   | Type | When |
-   |------|------|
-   | `feat` | New feature or capability |
-   | `fix` | Bug fix |
-   | `refactor` | Code restructuring with no behavior change |
-   | `test` | Adding or updating tests only |
-   | `docs` | Documentation changes only |
-   | `chore` | Build, CI, tooling changes |
 
 ### Pushing
 

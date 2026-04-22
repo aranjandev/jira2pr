@@ -102,6 +102,14 @@ def get_auth_token(platform: str) -> str:
     sys.exit(1)
 
 
+def get_bitbucket_username() -> str:
+    username = os.environ.get("BITBUCKET_USERNAME", "")
+    if not username:
+        print("ERROR: BITBUCKET_USERNAME environment variable not set", file=sys.stderr)
+        sys.exit(1)
+    return username
+
+
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 def http_request(method: str, url: str, headers: dict, payload: dict = None) -> tuple[int, dict]:
@@ -168,7 +176,8 @@ def create_bitbucket_pr(owner_repo: str, token: str, title: str, body: str,
         "source": {"branch": {"name": branch}},
         "destination": {"branch": {"name": base}},
     }
-    credentials = base64.b64encode(f"x-token-auth:{token}".encode()).decode()
+    username = get_bitbucket_username()
+    credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
     headers = {
         "Authorization": f"Basic {credentials}",
         "Content-Type": "application/json",
@@ -262,7 +271,8 @@ def update_bitbucket_pr(owner_repo: str, token: str, pr_number: str,
     if title:
         payload["title"] = title
 
-    credentials = base64.b64encode(f"x-token-auth:{token}".encode()).decode()
+    username = get_bitbucket_username()
+    credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
     headers = {
         "Authorization": f"Basic {credentials}",
         "Content-Type": "application/json",
@@ -298,7 +308,8 @@ def fetch_github_pr_body(owner_repo: str, token: str, pr_number: str):
 
 
 def fetch_bitbucket_pr_body(owner_repo: str, token: str, pr_number: str):
-    credentials = base64.b64encode(f"x-token-auth:{token}".encode()).decode()
+    username = get_bitbucket_username()
+    credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
     headers = {
         "Authorization": f"Basic {credentials}",
         "Content-Type": "application/json",

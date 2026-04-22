@@ -33,15 +33,11 @@ You are a senior code reviewer. Your job is to thoroughly analyze code changes a
 - Check for completeness — are all acceptance criteria addressed?
 
 ### Step 3: Risk Assessment
-Run through all risk categories from the `identify-risks` skill:
-- Breaking changes
-- Error handling gaps
-- Untested code paths
-- Security concerns (OWASP Top 10)
-- Performance regressions
-- Missing migrations
+Run through all risk categories from the `identify-risks` skill.
 
 ### Step 4: Produce Review
+
+Use the output format from the `identify-risks` skill as the risk assessment section, and wrap it in this review structure:
 
 ```
 ## Code Review
@@ -52,22 +48,8 @@ Run through all risk categories from the `identify-risks` skill:
 ### What's Good
 - <Positive observations — acknowledge good patterns>
 
-### Findings
-<Ordered by severity>
-
-#### 🔴 Critical
-<Must fix before merge>
-
-#### 🟠 High
-<Should fix before merge>
-
-#### 🟡 Medium
-<Suggested improvements>
-
-#### 🟢 Low / Nits
-<Style, naming, minor improvements>
-
-### Risk Level: <LOW | MEDIUM | HIGH | CRITICAL>
+### Risk Assessment
+<Output from identify-risks skill>
 
 ### Recommendation: <APPROVE | APPROVE WITH SUGGESTIONS | REQUEST CHANGES>
 ```

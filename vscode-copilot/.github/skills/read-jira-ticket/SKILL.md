@@ -63,6 +63,9 @@ The following environment variables must be set:
 
    ### Implementation Hints
    - <Any technical details, component mentions, or architectural hints from the ticket>
+   
+   ### Additional Notes
+   - Plan approval required: <Yes/No based on labels or ticket content> 
    ```
 
 4. **If the script fails:**
