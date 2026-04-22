@@ -11,6 +11,19 @@ This repo curates ready-to-use configuration files that enable AI coding agents 
 - Shell scripts: Use `set -euo pipefail`, quote variables, prefer `$()` over backticks
 - Key patterns to follow: see `vscode-copilot/.github/` for the canonical example of a setup folder
 
+## Shell Command Rules
+
+Applies whenever an agent runs shell commands in a terminal. Violations produce silent, hard-to-debug corruption:
+
+- **Never write file content using heredocs** (`<< 'EOF' ... EOF`) — they get mangled in agent terminal sessions.
+- **Never use `python3 -c "..."` with double outer quotes** — the shell expands `$variables` and backticks inside.
+- **Always use `python3 -c '...'` with single outer quotes** and `\n` for newlines — this is the only reliable pattern:
+  ```bash
+  python3 -c 'open("/tmp/file.md","w").write("line1\nline2\n")'
+  # With dynamic values, concatenate inside the expression
+  python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/file.md","w").write("# Title\nTimestamp: "+ts+"\n")'
+  ```
+
 ## Architecture
 
 - Project type: Multi-folder template collection (not a runnable application)

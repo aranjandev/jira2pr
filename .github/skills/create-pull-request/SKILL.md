@@ -57,15 +57,22 @@ Creates an initial **draft** Pull Request using the canonical PR body template. 
 
 5. **Write body to a temp file and create the PR:**
 
-   > **Shell tip:** Heredocs are unreliable in agent shell environments. Write the PR body via a Python script instead (write string to `/tmp/pr_body.md`).
+   > **File writing rule — strictly enforced:** Never use heredocs (`<< 'EOF'`) or `python3 -c "..."` with double outer quotes — both corrupt output in agent shell sessions. **Always** use `python3 -c '...'` with single outer quotes and `\n` for newlines:
+   >
+   > ```bash
+   > # Static content
+   > python3 -c 'open("/tmp/pr_body.md","w").write("# TICKET: Title\n\nContent\n")'
+   > # With dynamic values — concatenate inside the expression
+   > python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/pr_body.md","w").write("# Title\n\nTimestamp: "+ts+"\n")'
+   > ```
 
-   Then create the PR:
+   Then create the PR (`--base` is required — use `main` unless the repo default branch differs):
    ```bash
-   python3 /tmp/pr_body.py  # writes /tmp/pr_body.md
    python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
      --title "<PR_TITLE>" \
      --body-file /tmp/pr_body.md \
      --draft \
+     --base main \
      --labels "<label1,label2>"
    ```
    Reference: [pr_helper.py](./scripts/pr_helper.py)
@@ -96,7 +103,7 @@ The skill **must** return to the caller:
 - Always create as `--draft` — the PR is not ready for review at this point
 - Always link the JIRA ticket in the Links block
 - Include the ticket key in the PR title for automatic JIRA linking
-- Always use the `pr_body.py` Python script approach to write `/tmp/pr_body.md` — never use heredocs (they break in agent shell environments)
+- Always write temp files with `python3 -c '...'` using single outer quotes — never heredocs (`<<EOF`), never `python3 -c "..."` with double outer quotes (shell expands `$` and backticks inside both)
 - Use `--dry-run` first if uncertain about the PR content
 - Never create a PR against main/master from main/master
 - The PR body must contain all `PR_BLOCK:*:BEGIN/END` boundary markers — downstream updates depend on them
