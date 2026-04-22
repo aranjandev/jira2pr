@@ -16,38 +16,47 @@ User runs /feature PROJ-123  (or /feature <PR-URL> to resume)
     ┌────┴────┐
     ▼         │
 ┌────────┐    │
-│ JIRA   │    │  1. Read ticket → structured requirements
-│ Reader │    │     (Tier-0: GPT-4o mini)
+│ JIRA   │    │  Phase 1: Read ticket → structured requirements
+│ Reader │    │           (Tier-0: GPT-4o mini)
 └────┬───┘    │
      │        │
      ▼        │
- [Plan &      │  2. Approve plan → draft PR created as live
-  Draft PR]   │     state document (Status: Planning)
+┌────────┐    │  Phase 2: (optional) Research packages/APIs
+│Research│    │           (Tier-1: Claude Haiku)
+│  er    │    │
+└────┬───┘    │
+     │        │
+     ▼        │
+ [Plan +      │           Create branch + draft PR as live
+  Branch +    │           state document (Status: Implementing)
+  Draft PR]   │           Present plan; await approval if complex
               │
     ┌─────────┘
     ▼
- [Branch &    │  3. Create branch → PR updated
-  Implement]  │     (Status: Implementing)
+ [Implement]  │  Phase 3: Implement changes, run tests & lint
+              │           PR updated (Status: Reviewing)
               │
     ┌─────────┘
     ▼
 ┌────────┐
-│Reviewer│       4. Analyze changes for risks & quality
-│        │          (Tier-3: Claude Opus)
-└────┬───┘           PR updated (Status: Reviewing)
+│Reviewer│       Phase 4: Analyze changes for risks & quality
+│        │               (Tier-3: Claude Opus)
+└────┬───┘               PR updated (Status: Submitting)
      │
      ▼
 ┌────────┐
-│  PR    │       5. Commit, push, mark PR ready for review
-│ Author │          (Tier-1: Claude Haiku)
-└────────┘           PR finalized (Status: Ready)
+│  PR    │       Phase 5: Commit, push, mark PR ready for review
+│ Author │               (Tier-1: Claude Haiku)
+└────────┘               PR finalized (Status: Ready)
 ```
+
+> **Resume support:** Pass an existing PR URL or number (`/feature #42`) to resume an interrupted workflow. The Orchestrator reads the PR body, restores the task list, and continues from the last recorded phase using the shared resume procedure in `_resume.md`.
 
 ### PR as Live State Document
 
-A key feature of this workflow is that the **PR body is a live state document**, not just a description. After the plan is approved, a draft PR is created immediately. The PR body is divided into machine-writable sections (bounded by `<!-- PR_BLOCK:*:BEGIN/END -->` markers) that the Orchestrator updates at each phase transition:
+A key feature of this workflow is that the **PR body is a live state document**, not just a description. A draft PR is created at the end of Phase 2 (Planning), before any code is written. The PR body is divided into machine-writable sections bounded by `<!-- PR_BLOCK:*:BEGIN/END -->` markers that the Orchestrator updates at each phase transition.
 
-> **Key sections** — see `.github/instructions/pr-description.instructions.md` for the full schema.
+> **Schema & template** — see `.github/instructions/pr-schema.instructions.md` for block definitions, mutability rules, and idempotency rules; `.github/instructions/pr-template.instructions.md` for the canonical PR body template.
 
 | Section | Mutability | Purpose |
 |---------|------------|--------|
@@ -57,18 +66,20 @@ A key feature of this workflow is that the **PR body is a live state document**,
 | Plan | Mutable | Task list (with stable IDs T1, T2, ...), test strategy, risks |
 | Phase Log | Append-only | Audit trail of every phase transition |
 | Review Summary | Mutable | Risk level, findings, resolutions from self-review |
+| Decisions Log | Append-only | Record of scope changes, plan mutations, review overrides |
+| Open Questions | Mutable | Unresolved items and intentionally deferred work |
+| Agent Notes | Mutable | Breadcrumbs for downstream agents or human reviewers |
+
+The valid phase values are: `Planning` · `Implementing` · `Reviewing` · `Submitting` · `Ready`
 
 ## Prerequisites
 
 - **VS Code** with GitHub Copilot extension
-- **GitHub CLI** (`gh`) — [Install](https://cli.github.com)
-  ```bash
-  gh auth login
-  ```
-- **curl** and **jq** — for JIRA API calls and JSON processing
-  ```bash
-  brew install jq  # macOS
-  ```
+- **Python 3** — all scripts use the standard library only (no `pip install` required)
+- **git** — for branch, commit, and push operations
+- **GitHub token** — a [fine-grained PAT](https://github.com/settings/tokens?type=beta) with *Pull requests: Read & Write* on your repo (place in `.env` as `GITHUB_TOKEN`)
+  - Alternatively, authenticate via `gh auth login` if you have the GitHub CLI installed
+- **Bitbucket token** (optional) — if your repo is on Bitbucket, set `BITBUCKET_TOKEN` and `BITBUCKET_USERNAME` in `.env` instead
 
 ## Setup
 
@@ -86,10 +97,17 @@ cp vscode-copilot/.env.example /path/to/your/project/.env
 Edit the `.env` file you just copied and fill in your values:
 
 ```bash
+# JIRA
 JIRA_BASE_URL=https://yourcompany.atlassian.net
 JIRA_EMAIL=you@yourcompany.com
 JIRA_API_TOKEN=your-jira-api-token
+
+# GitHub (primary)
 GITHUB_TOKEN=your-github-token
+
+# Bitbucket (if applicable — use instead of GitHub token)
+# BITBUCKET_TOKEN=your-bitbucket-token
+# BITBUCKET_USERNAME=your-bitbucket-username
 ```
 
 Then add `.env` to your project's `.gitignore`:
@@ -100,7 +118,7 @@ echo '.env' >> .gitignore
 
 > **Get a JIRA API token:** [Atlassian Account → Security → API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
 >
-> **Get a GitHub token:** Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) with *Pull requests: Read & Write* on your repo, or run `gh auth login` to use the GitHub CLI instead.
+> **Get a GitHub token:** Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) with *Pull requests: Read & Write* on your repo, or run `gh auth login` to use the GitHub CLI as an alternative.
 
 ### 3. Customize project instructions
 
@@ -110,13 +128,7 @@ Edit `.github/copilot-instructions.md` — fill in all `<!-- CUSTOMIZE -->` sect
 - Build, test, and lint commands
 - Coding conventions
 
-### 4. Customize coding standards
-
-Edit `.github/instructions/coding-standards.instructions.md`:
-- Adjust the `applyTo` glob to match your project's languages
-- Fill in naming conventions, patterns, and anti-patterns
-
-### 5. Adjust model tiers (optional)
+### 4. Adjust model tiers (optional)
 
 Edit `.github/model-tiers.json` to change which models are assigned to each tier:
 
@@ -174,11 +186,11 @@ or
 ```
 /feature #42
 ```
-The Orchestrator will:
-1. Fetch the PR body and determine the current phase from the Status block
-2. Restore the task list from the Plan block
-3. Record a resume event in the Phase Log (idempotent — no duplicate entries)
-4. Continue from exactly where work stopped
+The Orchestrator follows the shared resume procedure in `_resume.md`:
+1. Fetch the PR body and validate all `PR_BLOCK:*:BEGIN/END` boundary markers
+2. Parse current phase, branch name, and task list from the PR body
+3. Append a resume entry to the Phase Log (idempotent — no duplicate entries)
+4. Route to the correct workflow step for the current phase and continue
 
 No work is lost — the PR body is the single source of truth for the workflow state.
 
@@ -191,6 +203,7 @@ No work is lost — the PR body is the single source of truth for the workflow s
 ├── scripts/
 │   └── apply_model_tiers.py         # Patches agent model fields
 ├── agent-workflows/
+│   ├── _resume.md                   # Shared resume-from-PR procedure
 │   ├── feature.md                   # End-to-end feature workflow definition
 │   └── bugfix.md                    # End-to-end bugfix workflow definition
 ├── agents/
@@ -211,9 +224,9 @@ No work is lost — the PR body is the single source of truth for the workflow s
 │   ├── bugfix.prompt.md             # /bugfix slash command
 │   └── review.prompt.md             # /review slash command
 └── instructions/
-    ├── coding-standards.instructions.md
     ├── commit-conventions.instructions.md
-    └── pr-description.instructions.md  # Canonical PR state document schema
+    ├── pr-schema.instructions.md        # PR block definitions, mutability & idempotency rules
+    └── pr-template.instructions.md      # Canonical PR body template (copy-paste for PR creation)
 ```
 
 ## Model Tiers
@@ -223,7 +236,7 @@ Agents are assigned model tiers based on task complexity:
 | Tier | Default Model | Used By | Rationale |
 |------|--------------|---------|-----------|
 | 0 | GPT-4o mini | JIRA Reader | Simple extraction & formatting |
-| 1 | Claude Haiku 3.5 | PR Author | Templated, formulaic output |
+| 1 | Claude Haiku 3.5 | Researcher, PR Author | Light reasoning, templated output |
 | 2 | Claude Sonnet 4 | Orchestrator | Planning & code generation |
 | 3 | Claude Opus 4 | Reviewer | Deep analysis & reasoning |
 
@@ -234,12 +247,12 @@ To change models, edit `model-tiers.json` and run `apply_model_tiers.py`. Agent 
 | What | Where | When |
 |------|-------|------|
 | Project conventions | `copilot-instructions.md` | Always customize first |
-| Language-specific rules | `coding-standards.instructions.md` | Adjust `applyTo` glob + rules |
 | Commit format | `commit-conventions.instructions.md` | If you use a different convention |
+| PR body template | `pr-template.instructions.md` | To match your team's PR format |
 | Model choices | `model-tiers.json` + `apply_model_tiers.py` | To swap models or save costs |
 | JIRA field mapping | `skills/read-jira-ticket/scripts/fetch_jira.py` | If custom fields differ |
 | Branch naming | `skills/git-operations/scripts/git_helper.py` | If you use different conventions |
-| PR template | `skills/create-pull-request/SKILL.md` | To match your team's PR format |
+| PR creation logic | `skills/create-pull-request/scripts/pr_helper.py` | For Bitbucket or custom API endpoints |
 
 ## License
 
