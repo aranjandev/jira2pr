@@ -59,6 +59,12 @@ Handles git workflow operations: branch creation, committing, and pushing. Enfor
 
 2. Sets upstream tracking automatically on first push.
 
+3. **Token-based authentication (HTTPS remotes):** The script automatically injects credentials from the environment via `GIT_ASKPASS` — no interactive prompt, no hanging. Ensure the relevant token is in `.env` or already exported:
+   - GitHub: `GITHUB_TOKEN=<pat>`
+   - Bitbucket: `BITBUCKET_TOKEN=<app-password>` and `BITBUCKET_USERNAME=<username>`
+
+   If the token is missing and push stalls, verify that `.env` at the repo root contains the correct variable and that `load_env()` ran (it runs automatically when you invoke the script). **Do not fall back to `gh auth` or `gh` CLI for pushing** — the script handles credentials directly.
+
 ### Checking Status
 
 1. Run:

@@ -9,8 +9,10 @@
 
 import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -134,13 +136,83 @@ def cmd_commit(message: str):
         pass
 
 
+def _detect_remote_platform(remote_url: str) -> str:
+    if "github.com" in remote_url:
+        return "github"
+    elif "bitbucket.org" in remote_url or "bitbucket.com" in remote_url:
+        return "bitbucket"
+    return "unknown"
+
+
+def _make_askpass_script(token: str, username: str) -> str:
+    """Write a temporary GIT_ASKPASS helper script. Returns the file path."""
+    script = (
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "prompt = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+        "if 'username' in prompt.lower():\n"
+        f"    print({repr(username)})\n"
+        "else:\n"
+        f"    print({repr(token)})\n"
+    )
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", delete=False, prefix="git_askpass_"
+    ) as f:
+        f.write(script)
+        path = f.name
+    os.chmod(path, stat.S_IRWXU)
+    return path
+
+
 def cmd_push():
     branch = current_branch()
     if not branch:
         print("ERROR: Not on any branch (detached HEAD?)", file=sys.stderr)
         sys.exit(1)
 
-    git("push", "-u", "origin", branch)
+    # Inject token credentials via GIT_ASKPASS for HTTPS remotes so that
+    # agents don't hang waiting for interactive input.
+    askpass_path = None
+    run_env = None
+
+    remote_result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        capture_output=True, text=True
+    )
+    remote_url = remote_result.stdout.strip() if remote_result.returncode == 0 else ""
+
+    if remote_url.startswith("https://"):
+        platform = _detect_remote_platform(remote_url)
+        if platform == "github":
+            token = os.environ.get("GITHUB_TOKEN", "")
+            if token:
+                askpass_path = _make_askpass_script(token, "x-access-token")
+                run_env = {**os.environ, "GIT_ASKPASS": askpass_path, "GIT_TERMINAL_PROMPT": "0"}
+            else:
+                print("WARN: GITHUB_TOKEN not set — push will use system credentials", file=sys.stderr)
+        elif platform == "bitbucket":
+            token = os.environ.get("BITBUCKET_TOKEN", "")
+            username = os.environ.get("BITBUCKET_USERNAME", "")
+            if token and username:
+                askpass_path = _make_askpass_script(token, username)
+                run_env = {**os.environ, "GIT_ASKPASS": askpass_path, "GIT_TERMINAL_PROMPT": "0"}
+            else:
+                print("WARN: BITBUCKET_TOKEN or BITBUCKET_USERNAME not set — push will use system credentials", file=sys.stderr)
+
+    try:
+        if run_env:
+            result = subprocess.run(["git", "push", "-u", "origin", branch], env=run_env)
+            if result.returncode != 0:
+                sys.exit(result.returncode)
+        else:
+            git("push", "-u", "origin", branch)
+    finally:
+        if askpass_path:
+            try:
+                os.unlink(askpass_path)
+            except OSError:
+                pass
+
     print(f"Pushed branch '{branch}' to origin.")
 
 
