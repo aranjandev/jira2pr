@@ -79,8 +79,14 @@ Apply idempotency rules from `pr-schema.instructions.md` before appending.
 
 ### Step 5: Write updated body and push
 
+> **File writing rule:** Write the updated body to `/tmp/pr_updated_body.md` using `python3 -c '...'` with single outer quotes. Never use heredocs (`<<EOF`) or `python3 -c "..."` with double outer quotes — both corrupt output in agent shell sessions:
+>
+> ```bash
+> python3 -c 'open("/tmp/pr_updated_body.md","w").write(FULL_BODY_STRING)'
+> ```
+
 ```bash
-# Write the modified body to a temp file, then update the PR
+# Update the PR via API
 python3 ./.github/skills/create-pull-request/scripts/pr_helper.py update \
   --pr-number <PR_NUMBER> \
   --body-file /tmp/pr_updated_body.md

@@ -55,6 +55,23 @@
 
 ---
 
+## Shell Command Rules
+
+> This section is managed by the jira2pr agent setup. Do not modify.
+
+Applies whenever an agent runs shell commands in a terminal. Violations produce silent, hard-to-debug corruption:
+
+- **Never write file content using heredocs** (`<< 'EOF' ... EOF`) — they get mangled in agent terminal sessions.
+- **Never use `python3 -c "..."` with double outer quotes** — the shell expands `$variables` and backticks inside.
+- **Always use `python3 -c '...'` with single outer quotes** and `\n` for newlines — this is the only reliable pattern:
+  ```bash
+  python3 -c 'open("/tmp/file.md","w").write("line1\nline2\n")'
+  # With dynamic values, concatenate inside the expression
+  python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/file.md","w").write("# Title\nTimestamp: "+ts+"\n")'
+  ```
+
+---
+
 ## How Agents Contribute to Code
 
 > This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.
