@@ -150,6 +150,48 @@ python3 ./.github/scripts/apply_model_tiers.py
 
 ## Usage
 
+### JIRA ticket creation
+
+Before running `/feature <TICKET_KEY>`, create the JIRA ticket with a clear, structured description. The following template works well with the `read-jira-ticket` skill and improves requirement extraction quality.
+
+Use this as your JIRA issue description template:
+
+```markdown
+## Description
+<What problem are we solving? Include user/business context and current pain point.>
+
+## Requirements
+- <Functional requirement 1>
+- <Functional requirement 2>
+- <Any important non-functional requirement: performance, security, compatibility>
+
+## Acceptance Criteria
+- Given <context>, when <action>, then <expected result>
+- Given <context>, when <action>, then <expected result>
+
+## Subtasks
+- <Subtask 1>
+- <Subtask 2>
+
+## Related Issues
+- <Blocks/Depends on/Relates to>: <PROJ-456>
+
+## Implementation Hints
+- <Known technical constraints>
+- <Relevant service/component/file paths>
+- <API contracts, payload examples, or links>
+
+## Additional Notes
+- Plan approval required: <Yes/No>
+```
+
+Recommended issue fields:
+- **Summary:** concise outcome-oriented title (for example: "Add retry handling for payment webhook timeouts")
+- **Issue Type:** Story or Bug
+- **Priority:** set explicitly
+- **Labels:** include workflow labels your team uses (for example, `plan-approval-required` when applicable)
+
+
 ### Feature development
 In VS Code Copilot Chat, type:
 ```
