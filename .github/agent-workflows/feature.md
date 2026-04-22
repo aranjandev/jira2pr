@@ -42,7 +42,7 @@ Then use this routing table for **Step G**:
    - If research needed: then go to STEP-2.2, else go to STEP-2.3
 
 *  **STEP-2.2: Research**: 
-   - Delegate to `explorer` agent with a query for package recommendations, algorithm comparisons, or API patterns. 
+   - Delegate to `researcher` agent with a query for package recommendations, algorithm comparisons, or API patterns. 
    - Pass results to next steps.
 
 * **STEP-2.3: Create a task list** (use the `todo` tool) breaking down the implementation:

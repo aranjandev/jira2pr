@@ -196,7 +196,7 @@ No work is lost — the PR body is the single source of truth for the workflow s
 ├── agents/
 │   ├── orchestrator.agent.md        # Tier-2 — end-to-end workflow
 │   ├── jira-reader.agent.md         # Tier-0 — ticket parsing
-│   ├── explorer.agent.md            # Tier-1 — research & codebase exploration
+│   ├── researcher.agent.md          # Tier-1 — research & codebase exploration
 │   ├── reviewer.agent.md            # Tier-3 — code review (read-only)
 │   └── pr-author.agent.md           # Tier-1 — commit & PR finalization
 ├── skills/
