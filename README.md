@@ -1,6 +1,14 @@
 # jira2pr
 
-Copy-ready AI agent setup templates for end-to-end automated development — from reading a JIRA ticket to submitting a Pull Request.
+`jira2pr` is a multi-agent system definition to achieve end-to-end automation of s/w feature development - from reading a JIRA ticket to submitting a PR. It leverages:
+
+* Multiple agents with named roles
+* Reusable skills
+* Workflows
+* Model routing
+* Executable automation hooks
+
+It's copy ready! If you use VSCode-Copilot or Claude Code for agentic development, just copy the corresponding folders and with a couple more setup steps your agent-system will be ready for any new repo. 
 
 ## Motivation
 
@@ -79,7 +87,7 @@ Agents are assigned model tiers based on task complexity, balancing cost against
 | Tier | Default Model | Used By |
 |------|--------------|---------|
 | 0 | GPT-4o mini | JIRA Reader |
-| 1 | Claude Haiku 3.5 | Researcher, PR Author |
+| 1 | GPT-4o mini | Researcher, PR Author |
 | 2 | Claude Sonnet 4 | Orchestrator |
 | 3 | Claude Opus 4 | Reviewer |
 
