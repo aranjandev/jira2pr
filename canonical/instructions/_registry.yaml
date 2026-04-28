@@ -1,0 +1,24 @@
+# Instructions Registry — platform-agnostic metadata for all instruction files.
+#
+# Platform adapters read this file to generate platform-specific instruction
+# definitions (e.g., with YAML frontmatter and .instructions.md suffix for Copilot).
+#
+# Fields:
+#   slug          — Filename stem (used for canonical .md and adapter files)
+#   description   — One-sentence description of what the instruction governs
+
+instructions:
+  - slug: commit-conventions
+    description: 'Conventional commit message format and rules for writing git commit
+      messages. Covers type prefixes, scope conventions, body format, footer
+      references, and breaking change notation.'
+
+  - slug: pr-schema
+    description: 'PR state document schema — block definitions, mutability rules,
+      ownership model, idempotency rules, and scope change protocol. The PR body
+      template that implements this schema lives in pr-template.instructions.md.'
+
+  - slug: pr-template
+    description: 'Canonical PR body template for agent-maintained pull requests. For
+      schema rules (block mutability, idempotency, ownership), see
+      pr-schema.instructions.md.'

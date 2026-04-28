@@ -1,0 +1,47 @@
+# Skills Registry — platform-agnostic metadata for all skills.
+#
+# Platform adapters read this file to generate platform-specific skill
+# definitions (e.g., with YAML frontmatter for VS Code Copilot).
+#
+# Fields:
+#   slug          — Directory name under skills/ (also used as skill identifier)
+#   description   — One-sentence purpose statement
+#   argument_hint — Example input shown to the user
+
+skills:
+  - slug: read-jira-ticket
+    description: 'Fetches a JIRA ticket by key or URL and extracts structured requirements
+      including summary, description, acceptance criteria, subtasks, labels, and
+      priority. Use when given a JIRA ticket link, ticket key, or asked to
+      read/interpret a ticket.'
+    argument_hint: 'JIRA ticket key (e.g., PROJ-123) or full URL'
+
+  - slug: git-operations
+    description: 'Performs git operations: creating branches from ticket keys, staging
+      and committing changes with conventional commit messages, and pushing to
+      origin. Use when branching, committing, or pushing code.'
+    argument_hint: 'command and arguments (e.g., create-branch PROJ-123 feat)'
+
+  - slug: create-pull-request
+    description: 'Creates a draft Pull Request using the canonical PR body template.
+      Populates all initial blocks and returns PR URL + PR number. Use after the
+      branch has been created and pushed.'
+    argument_hint: 'PR details (title, JIRA key, ticket data for Intent/Plan)'
+
+  - slug: update-pull-request
+    description: 'Updates an existing PR body by modifying MUTABLE blocks and appending
+      to APPEND-ONLY blocks. Use when transitioning between workflow phases.'
+    argument_hint: 'PR number, target phase, actor, summary, and optional block content'
+
+  - slug: summarize-changes
+    description: 'Analyzes git diff output and produces a human-readable summary of all
+      changes, grouped by component or module. Use when preparing PR
+      descriptions, commit messages, or change reviews.'
+    argument_hint: 'optional: commit range or branch comparison'
+
+  - slug: identify-risks
+    description: 'Analyzes code changes for potential risks: breaking changes, missing
+      error handling, untested paths, security concerns, performance
+      regressions, and missing migrations. Use during code review or before
+      submitting a PR.'
+    argument_hint: 'optional: specific area to focus risk analysis on'

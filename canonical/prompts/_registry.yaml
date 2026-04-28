@@ -1,0 +1,37 @@
+# Prompts Registry — platform-agnostic metadata for user-facing entry points.
+#
+# Platform adapters read this file to generate platform-specific prompt
+# definitions (e.g., with YAML frontmatter and .prompt.md suffix for Copilot,
+# or slash commands for Claude Code).
+#
+# Fields:
+#   slug          — Filename stem (used for canonical .md and adapter files)
+#   description   — One-sentence description shown to users
+#   agent         — Target agent slug that handles this prompt
+#   argument_hint — Example input shown to the user
+
+prompts:
+  - slug: feature
+    description: 'Full feature workflow — start fresh from a JIRA ticket, or resume
+      an in-progress feature from a PR link. Reads the ticket (or PR state),
+      plans implementation, writes code, self-reviews, and submits a Pull
+      Request.'
+    agent: orchestrator
+    argument_hint: 'JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g.,
+      #42) to resume'
+
+  - slug: bugfix
+    description: 'Bugfix workflow — start fresh from a JIRA ticket, or resume an
+      in-progress bugfix from a PR link. Reads the bug ticket (or PR state),
+      reproduces the issue, identifies root cause, implements the fix with a
+      regression test, and submits a Pull Request.'
+    agent: orchestrator
+    argument_hint: 'JIRA bug ticket URL/key (e.g., PROJ-456) or PR URL/number
+      (e.g., #42) to resume'
+
+  - slug: review
+    description: 'Reviews current code changes for quality, risks, and correctness.
+      Produces a structured review with findings categorized by severity and
+      actionable recommendations.'
+    agent: reviewer
+    argument_hint: 'Optional: specific area or concern to focus the review on'
