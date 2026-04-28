@@ -3,7 +3,6 @@ description: "Full feature workflow — start fresh from a JIRA ticket, or resum
 agent: "orchestrator"
 argument-hint: "JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g., #42) to resume"
 ---
-
 # Feature Workflow
 
 Implement a feature end-to-end, or resume one that was interrupted.

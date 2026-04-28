@@ -3,7 +3,6 @@ name: update-pull-request
 description: 'Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks. Use when transitioning between workflow phases.'
 argument-hint: 'PR number, target phase, actor, summary, and optional block content'
 ---
-
 # Update Pull Request
 
 Updates the body of an existing draft PR at workflow phase transitions. Operates on the canonical PR state document using boundary markers (`PR_BLOCK:*:BEGIN/END`) for safe, idempotent edits.

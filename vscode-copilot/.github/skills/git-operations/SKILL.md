@@ -3,7 +3,6 @@ name: git-operations
 description: 'Performs git operations: creating branches from ticket keys, staging and committing changes with conventional commit messages, and pushing to origin. Use when branching, committing, or pushing code.'
 argument-hint: 'command and arguments (e.g., create-branch PROJ-123 feat)'
 ---
-
 # Git Operations
 
 Handles git workflow operations: branch creation, committing, and pushing. Enforces naming conventions and commit message standards.

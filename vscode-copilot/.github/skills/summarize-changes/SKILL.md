@@ -3,7 +3,6 @@ name: summarize-changes
 description: 'Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module. Use when preparing PR descriptions, commit messages, or change reviews.'
 argument-hint: 'optional: commit range or branch comparison'
 ---
-
 # Summarize Changes
 
 Analyzes the current git diff and produces a structured, human-readable summary of all changes grouped by component.

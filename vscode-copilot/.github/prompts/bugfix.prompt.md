@@ -3,7 +3,6 @@ description: "Bugfix workflow — start fresh from a JIRA ticket, or resume an i
 agent: "orchestrator"
 argument-hint: "JIRA bug ticket URL/key (e.g., PROJ-456) or PR URL/number (e.g., #42) to resume"
 ---
-
 # Bugfix Workflow
 
 Fix a bug end-to-end, or resume a bugfix that was interrupted.

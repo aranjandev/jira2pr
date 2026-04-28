@@ -45,7 +45,7 @@ Then use this routing table for **Step G**:
    - Delegate to `researcher` agent with a query for package recommendations, algorithm comparisons, or API patterns. 
    - Pass results to next steps.
 
-* **STEP-2.3: Create a task list** (use the `todo` tool) breaking down the implementation:
+* **STEP-2.3: Create a task list** (use the `todo` tool to plan the tasks) breaking down the implementation:
    - List each file to create or modify
    - List each test to add
    - Order tasks by dependency
@@ -89,7 +89,7 @@ Then use this routing table for **Step G**:
     - Follow project conventions from `copilot-instructions.md`
     - Write clean, idiomatic code
     - Add/update tests alongside implementation
-    - Mark each task as completed in the todo list
+    - Mark each task as completed in the todo list immediately after finishing it
 
 * **STEP-3.2: Run tests** after implementation:
     ```bash

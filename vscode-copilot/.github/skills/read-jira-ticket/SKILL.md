@@ -3,7 +3,6 @@ name: read-jira-ticket
 description: 'Fetches a JIRA ticket by key or URL and extracts structured requirements including summary, description, acceptance criteria, subtasks, labels, and priority. Use when given a JIRA ticket link, ticket key, or asked to read/interpret a ticket.'
 argument-hint: 'JIRA ticket key (e.g., PROJ-123) or full URL'
 ---
-
 # Read JIRA Ticket
 
 Fetches a JIRA ticket and produces a structured requirements document that downstream agents can use for planning and implementation.

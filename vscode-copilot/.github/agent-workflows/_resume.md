@@ -17,7 +17,7 @@ Shared steps for resuming a workflow from an existing draft PR. Both the feature
    - Plan block → extract task list, test strategy, risks
    - Phase Log → read audit trail
 * **STEP-D: Store `PR_NUMBER`** for subsequent update calls.
-* **STEP-E: Populate the `todo` tool** with tasks from the Plan block so progress tracking continues.
+* **STEP-E: Populate the task tracker** (use the `todo` tool to plan the tasks) with tasks from the Plan block so progress tracking continues.
 * **STEP-F: Append Phase Log** entry using `update-pull-request` skill: current timestamp, current phase (not a new one), `orchestrator`, "Resumed by orchestrator".
    - Idempotency: if the last Phase Log row already has this phase value and summary starts with "Resumed", do not append.
 
