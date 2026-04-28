@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Read files in the workspace",
+      "Search the codebase",
+      "Run make test",
+      "Run make lint",
+      "Run make format",
+      "Run make check",
+      "Run python scripts/assemble_agents.py",
+      "Run git status",
+      "Run git diff",
+      "Run git log"
+    ],
+    "deny": [
+      "Install packages on the host (use Docker)",
+      "Modify files outside the workspace",
+      "Run git push --force",
+      "Run rm -rf on workspace root",
+      "Access /data/ mount outside Docker"
+    ]
+  }
+}
