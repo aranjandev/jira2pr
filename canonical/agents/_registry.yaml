@@ -1,0 +1,105 @@
+# Agent Registry — platform-agnostic metadata for all agents.
+#
+# Each platform adapter (`.github/agents/`, `.claude/commands/`, etc.)
+# reads this file to generate its own agent definitions.
+#
+# Fields:
+#   name          — Human-readable display name
+#   description   — One-paragraph purpose statement
+#   slug          — Filename stem (used for canonical .md and adapter files)
+#   tier          — Model-capability tier (0=cheapest … 3=most powerful)
+#   role          — Short role label (optional, used by orchestrator)
+#   capabilities  — Abstract capability tags (platform adapters map these to concrete tools)
+#   subagents     — List of agent slugs this agent may invoke (empty = leaf agent)
+#   argument_hint — Example input shown to the user
+#   user_invocable — Whether end-users can invoke this agent directly
+
+agents:
+  - slug: orchestrator
+    name: Orchestrator
+    description: 'End-to-end feature development orchestrator. Accepts a JIRA ticket
+      (fresh start) or a PR link/number (resume from last phase). Reads
+      requirements, plans implementation, writes code, self-reviews, and submits
+      a PR. Chains subagents: jira-reader for ticket parsing, researcher for
+      research, reviewer for quality checks, pr-author for submission. Use this
+      agent for full feature or bugfix workflows.'
+    tier: 2
+    role: Primary executor with delegation authority
+    capabilities:
+      - read
+      - edit
+      - search
+      - execute
+      - delegate
+      - plan
+    subagents:
+      - jira-reader
+      - researcher
+      - reviewer
+      - pr-author
+    argument_hint: 'JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g.,
+      #42) to resume'
+    user_invocable: true
+
+  - slug: jira-reader
+    name: JIRA Reader
+    description: Fetches and interprets JIRA tickets. Reads a JIRA ticket by key or
+      URL and produces a structured requirements document with summary,
+      description, acceptance criteria, subtasks, and implementation hints. Use
+      this agent when you need to understand what a JIRA ticket requires before
+      planning or implementing.
+    tier: 0
+    capabilities:
+      - read
+      - search
+      - execute
+    subagents: []
+    argument_hint: JIRA ticket key (e.g., PROJ-123) or URL
+    user_invocable: true
+
+  - slug: reviewer
+    name: Reviewer
+    description: Reviews code changes for quality, correctness, and risks. Analyzes
+      diffs to identify breaking changes, missing error handling, untested
+      paths, security vulnerabilities, and performance regressions. Produces a
+      structured risk assessment with actionable recommendations. Use this agent
+      for code review before submitting a PR.
+    tier: 3
+    capabilities:
+      - read
+      - search
+    subagents: []
+    argument_hint: 'Optional: specific area or concern to focus the review on'
+    user_invocable: true
+
+  - slug: researcher
+    name: Researcher
+    description: Lightweight research agent for technical investigation. Searches
+      the web, evaluates packages/libraries, compares algorithms, and summarizes
+      API documentation. Use this agent when implementation requires researching
+      unfamiliar domains, choosing between libraries, or understanding external
+      APIs before planning.
+    tier: 1
+    capabilities:
+      - read
+      - search
+      - fetch
+    subagents: []
+    argument_hint: Research query, e.g., 'best Python library for streaming
+      second-order statistics'
+    user_invocable: true
+
+  - slug: pr-author
+    name: PR Author
+    description: 'Handles the final stage of a feature workflow: creating git
+      commits with conventional commit messages, pushing the branch, and
+      finalizing an existing draft PR by updating its state to Ready and marking
+      it as ready for review. Use this agent when code changes are complete and
+      ready to be submitted.'
+    tier: 1
+    capabilities:
+      - read
+      - execute
+    subagents: []
+    argument_hint: JIRA ticket key, PR number, and any PR-specific instructions
+    user_invocable: true

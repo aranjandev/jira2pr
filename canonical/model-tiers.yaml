@@ -1,0 +1,29 @@
+# Model Tiers — platform-neutral cost/capability mapping.
+#
+# Each tier maps to concrete model names per platform.  The assembly script
+# reads this file and writes platform-specific config (e.g., model-tiers.json
+# for Copilot).
+#
+# To add a new platform, add a key under `models:` for each tier.
+
+tiers:
+  0:
+    description: "Cheapest — simple extraction, formatting, and API calls"
+    role: "Simple, deterministic tasks"
+    models:
+      copilot: "GPT-4o mini (copilot)"
+  1:
+    description: "Light reasoning — templated output, formulaic writing"
+    role: "Formulaic tasks"
+    models:
+      copilot: "Claude Haiku 3.5 (copilot)"
+  2:
+    description: "Strong reasoning — planning, code generation, implementation"
+    role: "Implementation and orchestration"
+    models:
+      copilot: "Claude Sonnet 4 (copilot)"
+  3:
+    description: "Highest capability — deep analysis, risk assessment, complex review"
+    role: "Thorough review and analysis"
+    models:
+      copilot: "Claude Opus 4 (copilot)"
