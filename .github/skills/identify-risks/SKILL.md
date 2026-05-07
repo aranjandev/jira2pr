@@ -3,7 +3,6 @@ name: identify-risks
 description: 'Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations. Use during code review or before submitting a PR.'
 argument-hint: 'optional: specific area to focus risk analysis on'
 ---
-
 # Identify Risks
 
 Performs a systematic risk analysis of code changes to catch issues before they reach production.
@@ -94,4 +93,4 @@ Performs a systematic risk analysis of code changes to catch issues before they 
 - Don't flag theoretical risks that can't happen given the actual code paths
 - Prioritize: critical/high findings first
 - If no significant risks found, say so clearly — don't invent problems
-- Consider the project context from `copilot-instructions.md` when assessing conventions
+- Consider the project context from the project instructions file when assessing conventions

@@ -1,7 +1,6 @@
 ---
 description: "PR state document schema — block definitions, mutability rules, ownership model, idempotency rules, and scope change protocol. The PR body template that implements this schema lives in pr-template.instructions.md."
 ---
-
 # PR State Document Schema
 
 This file is the **single source of truth** for the PR body schema used by coding agents. The actual PR body template that implements this schema is in [pr-template.instructions.md](pr-template.instructions.md).

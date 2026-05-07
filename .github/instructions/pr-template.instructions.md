@@ -1,7 +1,6 @@
 ---
 description: "Canonical PR body template for agent-maintained pull requests. For schema rules (block mutability, idempotency, ownership), see pr-schema.instructions.md."
 ---
-
 # PR Body Template
 
 > **Schema reference:** Block definitions, mutability rules, idempotency rules, and ownership model are defined in [pr-schema.instructions.md](pr-schema.instructions.md). Phase transitions are defined in each workflow file (`agent-workflows/feature.md`, `agent-workflows/bugfix.md`).
