@@ -3,7 +3,6 @@ name: create-pull-request
 description: 'Creates a draft Pull Request using the canonical PR body template. Populates all initial blocks and returns PR URL + PR number. Use after the branch has been created and pushed.'
 argument-hint: 'PR details (title, JIRA key, ticket data for Intent/Plan)'
 ---
-
 # Create Pull Request
 
 Creates an initial **draft** Pull Request using the canonical PR body template. The PR body is a live state document that will be updated at each workflow phase transition.

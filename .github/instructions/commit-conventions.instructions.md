@@ -1,7 +1,6 @@
 ---
 description: "Conventional commit message format and rules for writing git commit messages. Covers type prefixes, scope conventions, body format, footer references, and breaking change notation."
 ---
-
 # Commit Message Conventions
 
 Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
