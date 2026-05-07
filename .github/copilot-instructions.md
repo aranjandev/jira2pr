@@ -1,51 +1,68 @@
+<!-- This file is hand-maintained for the jira2pr repo itself. Do not regenerate with assemble.py. -->
+
 # Project Instructions
 
 ## Overview
 
-This repo curates ready-to-use configuration files that enable AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a Pull Request. Each top-level folder contains a complete setup for a specific tool/IDE combination. End users copy the relevant setup folder into their project, customize the templates, and start using agents immediately.
+This repo provides a platform-agnostic multi-agent workflow system that enables AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a Pull Request. All concepts (agents, skills, prompts, workflows, instructions) are defined once in the `canonical/` folder and assembled into platform-specific output folders by scripts in `scripts/`. End users run the assembler to generate a ready-to-use setup for their tool (e.g., VS Code Copilot, Claude Code), then copy the output into their project.
 
 ## Code Style
 
-- Languages: Markdown, Shell script (Bash/Zsh), Python, JSON
+- Languages: Markdown, Shell script (Bash/Zsh), Python, JSON, YAML
 - Formatter: None enforced — keep Markdown clean and consistent with existing files
 - Shell scripts: Use `set -euo pipefail`, quote variables, prefer `$()` over backticks
-- Key patterns to follow: see `vscode-copilot/.github/` for the canonical example of a setup folder
+- Key patterns to follow: see `canonical/` for authoritative definitions; see `scripts/assembler/` for platform-specific rendering logic
 
 ## Architecture
 
-- Project type: Multi-folder template collection (not a runnable application)
+- Project type: Canonical definitions + assembler pipeline (not a runnable application)
 - Key directories:
-  - `vscode-copilot/` — Complete VS Code + GitHub Copilot agent setup (agents, skills, prompts, workflows, instructions, scripts)
-  - `.github/` — This repo's own Copilot config (used when developing this repo itself)
-- Each setup folder mirrors the structure expected by its target tool:
-  - `vscode-copilot/.github/` contains `agents/`, `skills/`, `prompts/`, `agent-workflows/`, `instructions/`, `scripts/`, `model-tiers.json`, and `copilot-instructions.md`
-- Future setup folders (e.g., `claude-code/`, `cursor/`) will follow the same pattern: self-contained, copy-and-customize
+  - `canonical/` — Platform-agnostic source of truth for all agent concepts: agents, skills, prompts, workflows, instructions, and model tiers. **Edit here, not in the output folders.**
+    - `canonical/platform-extras/` — Platform-specific fragments (e.g., Copilot frontmatter, CLAUDE.md boilerplate) that the assembler merges in during generation
+  - `scripts/` — Assembler pipeline (`assemble.py` + `assembler/` package) that reads `canonical/` and writes platform-specific output
+  - `vscode-copilot/` — Generated output for VS Code + GitHub Copilot (reference only; safe to delete and regenerate)
+  - `claude-code/` — Generated output for Claude Code (reference only; safe to delete and regenerate)
+  - `cursor/` — Planned output for Cursor (in progress; currently empty)
+  - `.github/` — This repo's own Copilot config, hand-maintained to guide agents editing `canonical/` source files. **Not** assembler output — the generated reference copy lives in `vscode-copilot/.github/`
+- The assembler is invoked as:
+  ```bash
+  python scripts/assemble.py --target-dir vscode-copilot --platform copilot
+  python scripts/assemble.py --target-dir claude-code     --platform claude
+  ```
+- Adding a new platform means adding a renderer under `scripts/assembler/platforms/` and optional extras under `canonical/platform-extras/<platform>/`
 
 ## Build and Test
 
-This repo has no build step or runtime dependencies. Validation is manual:
-
 ```bash
-# Verify Python scripts are syntactically valid
-python3 -m py_compile vscode-copilot/.github/scripts/apply_model_tiers.py
-python3 -m py_compile vscode-copilot/.github/skills/git-operations/scripts/git_helper.py
-python3 -m py_compile vscode-copilot/.github/skills/read-jira-ticket/scripts/fetch_jira.py
-python3 -m py_compile vscode-copilot/.github/skills/create-pull-request/scripts/pr_helper.py
+# Assemble output for a platform
+python scripts/assemble.py --target-dir vscode-copilot --platform copilot
+python scripts/assemble.py --target-dir claude-code     --platform claude
 
-# Check JSON is valid
-python3 -m json.tool vscode-copilot/.github/model-tiers.json > /dev/null
+# Dry-run: verify no generated file would change (CI check)
+python scripts/assemble.py --target-dir vscode-copilot --platform copilot --check
+
+# Run unit tests
+python -m pytest tests/
+
+# Verify Python skill scripts are syntactically valid
+python3 -m py_compile canonical/skills/git-operations/scripts/git_helper.py
+python3 -m py_compile canonical/skills/read-jira-ticket/scripts/fetch_jira.py
+python3 -m py_compile canonical/skills/create-pull-request/scripts/pr_helper.py
 ```
 
 ## Conventions
 
+- All canonical definitions live in `canonical/`; never edit generated output in `vscode-copilot/` or `claude-code/` directly
+- Each concept type has a `_registry.yaml` in its folder listing all members and their metadata (tier, tools, etc.)
+- Agent source files in `canonical/agents/` are plain Markdown — the assembler adds platform-specific frontmatter during generation
+- Skill source files in `canonical/skills/<skill-name>/SKILL.md` use structured sections (Description, When to Use, Steps, Output Format)
+- Instruction source files in `canonical/instructions/` are plain Markdown — the assembler wraps them with platform-specific headers
+- Prompt source files in `canonical/prompts/` are plain Markdown — assembled into `.prompt.md` files for Copilot, `CLAUDE.md` entries for Claude Code, etc.
+- Workflow source files in `canonical/workflows/` define multi-step sequences in a platform-agnostic format
+- Model tiers are defined in `canonical/model-tiers.yaml` and resolved to concrete model names per platform during assembly
 - All template files that users must customize contain `<!-- CUSTOMIZE: ... -->` comment markers explaining what to fill in
-- Agent files (`.agent.md`) include YAML frontmatter with `description`, `tools`, and `model` fields
-- Skill files live in `skills/<skill-name>/SKILL.md` with structured sections (Description, When to Use, Steps, Output Format)
-- Instruction files (`.instructions.md`) include YAML frontmatter with `description` and `applyTo` globs
-- Prompt files (`.prompt.md`) are user-facing entry points (e.g., `/feature`, `/bugfix`)
-- Workflow files define multi-step sequences for GitHub Actions or agent orchestration
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) — see `.github/instructions/commit-conventions.instructions.md`
-- Keep template content generic and project-agnostic; users fill in specifics
+- Keep canonical content generic and project-agnostic; platform-specific details belong in `canonical/platform-extras/`
 
 ## Dependencies
 
@@ -65,7 +82,7 @@ python3 -m json.tool vscode-copilot/.github/model-tiers.json > /dev/null
 
 > This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.
 
-Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.
+Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is defined in the platform-agnostic `canonical/` folder and assembled into platform-specific output by `scripts/assemble.py`.
 
 ### Agent Roster
 
@@ -75,15 +92,15 @@ Five agents are available. Each has a defined scope and model tier:
 |-------|------|-------|
 | **Orchestrator** | End-to-end workflow driver — reads the ticket, plans, implements, delegates, and submits the PR | Claude Sonnet 4 |
 | **JIRA Reader** | Fetches a JIRA ticket and produces a structured requirements document | GPT-4o mini |
-| **Researcher** | Lightweight research — evaluates packages, APIs, and algorithms | GPT-4o mini |
 | **Reviewer** | Thorough code review — identifies risks, missing tests, and security issues | Claude Opus 4 |
+| **Researcher** | Lightweight research — evaluates packages, APIs, and algorithms | Claude Haiku 3.5 |
 | **PR Author** | Commits changes, pushes the branch, and finalises the draft PR | Claude Haiku 3.5 |
 
-Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, `model`, and which subagents it may invoke.
+Agent definitions live in `canonical/agents/`. Each file is a plain Markdown file; the assembler adds platform-specific frontmatter (YAML for Copilot, CLAUDE.md entries for Claude Code) during generation.
 
 ### Skills
 
-Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `.github/skills/<skill-name>/SKILL.md`.
+Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `canonical/skills/<skill-name>/SKILL.md`.
 
 | Skill | Purpose |
 |-------|---------|
@@ -96,7 +113,7 @@ Skills are reusable, domain-specific instruction sets that agents load on demand
 
 ### Agent Prompts
 
-User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`. Invoke them with a `/` slash command in the Copilot chat:
+User-facing entry points are defined in `canonical/prompts/`. The assembler renders them as `.prompt.md` slash commands for Copilot and equivalent entries for other platforms:
 
 | Prompt | Slash command | What it does |
 |--------|---------------|--------------|
@@ -106,7 +123,7 @@ User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`
 
 ### Workflows
 
-Multi-phase workflow definitions live in `.github/agent-workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:
+Multi-phase workflow definitions live in `canonical/workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:
 
 | Workflow | Trigger | Phases |
 |----------|---------|--------|
@@ -118,7 +135,7 @@ All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA inp
 
 ### Instructions
 
-Persistent rules that apply across all agents are defined as `.instructions.md` files in `.github/instructions/`:
+Persistent rules that apply across all agents are defined in `canonical/instructions/`:
 
 | File | Scope | What it governs |
 |------|-------|-----------------|
@@ -154,9 +171,9 @@ Applies whenever an agent runs shell commands in a terminal. Violations produce 
 
 ### Model Tiers
 
-`.github/model-tiers.json` maps model tiers (0–3) to concrete Copilot model names. The `scripts/apply_model_tiers.py` script stamps the correct model into each agent file at setup time. Tier assignment reflects cost/capability trade-offs:
+`canonical/model-tiers.yaml` maps model tiers (0–3) to concrete model names per platform. The assembler resolves these during generation and stamps the correct model into each agent file. Tier assignment reflects cost/capability trade-offs:
 
 - **Tier 0** — Cheapest (GPT-4o mini): simple, deterministic tasks like reading tickets
-- **Tier 1** — Lightweight (GPT-4o mini / Haiku): formulaic tasks like committing and pushing
+- **Tier 1** — Lightweight (Claude Haiku 3.5): formulaic tasks like committing and pushing
 - **Tier 2** — Capable (Claude Sonnet): complex reasoning and implementation
 - **Tier 3** — Most powerful (Claude Opus): thorough review and risk analysis
