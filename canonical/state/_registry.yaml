@@ -1,0 +1,28 @@
+# State Registry — metadata for the agent workflow state concept.
+#
+# The state/ folder contains the schema and template for per-workflow agent state files.
+# State files are created by the orchestrator during Phase 2 and stored at
+# .github/state/<TICKET-KEY>.md in the target repository.
+#
+# The assembler copies SCHEMA.md and workflow-state.tpl.md into .github/state/ so they
+# are available at runtime. The actual state files (e.g., KAN-12.md) are agent-managed
+# and are never generated or overwritten by the assembler.
+#
+# Fields:
+#   name        — Display name for this concept
+#   description — One-sentence purpose statement
+#   output_dir  — Target output directory (under .github/ for copilot)
+
+state:
+  name: Workflow State
+  description: >
+    Per-workflow agent state files that mirror PR body context locally,
+    enabling agents to track phase, tasks, and decisions without
+    round-tripping to the GitHub API on every read.
+  output_dir: state
+
+files:
+  - filename: SCHEMA.md
+    description: Schema reference and mutability rules for per-workflow state files
+  - filename: workflow-state.tpl.md
+    description: Template for creating new per-workflow state files

@@ -45,3 +45,16 @@ skills:
       regressions, and missing migrations. Use during code review or before
       submitting a PR.'
     argument_hint: 'optional: specific area to focus risk analysis on'
+
+  - slug: manage-state
+    description: 'Creates, reads, and updates the per-workflow agent state file at
+      .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow
+      context that reduces GitHub API round-trips and enables richer resumption.
+      Use when creating a new workflow, at phase transitions, or when resuming.'
+    argument_hint: 'operation and ticket key (e.g., create KAN-12, update KAN-12)'
+
+  - slug: register-artifact
+    description: 'Appends a completed workflow entry to the repo-level artifact registry
+      at .github/artifacts/REGISTRY.md. Use exactly once per workflow when the
+      PR transitions to Ready phase.'
+    argument_hint: 'ticket key, PR number, PR URL, type, risk level, and summary'
