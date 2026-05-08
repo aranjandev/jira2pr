@@ -40,13 +40,13 @@ After writing a block, ask: *"If I lost my entire conversation history and only 
    cp .github/state/workflow-state.tpl.md .github/state/<TICKET-KEY>.md
    ```
 
-2. Populate the file by overwriting the placeholder values in each block (see **Per-Block Depth Guide** above for how detailed each block should be):
-   - **META block**: Workflow type (`feature` or `bugfix`), ticket key, ticket URL, branch name, PR number, PR URL, `Created At` and `Updated At` (current UTC timestamp)
-   - **PHASE block**: Set to `Implementing`
-   - **UNDERSTANDING block**: Full requirements in your own words — every acceptance criterion, edge cases identified during exploration, key file paths and code patterns discovered, relevant project conventions, and confirmed build/test commands. A resuming agent should be able to skip Phase 1 entirely based on this block.
-   - **RESEARCH block**: If the researcher agent was invoked: each option evaluated (with accept/reject reasoning), final recommendation and why, library versions or API patterns chosen, and links to references. If no research was needed: leave empty. A resuming agent should never need to re-run research.
-   - **PLAN block**: Task table (ID, Description, Status=`pending`) mirrored from PR body, **plus** per-task implementation notes: which files to create/modify, which patterns to follow, which tests to add, and any gotchas. Include test strategy with exact test commands and risks with concrete mitigation steps. A resuming agent should be able to start implementing any task from this block alone.
-   - **PHASE_LOG block**: First row — same timestamp and summary as the PR body Phase Log entry at creation
+2. Populate each block per the **Per-Block Depth Guide** above. The data source for each block at creation:
+   - **META**: workflow type, ticket key/URL, branch, PR number/URL, timestamps
+   - **PHASE**: `Implementing`
+   - **UNDERSTANDING**: Phase 1 output (jira-reader + codebase exploration)
+   - **RESEARCH**: Phase 2 researcher output (leave empty if no research was needed)
+   - **PLAN**: mirror the PR body task list + per-task implementation notes
+   - **PHASE_LOG**: first row — same timestamp and summary as the PR body Phase Log entry
 
 3. Write the populated content using single-quoted Python (never heredocs):
    ```bash
@@ -81,10 +81,10 @@ At each phase transition (after calling `update-pull-request`):
 
 1. Update the **PHASE block**: replace the phase value
 2. Update the **META block**: advance `Updated At` to current UTC timestamp
-3. Update phase-specific MUTABLE blocks with comprehensive detail per the **Per-Block Depth Guide**:
-   - Entering `Reviewing`: populate **REVIEW** block with full risk assessment, every finding with severity and description, and resolution status
-   - Entering `Submitting`: update **REVIEW** block with final resolutions for any findings addressed during review
-   - Entering `Ready`: ensure **IMPLEMENTATION** block lists all files modified and tests added
+3. Update phase-specific MUTABLE blocks per the **Per-Block Depth Guide**:
+   - Entering `Reviewing`: populate **REVIEW** block
+   - Entering `Submitting`: update **REVIEW** block with final resolutions
+   - Entering `Ready`: ensure **IMPLEMENTATION** block is complete
 4. Append a row to the **PHASE_LOG block** — apply the same dedupe rule as the PR body:
    - Do not append if the last row already has the same Phase value
 
@@ -99,10 +99,7 @@ At each phase transition (after calling `update-pull-request`):
 During Phase 3/4, after completing each task:
 
 1. In the **PLAN block**, update the task's `Status` column: `pending` → `in-progress` → `done`
-2. In the **IMPLEMENTATION block**:
-   - Add each file path to "Files Modified" with a brief note on what changed (e.g., `scripts/assembler/registry.py — added state_files() accessor`)
-   - Add each test to "Tests Added" with what it covers (e.g., `tests/test_assembler.py::test_state_schema_generated — verifies .github/state/SCHEMA.md exists and contains STATE_BLOCK markers`)
-   - If any plan deviation occurred, note it (e.g., "Added extra validation not in original plan because...")
+2. Update the **IMPLEMENTATION block** per the depth guide (files modified, tests added, any plan deviations)
 3. Stage the state file:
    ```bash
    git add .github/state/<TICKET-KEY>.md
