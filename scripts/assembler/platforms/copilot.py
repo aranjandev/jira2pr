@@ -210,6 +210,7 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_state(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        # No {{VAR}} substitution — state files use <PLACEHOLDER> runtime syntax filled by agents.
         for file_path in registry.state_files():
             content = file_path.read_text()
             rel = f"{self.GITHUB_PREFIX}/state/{file_path.name}"
@@ -220,6 +221,8 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_artifacts(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        # No {{VAR}} substitution — artifacts files use <PLACEHOLDER> runtime syntax filled by agents.
+        # REGISTRY.md is excluded by registry.artifacts_files() — it is agent-managed, not generated.
         for file_path in registry.artifacts_files():
             content = file_path.read_text()
             rel = f"{self.GITHUB_PREFIX}/artifacts/{file_path.name}"

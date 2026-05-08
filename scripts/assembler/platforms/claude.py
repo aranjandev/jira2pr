@@ -3,6 +3,10 @@
 This is a minimal stub.  Claude Code support is planned but not yet
 feature-complete.  Currently it generates:
   - .claude/commands/<slug>.md   for each agent
+
+Not yet implemented (see KAN-12 follow-up):
+  - state/   (→ SCHEMA.md, workflow-state.tpl.md)  — add _assemble_state()
+  - artifacts/  (→ SCHEMA.md)                       — add _assemble_artifacts()
 """
 
 from __future__ import annotations

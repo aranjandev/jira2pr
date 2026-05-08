@@ -22,7 +22,6 @@ Then use this routing table for **Step G**:
 | Phase Found | Resume Point | Pre-resume Check |
 |-------------|--------------|------------------|
 | `Implementing` | **STEP-4.1** | Check `git diff --stat` and `git status` to assess regression test + fix progress. Report assessment to user. |
-| `Reviewing` | **STEP-6.1** | Verify Review Summary block is populated |
 | `Submitting` | **STEP-6.1** | Verify Review Summary block is populated |
 | `Ready` | **STOP** | Report "PR #N is already finalized and marked Ready" |
 
@@ -118,6 +117,7 @@ Then use this routing table for **Step G**:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions
     - Append Phase Log: "Self-review complete, findings addressed"
+    - Also update state file: set PHASE to `Submitting`, update REVIEW block with risk level and findings, append Phase Log row (same content)
 
 ## Phase 6: Submit
 
