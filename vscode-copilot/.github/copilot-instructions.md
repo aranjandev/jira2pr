@@ -87,6 +87,8 @@ Skills are reusable, domain-specific instruction sets that agents load on demand
 | `update-pull-request` | Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks |
 | `summarize-changes` | Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module |
 | `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
+| `manage-state` | Creates, reads, and updates the per-workflow agent state file at  |
+| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at  |
 
 ### Agent Prompts
 

@@ -69,6 +69,18 @@ Then use this routing table for **Step G**:
      --draft --labels "bugfix"
    ```
 
+* **STEP-3.3b: Create state file** using the `manage-state` skill:
+   - Copy `.github/state/workflow-state.tpl.md` to `.github/state/<TICKET_KEY>.md`
+   - Populate META block: workflow type (`bugfix`), ticket key, ticket URL, branch, PR number, PR URL, timestamps
+   - Set PHASE to `Implementing`
+   - Populate UNDERSTANDING block with bug description, root cause, and constraints from Phases 1–2
+   - Populate PLAN block with fix tasks (all `Status=pending`), test strategy, and risks
+   - Populate first PHASE_LOG row: same timestamp and summary as the PR body Phase Log entry
+   - Commit the state file:
+     ```bash
+     python3 ./.github/skills/git-operations/scripts/git_helper.py commit "chore(state): initialize workflow state [<TICKET_KEY>]"
+     ```
+
 ## Phase 4: Implement
 
 * **STEP-4.1: Write a regression test first**:
@@ -79,6 +91,7 @@ Then use this routing table for **Step G**:
     - Make the minimal change needed to resolve the root cause
     - Follow project conventions from `copilot-instructions.md`
     - Avoid unrelated changes — keep the diff focused
+    - After completing each task, update the state file PLAN block task status and IMPLEMENTATION block using the `manage-state` skill
 
 * **STEP-4.3: Run the full test suite**:
     ```bash
@@ -91,6 +104,7 @@ Then use this routing table for **Step G**:
 * **STEP-4.5: Update PR** using the `update-pull-request` skill:
     - No status change (still `Implementing`)
     - Append Phase Log: "Fix applied, regression test passing"
+    - Also update state file: append matching Phase Log row (same content)
 
 ## Phase 5: Self-Review
 
@@ -111,4 +125,7 @@ Then use this routing table for **Step G**:
     - Commit and push changes
     - Use the `update-pull-request` skill to finalize: Status → `Ready`, Draft → `false` (`--undraft`)
     - Append Phase Log: "PR finalized and marked ready for review"
+    - Register the artifact using the `register-artifact` skill: append one row to `.github/artifacts/REGISTRY.md` with ticket, PR number, branch, URL, actor (`pr-author`), risk level from Review Summary, and a one-sentence summary
+    - Archive the state file: `git mv .github/state/<TICKET_KEY>.md .github/state/archive/<TICKET_KEY>.md`
+    - Include registry update and state archive in the final commit
 * **STEP-6.2: Report to the user**: Provide the PR URL and a brief summary including the root cause and the fix.

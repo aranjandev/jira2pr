@@ -176,6 +176,50 @@ class TestCopilotAssembly(unittest.TestCase):
         assembler.assemble(self.registry, writer)
         self.assertTrue(writer.all_ok, writer.summary())
 
+    def test_state_schema_generated(self):
+        self.assertTrue(
+            (self.out / ".github/state/SCHEMA.md").exists(),
+            "Missing .github/state/SCHEMA.md",
+        )
+        content = (self.out / ".github/state/SCHEMA.md").read_text()
+        self.assertIn("STATE_BLOCK", content)
+        self.assertIn("manage-state", content)
+
+    def test_state_template_generated(self):
+        self.assertTrue(
+            (self.out / ".github/state/workflow-state.tpl.md").exists(),
+            "Missing .github/state/workflow-state.tpl.md",
+        )
+        content = (self.out / ".github/state/workflow-state.tpl.md").read_text()
+        self.assertIn("STATE_BLOCK:META:BEGIN", content)
+        self.assertIn("STATE_BLOCK:PHASE_LOG:BEGIN", content)
+
+    def test_artifacts_schema_generated(self):
+        self.assertTrue(
+            (self.out / ".github/artifacts/SCHEMA.md").exists(),
+            "Missing .github/artifacts/SCHEMA.md",
+        )
+        content = (self.out / ".github/artifacts/SCHEMA.md").read_text()
+        self.assertIn("REGISTRY.md", content)
+        self.assertIn("register-artifact", content)
+
+    def test_artifacts_registry_not_generated(self):
+        # The assembler must NOT generate REGISTRY.md — it is agent-managed.
+        self.assertFalse(
+            (self.out / ".github/artifacts/REGISTRY.md").exists(),
+            "Assembler must not generate REGISTRY.md",
+        )
+
+    def test_new_skills_assembled(self):
+        self.assertTrue(
+            (self.out / ".github/skills/manage-state/SKILL.md").exists(),
+            "Missing manage-state skill",
+        )
+        self.assertTrue(
+            (self.out / ".github/skills/register-artifact/SKILL.md").exists(),
+            "Missing register-artifact skill",
+        )
+
 
 class TestClaudeAssembly(unittest.TestCase):
 

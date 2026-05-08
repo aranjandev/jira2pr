@@ -42,6 +42,8 @@ class CopilotAssembler(PlatformAssembler):
         self._assemble_prompts(registry, writer)
         self._assemble_project_instructions(registry, writer)
         self._assemble_model_tiers(registry, writer)
+        self._assemble_state(registry, writer)
+        self._assemble_artifacts(registry, writer)
         self._copy_platform_extras(registry, writer)
         self._copy_env_example(registry, writer)
 
@@ -202,6 +204,26 @@ class CopilotAssembler(PlatformAssembler):
         extras = registry.platform_extras_dir(self.name)
         if extras is not None:
             writer.copy_tree(extras, f"{self.GITHUB_PREFIX}/scripts")
+
+    # ------------------------------------------------------------------
+    # State
+    # ------------------------------------------------------------------
+
+    def _assemble_state(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        for file_path in registry.state_files():
+            content = file_path.read_text()
+            rel = f"{self.GITHUB_PREFIX}/state/{file_path.name}"
+            writer.put(rel, content)
+
+    # ------------------------------------------------------------------
+    # Artifacts
+    # ------------------------------------------------------------------
+
+    def _assemble_artifacts(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        for file_path in registry.artifacts_files():
+            content = file_path.read_text()
+            rel = f"{self.GITHUB_PREFIX}/artifacts/{file_path.name}"
+            writer.put(rel, content)
 
     # ------------------------------------------------------------------
     # .env.example

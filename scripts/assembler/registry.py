@@ -107,6 +107,20 @@ class CanonicalRegistry:
         d = self.canonical_dir / "workflows"
         return sorted(d.glob("*.md")) if d.is_dir() else []
 
+    def state_files(self) -> list[Path]:
+        """List all state/ markdown files (SCHEMA, templates — not agent-managed state files)."""
+        d = self.canonical_dir / "state"
+        if not d.is_dir():
+            return []
+        return sorted(p for p in d.glob("*.md") if not p.name.startswith("_"))
+
+    def artifacts_files(self) -> list[Path]:
+        """List all artifacts/ markdown files (SCHEMA only — not the agent-managed REGISTRY.md)."""
+        d = self.canonical_dir / "artifacts"
+        if not d.is_dir():
+            return []
+        return sorted(p for p in d.glob("*.md") if not p.name.startswith("_"))
+
     def model_for_tier(self, tier: int, platform: str) -> str:
         """Look up the model name for a tier + platform combination."""
         tiers = self.model_tiers.get("tiers", {})
