@@ -18,7 +18,24 @@ The PR body is the canonical **human-visible** state. The state file is the cano
 - **Created** by the orchestrator at Phase 2 (after branch + draft PR creation) using the `manage-state` skill
 - **Updated** at each phase transition and after completing significant tasks
 - **Committed to git** alongside code changes so context survives session restarts
-- **Archived** (moved to `.github/state/archive/`) by the pr-author when the PR reaches `Ready`
+- **Archived** by the pr-author when the PR reaches `Ready` — moved to `.github/state/archive/<TICKET-KEY>.md` (see Archive section below)
+
+## Archive
+
+Completed workflow state files are preserved in `.github/state/archive/` rather than deleted, providing a historical record of past workflows.
+
+| Property | Value |
+|----------|-------|
+| Location | `.github/state/archive/<TICKET-KEY>.md` |
+| Created by | `pr-author`, at the `Ready` phase transition |
+| Operation | `git mv .github/state/<TICKET-KEY>.md .github/state/archive/<TICKET-KEY>.md` |
+| Mutability | **Read-only after archival** — archived files must never be updated |
+| Included in commit | Yes — the `git mv` is included in the finalization commit alongside the artifact registry update |
+
+**Rules:**
+- Archive only when the PR has reached `Ready` — never archive an in-progress state file
+- If the PR is closed without merging (abandoned), delete the state file rather than archiving it (`git rm`)
+- Archived files are for historical reference only; a resuming agent must never read from archive to continue work
 
 ## Block Definitions
 
