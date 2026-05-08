@@ -4,11 +4,7 @@ Shared steps for resuming a workflow from an existing draft PR. Both the feature
 
 ## Steps A–F: Parse and Restore PR State
 
-* **STEP-A: Fetch PR body:**
-   ```bash
-   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
-     --pr-number <PR_NUMBER> > /tmp/pr_current_body.md
-   ```
+* **STEP-A: Fetch PR body** using `pr_helper.py fetch-body --pr-number <PR_NUMBER>` (see `update-pull-request` skill).
 * **STEP-B: Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, report "This PR does not use the canonical schema — cannot resume" and stop.
 * **STEP-C: Parse PR state:**
    - Status block → extract current Phase
