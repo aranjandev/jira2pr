@@ -65,9 +65,11 @@ cat .github/state/<TICKET-KEY>.md
 ```
 
 Parse `STATE_BLOCK:*:BEGIN/END` boundary markers to extract specific sections:
+- **UNDERSTANDING block** → requirements, discovered file paths, conventions, build commands (primary context for resuming Phase 1 work)
+- **RESEARCH block** → options evaluated, recommendation, references (prevents re-running research)
 - **META block** → ticket, branch, PR number for API calls
 - **PHASE block** → current phase for routing
-- **PLAN block** → task table for progress assessment
+- **PLAN block** → task table with statuses for progress assessment
 - **PHASE_LOG block** → audit trail for context
 
 If the state file does not exist (older workflow or first resume), fall back to fetching the PR body:

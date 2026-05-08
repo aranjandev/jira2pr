@@ -35,10 +35,18 @@
 <!-- MUTABLE | owner: orchestrator | populated-at: Phase 1 -->
 
 ### Requirements Summary
-<!-- One paragraph: what the ticket requires -->
+<!-- What the ticket requires, in the agent's own words. Include every acceptance criterion. -->
 
 ### Key Constraints
-<!-- Hard constraints shaping the solution -->
+<!-- Hard constraints shaping the solution (performance, compatibility, security, scope) -->
+-
+
+### Key Files and Patterns Discovered
+<!-- Relevant file paths found during codebase exploration; conventions and patterns to follow -->
+-
+
+### Build / Test / Lint Commands
+<!-- Confirmed commands for this repo (from project-instructions or exploration) -->
 -
 
 ### Open Questions
@@ -53,7 +61,18 @@
 
 <!-- STATE_BLOCK:RESEARCH:BEGIN -->
 <!-- MUTABLE | owner: orchestrator | populated-at: Phase 2 if researcher agent was invoked -->
-<!-- Leave empty if no research was needed -->
+<!-- Leave this block empty (remove sub-sections below) if no research was needed -->
+
+### Options Evaluated
+<!-- Each option/library/approach considered, with accept/reject reasoning -->
+-
+
+### Recommendation
+<!-- Final choice and explicit rationale (why this over the alternatives) -->
+
+### References
+<!-- Links to docs, articles, or API references consulted -->
+-
 
 <!-- STATE_BLOCK:RESEARCH:END -->
 
@@ -84,11 +103,15 @@
 <!-- MUTABLE | owner: orchestrator | updated progressively during Phase 3/4 -->
 
 ### Files Modified
-<!-- Updated as each file is changed -->
+<!-- Per-file: path + brief note on what changed -->
 -
 
 ### Tests Added
-<!-- Updated as each test is added -->
+<!-- Per-test: name + what it covers -->
+-
+
+### Plan Deviations
+<!-- Any decisions made during implementation that differed from the plan, and why -->
 -
 
 <!-- STATE_BLOCK:IMPLEMENTATION:END -->
