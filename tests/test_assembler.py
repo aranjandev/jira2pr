@@ -193,6 +193,11 @@ class TestCopilotAssembly(unittest.TestCase):
         content = (self.out / ".github/state/workflow-state.tpl.md").read_text()
         self.assertIn("STATE_BLOCK:META:BEGIN", content)
         self.assertIn("STATE_BLOCK:PHASE_LOG:BEGIN", content)
+        # All 8 blocks from the schema must be present
+        for block in ["META", "PHASE", "UNDERSTANDING", "RESEARCH", "PLAN", "IMPLEMENTATION", "REVIEW", "PHASE_LOG"]:
+            self.assertIn(f"STATE_BLOCK:{block}:BEGIN", content, f"Missing block {block}")
+        # No unresolved compile-time {{VAR}} placeholders (state files use <PLACEHOLDER> syntax)
+        self.assertNotIn("{{", content, "Unresolved {{VAR}} in workflow-state.tpl.md")
 
     def test_artifacts_schema_generated(self):
         self.assertTrue(

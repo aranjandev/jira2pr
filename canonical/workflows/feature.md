@@ -134,6 +134,7 @@ Then use this routing table for **Step G**:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions
     - Append Phase Log: "Self-review complete, findings addressed"
+    - Also update state file: set PHASE to `Submitting`, update REVIEW block with risk level and findings, append Phase Log row (same content)
 
 ## Phase 5: Submitting
 

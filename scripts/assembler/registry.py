@@ -119,7 +119,13 @@ class CanonicalRegistry:
         d = self.canonical_dir / "artifacts"
         if not d.is_dir():
             return []
-        return sorted(p for p in d.glob("*.md") if not p.name.startswith("_"))
+        # Exclude _registry.yaml (not .md, but defensive) and REGISTRY.md so the
+        # assembler can never accidentally overwrite accumulated agent history.
+        excluded = {"_", "REGISTRY.md"}
+        return sorted(
+            p for p in d.glob("*.md")
+            if not p.name.startswith("_") and p.name != "REGISTRY.md"
+        )
 
     def model_for_tier(self, tier: int, platform: str) -> str:
         """Look up the model name for a tier + platform combination."""
