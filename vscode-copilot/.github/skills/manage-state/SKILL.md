@@ -115,11 +115,12 @@ During Phase 3/4, after completing each task:
 
 ### Archive at Completion
 
-When the pr-author finalizes the PR (moves to `Ready`):
+When the pr-author finalizes the PR (moves to `Ready`), move the state file to the archive folder per the rules in [`.github/state/SCHEMA.md`](../../state/SCHEMA.md#archive):
 ```bash
 mkdir -p .github/state/archive
 git mv .github/state/<TICKET-KEY>.md .github/state/archive/<TICKET-KEY>.md
 ```
+Include this `git mv` in the finalization commit alongside the artifact registry update. If the PR is abandoned instead, delete the file with `git rm` rather than archiving it.
 
 ## Important
 
