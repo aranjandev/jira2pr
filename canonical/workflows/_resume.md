@@ -16,7 +16,7 @@ Shared steps for resuming a workflow from an existing draft PR. Both the feature
 * **STEP-C2: Load state file if present** using the `manage-state` skill:
    - Check for `.github/state/<TICKET_KEY>.md` (ticket key comes from the Links block)
    - If found: read UNDERSTANDING, PLAN (with task statuses), IMPLEMENTATION, and RESEARCH blocks to enrich restored context beyond what the PR body contains
-   - If not found: continue \u2014 the PR body blocks parsed in STEP-C are sufficient for resumption
+   - If not found: continue — the PR body blocks parsed in STEP-C are sufficient for resumption
    - **Do not create** a new state file here; that happens only at Phase 2 during a fresh start
 
 * **STEP-D: Store `PR_NUMBER`** for subsequent update calls.
