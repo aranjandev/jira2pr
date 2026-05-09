@@ -61,4 +61,5 @@ Workflow definitions live in the platform's agent-workflows directory. Read the 
 - If you're unsure about a requirement, ask the user rather than guessing
 - **After plan approval, create a draft PR immediately** using the `create-pull-request` skill and store the PR number
 - **Update the PR body at each phase transition** using the `update-pull-request` skill — the PR is a live state document
+- **Maintain the workflow state file at every phase transition and after completing each task** using the `manage-state` skill — the state file is the agent's working memory and must stay in sync with the PR body at all times
 - **Pass the PR number to `pr-author`** at submit time — the pr-author finalizes the existing draft, it does not create a new PR

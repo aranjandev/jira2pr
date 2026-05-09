@@ -61,6 +61,24 @@
 
 Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.
 
+The workflow maintains **two state layers in parallel** — the PR body (human-facing, updated via the `update-pull-request` skill) and a per-workflow state file under `.github/state/` (agent-facing working memory, updated via the `manage-state` skill). Both layers must be kept in sync at every phase transition; neither alone is sufficient.
+
+**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions and owns both state layers throughout. The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+
+### State & Artifact Architecture
+
+The framework tracks state at two levels:
+
+| Layer | File | Audience | Skill | Owner |
+|-------|------|----------|-------|-------|
+| **PR body** | GitHub PR (live) | Human reviewers + agents | `update-pull-request` | orchestrator (all phases), pr-author (finalize) |
+| **Workflow state file** | `.github/state/<TICKET-KEY>.md` | Agents only | `manage-state` | orchestrator (all phases), pr-author (archive) |
+
+> **Invariant:** Both layers must be updated together at every phase boundary. Updating one without the other leaves the workflow in an inconsistent state.
+
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `.github/state/archive/<TICKET-KEY>.md`. The artifact registry at `.github/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+
+
 ### Agent Roster
 
 Five agents are available. Each has a defined scope and model tier:
@@ -87,8 +105,8 @@ Skills are reusable, domain-specific instruction sets that agents load on demand
 | `update-pull-request` | Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks |
 | `summarize-changes` | Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module |
 | `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
-| `manage-state` | Creates, reads, and updates the per-workflow agent state file at  |
-| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at  |
+| `manage-state` | Creates, reads, and updates the per-workflow agent state file at .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer resumption |
+| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at .github/artifacts/REGISTRY.md |
 
 ### Agent Prompts
 

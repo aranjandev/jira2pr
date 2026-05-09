@@ -57,37 +57,20 @@ Then use this routing table for **Step G**:
    - Test strategy, must include what tests will be added/modified and what user tests to run
    - Risks and mitigations (e.g., "This touches the auth flow, so I'll add extra tests and be careful to follow existing patterns")
 
-* **STEP-2.5: Create a feature branch** using the git-operations skill:
-   ```bash
-   python3 ./.github/skills/git-operations/scripts/git_helper.py create-branch <TICKET_KEY> feat
-   ```
+* **STEP-2.5: Create a feature branch** using the `git-operations` skill with ticket key `<TICKET_KEY>` and type `feat`.
 
 * **STEP-2.6: Create draft PR** using the `create-pull-request` skill:
    - Populate the canonical PR body template with: 
       * Status → `Implementing` 
       * Populate all fields: Links, Intent, Plan 
       * First Phase Log entry → "Branch created, draft PR created with plan, entering implementation"
-   - Create as `--draft`.
    - **Store the returned `PR_NUMBER`** — it is required for all subsequent updates.
-   ```bash
-   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
-     --title "<type>(<scope>): <description> [<TICKET_KEY>]" \
-     --body-file /tmp/pr_body.md \
-     --draft --labels "<labels>"
-   ```
 
 * **STEP-2.6b: Create state file** using the `manage-state` skill:
-   - Copy `.github/state/workflow-state.tpl.md` to `.github/state/<TICKET_KEY>.md`
-   - Populate META block: workflow type (`feature`), ticket key, ticket URL, branch, PR number, PR URL, timestamps
-   - Set PHASE to `Implementing`
-   - Populate UNDERSTANDING with requirements and constraints from Phase 1
-   - Populate RESEARCH block with researcher output (if STEP-2.2 was run; leave empty otherwise)
-   - Populate PLAN block: task table (all tasks with `Status=pending`), test strategy, risks
-   - Populate first PHASE_LOG row: same timestamp and summary as the PR body Phase Log entry
-   - Commit the state file:
-     ```bash
-     python3 ./.github/skills/git-operations/scripts/git_helper.py commit "chore(state): initialize workflow state [<TICKET_KEY>]"
-     ```
+   - Workflow type: `feature`
+   - Phase: `Implementing`
+   - Populate UNDERSTANDING from Phase 1 output, RESEARCH from STEP-2.2 (if run), PLAN from STEP-2.3/2.4
+   - Commit with message: `chore(state): initialize workflow state [<TICKET_KEY>]`
 
 * **STEP-2.7: Present the plan in PR** to the user:
    - Show the user the PR link for the proposed plan.
@@ -103,7 +86,7 @@ Then use this routing table for **Step G**:
     - Write clean, idiomatic code
     - Add/update tests alongside implementation
     - Mark each task as completed in the todo list immediately after finishing it
-    - After completing each task, update the state file PLAN block task status (`pending` → `in-progress` → `done`) and IMPLEMENTATION block using the `manage-state` skill
+    - After completing each task, update progress via the `manage-state` skill
 
 * **STEP-3.2: Run tests** after implementation:
     ```bash
@@ -116,7 +99,7 @@ Then use this routing table for **Step G**:
 * **STEP-3.4: Update PR** using the `update-pull-request` skill:
     - Status → `Reviewing`
     - Append Phase Log: "Implementation complete, tests passing"
-    - Also update state file: set PHASE to `Reviewing`, append Phase Log row (same content)
+    - Also update state file via the `manage-state` skill (same phase + log entry)
 
 ## Phase 4: Reviewing
 
@@ -134,17 +117,16 @@ Then use this routing table for **Step G**:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions
     - Append Phase Log: "Self-review complete, findings addressed"
-    - Also update state file: set PHASE to `Submitting`, update REVIEW block with risk level and findings, append Phase Log row (same content)
+    - Also update state file via the `manage-state` skill (same phase + review data + log entry)
 
 ## Phase 5: Submitting
 
 * **STEP-5.1: Delegate to `pr-author` agent**: 
     - Pass the JIRA ticket key **and the PR number**. 
-    - Aside from the assigned tasks, PR author must submit PR with these specs:
-      - Use the `update-pull-request` skill to finalize: Status → `Ready`, Draft → `false` (`--undraft`)
-      - Append Phase Log: "PR finalized and marked ready for review"
-      - Register the artifact using the `register-artifact` skill: append one row to `.github/artifacts/REGISTRY.md` with ticket, PR number, branch, URL, actor (`pr-author`), risk level from Review Summary, and a one-sentence summary
-      - Archive the state file: `git mv .github/state/<TICKET_KEY>.md .github/state/archive/<TICKET_KEY>.md`
+    - PR author must:
+      - Finalize the PR via `update-pull-request` skill: Status → `Ready`, undraft
+      - Register the artifact via `register-artifact` skill
+      - Archive the state file via `manage-state` skill
       - Include registry update and state archive in the final commit
 
 * **STEP-5.2: Report to the user**: Provide the PR URL and a brief summary of what was done.
