@@ -54,3 +54,28 @@
   - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
 
 <!-- AGENTS_SECTION:AUTO_GENERATED -->
+
+## How Agents Contribute to Code
+
+> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.
+
+Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `{{AGENTS_DIR}}/`.
+
+The workflow maintains **two state layers in parallel** — the PR body (human-facing, updated via the `update-pull-request` skill) and a per-workflow state file under `{{AGENTS_DIR}}/state/` (agent-facing working memory, updated via the `manage-state` skill). Both layers must be kept in sync at every phase transition; neither alone is sufficient.
+
+**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions and owns both state layers throughout. The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+
+### State & Artifact Architecture
+
+The framework tracks state at two levels:
+
+| Layer | File | Audience | Skill | Owner |
+|-------|------|----------|-------|-------|
+| **PR body** | GitHub PR (live) | Human reviewers + agents | `update-pull-request` | orchestrator (all phases), pr-author (finalize) |
+| **Workflow state file** | `{{AGENTS_DIR}}/state/<TICKET-KEY>.md` | Agents only | `manage-state` | orchestrator (all phases), pr-author (archive) |
+
+> **Invariant:** Both layers must be updated together at every phase boundary. Updating one without the other leaves the workflow in an inconsistent state.
+
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `{{AGENTS_DIR}}/state/archive/<TICKET-KEY>.md`. The artifact registry at `{{AGENTS_DIR}}/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+
+<!-- AGENTS_SECTION:DYNAMIC_TABLES -->
