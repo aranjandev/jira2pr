@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).parent.parent / "vscode-copilot/.github/scripts/apply_model_tiers.py"
+SCRIPT = Path(__file__).parent.parent / "canonical/platform-extras/copilot/apply_model_tiers.py"
 
 
 def _load():
