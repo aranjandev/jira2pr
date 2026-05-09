@@ -31,15 +31,15 @@ def generate_agents_section(
     platform: str,
     project_instructions_file: str,
 ) -> str:
-    """Build the markdown for the auto-generated agents documentation section."""
-    lines: list[str] = []
+    """Build the markdown for the dynamic (data-driven) table sub-sections.
 
-    lines.append("")
-    lines.append("## How Agents Contribute to Code")
-    lines.append("")
-    lines.append("> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.")
-    lines.append("")
-    lines.append("Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.")
+    The static canonical prose (section heading, overview paragraphs,
+    State & Artifact Architecture) lives in canonical/project-instructions.md
+    after the AGENTS_SECTION:AUTO_GENERATED marker and is passed through
+    verbatim by the assembler.  This function emits only the parts that are
+    generated from registry data.
+    """
+    lines: list[str] = []
 
     # --- Agent Roster ---
     lines.append("")
@@ -66,7 +66,7 @@ def generate_agents_section(
     lines.append("| Skill | Purpose |")
     lines.append("|-------|---------|")
     for skill in registry.skills:
-        purpose = skill["description"].split(".")[0]
+        purpose = re.split(r"\.\s", skill["description"], maxsplit=1)[0]
         lines.append(f"| `{skill['slug']}` | {purpose} |")
 
     # --- Agent Prompts ---

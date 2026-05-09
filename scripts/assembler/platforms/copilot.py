@@ -27,6 +27,7 @@ class CopilotAssembler(PlatformAssembler):
 
     TEMPLATE_VARS: dict[str, str] = {
         "PROJECT_INSTRUCTIONS_FILE": "copilot-instructions.md",
+        "AGENTS_DIR": ".github",
         "TASK_TRACKING_INSTRUCTION": "use the `todo` tool to plan the tasks",
         "TASK_COMPLETION_INSTRUCTION": "Mark each task as completed in the todo list immediately after finishing it",
     }
@@ -166,16 +167,27 @@ class CopilotAssembler(PlatformAssembler):
 
     def _assemble_project_instructions(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
         tpl = registry.project_instructions_tpl
-        marker = "<!-- AGENTS_SECTION:AUTO_GENERATED -->"
+        start_marker = "<!-- AGENTS_SECTION:AUTO_GENERATED -->"
+        tables_marker = "<!-- AGENTS_SECTION:DYNAMIC_TABLES -->"
 
-        if marker in tpl:
+        if tables_marker in tpl:
+            # Template has the two-marker layout:
+            #   static prose lives between start_marker and tables_marker
+            #   dynamic tables are injected at tables_marker
+            dynamic_tables = generate_agents_section(
+                registry, self.name, "copilot-instructions.md"
+            )
+            content = tpl.replace(tables_marker, dynamic_tables)
+        elif start_marker in tpl:
+            # Legacy single-marker layout: inject everything at start_marker
             agents_section = generate_agents_section(
                 registry, self.name, "copilot-instructions.md"
             )
-            content = tpl.replace(marker, marker + "\n" + agents_section)
+            content = tpl.replace(start_marker, start_marker + "\n" + agents_section)
         else:
             content = tpl
 
+        content = self.substitute(content)
         rel = f"{self.GITHUB_PREFIX}/copilot-instructions.md"
         writer.put(rel, content)
 
