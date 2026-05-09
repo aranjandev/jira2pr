@@ -45,6 +45,7 @@ class CopilotAssembler(PlatformAssembler):
         self._assemble_model_tiers(registry, writer)
         self._assemble_state(registry, writer)
         self._assemble_artifacts(registry, writer)
+        self._assemble_readme(registry, writer)
         self._copy_platform_extras(registry, writer)
         self._copy_env_example(registry, writer)
 
@@ -212,10 +213,24 @@ class CopilotAssembler(PlatformAssembler):
     # Platform extras (scripts like apply_model_tiers.py)
     # ------------------------------------------------------------------
 
+    def _assemble_readme(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        extras = registry.platform_extras_dir(self.name)
+        if extras is None:
+            return
+        tpl_path = extras / "README.md.tpl"
+        if not tpl_path.exists():
+            return
+        content = self.substitute(tpl_path.read_text())
+        writer.put(f"{self.GITHUB_PREFIX}/README.md", content)
+
     def _copy_platform_extras(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
         extras = registry.platform_extras_dir(self.name)
         if extras is not None:
-            writer.copy_tree(extras, f"{self.GITHUB_PREFIX}/scripts")
+            # Copy all files except .tpl files (those are handled by dedicated assembler methods).
+            for src_file in sorted(extras.rglob("*")):
+                if src_file.is_file() and src_file.suffix != ".tpl":
+                    file_rel = Path(f"{self.GITHUB_PREFIX}/scripts") / src_file.relative_to(extras)
+                    writer.copy(src_file, file_rel)
 
     # ------------------------------------------------------------------
     # State
