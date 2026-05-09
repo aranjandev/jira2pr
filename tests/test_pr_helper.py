@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import urllib.error
 
-SCRIPT = Path(__file__).parent.parent / "vscode-copilot/.github/skills/create-pull-request/scripts/pr_helper.py"
+SCRIPT = Path(__file__).parent.parent / "canonical/skills/create-pull-request/scripts/pr_helper.py"
 
 
 def _load():

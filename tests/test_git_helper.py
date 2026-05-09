@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-SCRIPT = Path(__file__).parent.parent / "vscode-copilot/.github/skills/git-operations/scripts/git_helper.py"
+SCRIPT = Path(__file__).parent.parent / "canonical/skills/git-operations/scripts/git_helper.py"
 
 
 def _load():
