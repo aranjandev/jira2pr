@@ -1,6 +1,6 @@
 ---
 description: "Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review. Use this agent when code changes are complete and ready to be submitted."
-name: "PR Author"
+name: "pr-author"
 tools: [read, execute]
 model: "Claude Haiku 3.5 (copilot)"
 argument-hint: "JIRA ticket key, PR number, and any PR-specific instructions"
