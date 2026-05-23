@@ -54,3 +54,38 @@ Use the output format from the `identify-risks` skill as the risk assessment sec
 - **Be proportionate** — don't invent problems. If the code is clean, say so.
 - **Be constructive** — every finding should include a recommendation for how to fix it
 - **No false positives** — only flag issues that could actually cause problems
+
+## Review Focus Rules (MANDATORY)
+
+This workflow guarantees:
+- Small, scoped changes (≤ 5 files)
+- No unrelated refactoring
+- Deterministic task execution
+- Tests are explicitly included
+
+Adjust your review accordingly:
+
+### Focus ONLY on high-signal issues:
+- Logic correctness
+- Missing edge cases that break behavior
+- Incorrect assumptions
+- Security issues
+- Data integrity issues
+
+### Deprioritize or IGNORE:
+- Minor style issues
+- Naming preferences
+- Alternative implementations
+- Hypothetical or speculative risks
+
+### Noise Reduction Rules:
+
+- Do NOT list more than 5 findings unless critical
+- Combine similar issues into one finding
+- Skip LOW-impact observations unless they affect correctness
+
+### Recommendation Policy:
+
+- APPROVE → if no correctness or risk issues
+- APPROVE WITH SUGGESTIONS → minor improvements only
+- REQUEST CHANGES → only if real failure/risk exists

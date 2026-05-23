@@ -45,10 +45,13 @@ Then use this routing table for **Step G**:
 
 ## Phase 3: Plan & Propose
 
-* **STEP-3.1: Plan the fix**:
-   - Describe the minimal, targeted change that addresses the root cause
-   - Identify which files need to change
-   - Plan the regression test: a test that fails before the fix and passes after
+* **STEP-3.1: Delegate to `planner-lite` agent** to produce a fix plan:
+   - Pass the root cause from STEP-2.2, affected code paths from STEP-1.3, and project conventions
+   - The plan must include:
+     - The regression test (a test that fails before the fix and passes after)
+     - The minimal, targeted code change that addresses the root cause
+     - Ordered task list: regression test first, then fix
+   - Receive back a validated plan containing: Summary, File Changes, ordered Task List, Tests, and Constraints
    - For complex fixes (touches > 3 files or risky areas like auth/payments), present the plan to the user and wait for confirmation
    - For simple fixes, present and proceed immediately
 
@@ -66,25 +69,24 @@ Then use this routing table for **Step G**:
 
 ## Phase 4: Implement
 
-* **STEP-4.1: Write a regression test first**:
-    - Add a test that reproduces the bug (should fail against current code logic)
-    - This test must pass after the fix is applied
+* **STEP-4.1: Delegate to `coder` agent** for implementation:
+    - Pass the complete plan from STEP-3.1 (planner-lite output) as the execution spec
+    - Pass project conventions from `{{PROJECT_INSTRUCTIONS_FILE}}`
+    - Pass relevant file context identified in the plan
+    - The `coder` will implement ALL changes: regression test AND fix code
+    - The regression test must be written first (as specified in the plan's task order)
+    - The `coder` will run tests and lint, and self-fix failures (up to 2 retries)
+    - Do NOT implement any code yourself — all implementation is delegated to `coder`
 
-* **STEP-4.2: Implement the fix**:
-    - Make the minimal change needed to resolve the root cause
-    - Follow project conventions from `{{PROJECT_INSTRUCTIONS_FILE}}`
-    - Avoid unrelated changes — keep the diff focused
-    - After completing each task, update progress via the `manage-state` skill
+* **STEP-4.2: Verify completion** after `coder` returns:
+    - Check the completion report: confirm tests pass and lint is clean
+    - If `coder` reports failure after retries → report to user and stop
+    - Confirm the regression test was added
+    - Confirm the fix addresses the root cause identified in STEP-2.2
+    - Confirm no unrelated changes were introduced
+    - Update progress via the `manage-state` skill
 
-* **STEP-4.3: Run the full test suite**:
-    ```bash
-    # Use the test command from {{PROJECT_INSTRUCTIONS_FILE}}
-    ```
-* **STEP-4.4: Run linting** if configured:
-    ```bash
-    # Use the lint command from {{PROJECT_INSTRUCTIONS_FILE}}
-    ```
-* **STEP-4.5: Update PR** using the `update-pull-request` skill:
+* **STEP-4.3: Update PR** using the `update-pull-request` skill:
     - No status change (still `Implementing`)
     - Append Phase Log: "Fix applied, regression test passing"
     - Also update state file via the `manage-state` skill (same log entry)
@@ -92,11 +94,13 @@ Then use this routing table for **Step G**:
 ## Phase 5: Self-Review
 
 * **STEP-5.1: Delegate to `reviewer`**: Ask the reviewer agent to analyze all changes.
-* **STEP-5.2: Address findings**:
-    - Fix any CRITICAL or HIGH findings immediately
-    - Apply MEDIUM suggestions if they're quick wins
+* **STEP-5.2: Address findings** by delegating to `coder`:
+    - Pass CRITICAL and HIGH findings to `coder` for immediate fix
+    - Pass MEDIUM suggestions to `coder` if they're quick wins
     - Note LOW/nit findings but don't block on them
-* **STEP-5.3: Re-run tests** after addressing review feedback.
+    - Do NOT fix code yourself — delegate all code changes to `coder`
+    - `coder` will run tests after fixes and self-verify
+* **STEP-5.3: Verify** `coder` completion report confirms tests pass.
 * **STEP-5.4: Update PR** using the `update-pull-request` skill:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions

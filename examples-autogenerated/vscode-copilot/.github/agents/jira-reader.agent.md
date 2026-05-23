@@ -1,6 +1,6 @@
 ---
 description: "Fetches and interprets JIRA tickets. Reads a JIRA ticket by key or URL and produces a structured requirements document with summary, description, acceptance criteria, subtasks, and implementation hints. Use this agent when you need to understand what a JIRA ticket requires before planning or implementing."
-name: "JIRA Reader"
+name: "jira-reader"
 tools: [read, search, execute]
 model: "GPT-4o mini (copilot)"
 argument-hint: "JIRA ticket key (e.g., PROJ-123) or URL"

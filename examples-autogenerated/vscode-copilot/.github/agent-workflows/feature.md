@@ -41,21 +41,20 @@ Then use this routing table for **Step G**:
    - Based on above, decide if research is needed 
    - If research needed: then go to STEP-2.2, else go to STEP-2.3
 
-*  **STEP-2.2: Research**: 
-   - Delegate to `researcher` agent with a query for package recommendations, algorithm comparisons, or API patterns. 
-   - Pass results to next steps.
+*  **STEP-2.2: Research: Delegate to `researcher` agent:** 
+   - Pass a query for package recommendations, algorithm comparisons, or API patterns. 
+   - Pass the research results to next steps.
 
-* **STEP-2.3: Create a task list** (use the `todo` tool to plan the tasks) breaking down the implementation:
-   - List each file to create or modify
-   - List each test to add
-   - Order tasks by dependency
-   - If research was done (STEP-2.2), incorporate findings and rationale (e.g., "Use library X because Y")
+* **STEP-2.3: Delegate to `planner-lite` agent** to produce a file-level implementation plan:
+   - Pass the structured requirements from STEP-1.1, project conventions from STEP-1.2, codebase context from STEP-1.3, and research output from STEP-2.2 (if any)
+   - Receive back a validated plan containing: Summary, File Changes, ordered Task List, Tests, and Constraints
+   - The plan is the **single source of truth** for implementation — no implementation detail is left ambiguous
 
-* **STEP-2.4: Format the plan** with these must-have items:
-   - Summary of intended behavior after implementation
-   - Tasks list from STEP-2.3
-   - Test strategy, must include what tests will be added/modified and what user tests to run
-   - Risks and mitigations (e.g., "This touches the auth flow, so I'll add extra tests and be careful to follow existing patterns")
+* **STEP-2.4: Review the plan** output from `planner-lite`:
+   - Verify it covers all requirements from the JIRA ticket
+   - Verify test strategy includes success and edge/failure cases
+   - If the plan is incomplete or misses requirements, re-invoke `planner-lite` with clarifying context
+   - Use the use the `todo` tool to plan the tasks to track the task list from the plan
 
 * **STEP-2.5: Create a feature branch** using the `git-operations` skill with ticket key `<TICKET_KEY>` and type `feat`.
 
@@ -81,22 +80,22 @@ Then use this routing table for **Step G**:
 
 ## Phase 3: Implementing
 
-* **STEP-3.1: Implement changes** file by file, following the plan:
-    - Follow project conventions from `copilot-instructions.md`
-    - Write clean, idiomatic code
-    - Add/update tests alongside implementation
-    - Mark each task as completed in the todo list immediately after finishing it
-    - After completing each task, update progress via the `manage-state` skill
+* **STEP-3.1: Delegate to `coder` agent** for implementation:
+    - Pass the complete plan from STEP-2.3 (planner-lite output) as the execution spec
+    - Pass project conventions from `copilot-instructions.md`
+    - Pass relevant file context identified in the plan
+    - The `coder` will implement ALL code changes and tests specified in the plan
+    - The `coder` will run tests and lint, and self-fix failures (up to 2 retries)
+    - Do NOT implement any code yourself — all implementation is delegated to `coder`
 
-* **STEP-3.2: Run tests** after implementation:
-    ```bash
-    # Use the test command from copilot-instructions.md
-    ```
-* **STEP-3.3: Run linting** if configured:
-    ```bash
-    # Use the lint command from copilot-instructions.md
-    ```
-* **STEP-3.4: Update PR** using the `update-pull-request` skill:
+* **STEP-3.2: Verify completion** after `coder` returns:
+    - Check the completion report: confirm tests pass and lint is clean
+    - If `coder` reports failure after retries → report to user and stop
+    - Confirm all files from the plan were created/modified
+    - Update progress via the `manage-state` skill
+    - Mark each task as completed in the todo list immediately after finishing it
+
+* **STEP-3.3: Update PR** using the `update-pull-request` skill:
     - Status → `Reviewing`
     - Append Phase Log: "Implementation complete, tests passing"
     - Also update state file via the `manage-state` skill (same phase + log entry)
@@ -106,12 +105,14 @@ Then use this routing table for **Step G**:
 * **STEP-4.1: Delegate to `reviewer` agent**: 
    - Ask the reviewer agent to analyze all changes.
 
-* **STEP-4.2: Address findings**:
-    - Fix any CRITICAL or HIGH findings immediately
-    - Apply MEDIUM suggestions if they're quick wins
+* **STEP-4.2: Address findings** by delegating to `coder`:
+    - Pass CRITICAL and HIGH findings to `coder` for immediate fix
+    - Pass MEDIUM suggestions to `coder` if they're quick wins
     - Note LOW/nit findings but don't block on them
+    - Do NOT fix code yourself — delegate all code changes to `coder`
+    - `coder` will run tests after fixes and self-verify
 
-* **STEP-4.3: Re-run tests** after addressing review feedback.
+* **STEP-4.3: Verify** `coder` completion report confirms tests pass.
 
 * **STEP-4.4: Update PR** using the `update-pull-request` skill:
     - Status → `Submitting`

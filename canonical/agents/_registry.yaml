@@ -16,15 +16,14 @@
 
 agents:
   - slug: orchestrator
-    name: Orchestrator
+    name: orchestrator
     description: 'End-to-end feature development orchestrator. Accepts a JIRA ticket
-      (fresh start) or a PR link/number (resume from last phase). Reads
-      requirements, plans implementation, writes code, self-reviews, and submits
-      a PR. Chains subagents: jira-reader for ticket parsing, researcher for
-      research, reviewer for quality checks, pr-author for submission. Use this
-      agent for full feature or bugfix workflows.'
-    tier: 2
-    role: Primary executor with delegation authority
+      (fresh start) or a PR link/number (resume from last phase). Drives
+      execution via structured planning, deterministic coding, and high-signal
+      review using specialized subagents. Use this agent for full feature or
+      bugfix workflows.'
+    tier: 3
+    role: Primary delegator with coordination authority
     capabilities:
       - read
       - edit
@@ -35,6 +34,8 @@ agents:
     subagents:
       - jira-reader
       - researcher
+      - planner-lite
+      - coder
       - reviewer
       - pr-author
     argument_hint: 'JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g.,
@@ -42,7 +43,7 @@ agents:
     user_invocable: true
 
   - slug: jira-reader
-    name: JIRA Reader
+    name: jira-reader
     description: Fetches and interprets JIRA tickets. Reads a JIRA ticket by key or
       URL and produces a structured requirements document with summary,
       description, acceptance criteria, subtasks, and implementation hints. Use
@@ -58,7 +59,7 @@ agents:
     user_invocable: true
 
   - slug: reviewer
-    name: Reviewer
+    name: reviewer
     description: Reviews code changes for quality, correctness, and risks. Analyzes
       diffs to identify breaking changes, missing error handling, untested
       paths, security vulnerabilities, and performance regressions. Produces a
@@ -73,7 +74,7 @@ agents:
     user_invocable: true
 
   - slug: researcher
-    name: Researcher
+    name: researcher
     description: Lightweight research agent for technical investigation. Searches
       the web, evaluates packages/libraries, compares algorithms, and summarizes
       API documentation. Use this agent when implementation requires researching
@@ -90,7 +91,7 @@ agents:
     user_invocable: true
 
   - slug: pr-author
-    name: PR Author
+    name: pr-author
     description: 'Handles the final stage of a feature workflow: creating git
       commits with conventional commit messages, pushing the branch, and
       finalizing an existing draft PR by updating its state to Ready and marking
@@ -102,4 +103,38 @@ agents:
       - execute
     subagents: []
     argument_hint: JIRA ticket key, PR number, and any PR-specific instructions
+    user_invocable: true
+
+  - slug: planner-lite
+    name: planner-lite
+    description: 'Generates a minimal, deterministic file-level implementation plan
+      for execution by a coder agent. Converts requirements into an ordered task
+      list with file changes, test strategy, and constraints. Use this agent
+      when you need a validated execution plan before implementation.'
+    tier: 2
+    capabilities:
+      - read
+      - search
+      - fetch
+      - execute
+      - plan
+    subagents: []
+    argument_hint: 'Structured requirements document and codebase context'
+    user_invocable: true
+
+  - slug: coder
+    name: coder
+    description: 'Executes a predefined implementation plan deterministically by
+      writing minimal, correct code and tests. Follows the plan exactly without
+      adding features, refactoring, or introducing new patterns. Use this agent
+      when a validated plan is ready for implementation.'
+    tier: 2
+    capabilities:
+      - read
+      - edit
+      - search
+      - execute
+      - plan
+    subagents: []
+    argument_hint: 'Implementation plan with ordered task list'
     user_invocable: true
