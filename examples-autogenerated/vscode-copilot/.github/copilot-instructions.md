@@ -85,13 +85,13 @@ The state file is committed to git alongside code changes so context survives se
 
 | Agent | Role | Model |
 |-------|------|-------|
-| **orchestrator** | End-to-end feature development orchestrator | Claude Opus 4 |
-| **jira-reader** | Fetches and interprets JIRA tickets | GPT-4o mini |
-| **reviewer** | Reviews code changes for quality, correctness, and risks | Claude Opus 4 |
-| **researcher** | Lightweight research agent for technical investigation | Claude Haiku 3.5 |
-| **pr-author** | Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review | Claude Haiku 3.5 |
-| **planner-lite** | Generates a minimal, deterministic file-level implementation plan for execution by a coder agent | Claude Sonnet 4 |
-| **coder** | Executes a predefined implementation plan deterministically by writing minimal, correct code and tests | Claude Sonnet 4 |
+| **orchestrator** | End-to-end feature development orchestrator | Claude Opus 4.6 |
+| **jira-reader** | Fetches and interprets JIRA tickets | GPT-5 mini |
+| **reviewer** | Reviews code changes for quality, correctness, and risks | Claude Opus 4.6 |
+| **researcher** | Lightweight research agent for technical investigation | Claude Haiku 4.5 |
+| **pr-author** | Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review | Claude Haiku 4.5 |
+| **planner-lite** | Generates a minimal, deterministic file-level implementation plan for execution by a coder agent | Claude Sonnet 4.6 |
+| **coder** | Executes a predefined implementation plan deterministically by writing minimal, correct code and tests | Claude Sonnet 4.6 |
 
 Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, `model`, and which subagents it may invoke.
 
