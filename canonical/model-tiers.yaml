@@ -11,19 +11,19 @@ tiers:
     description: "Cheapest — simple extraction, formatting, and API calls"
     role: "Simple, deterministic tasks"
     models:
-      copilot: "GPT-4o mini (copilot)"
+      copilot: "GPT-5 mini (copilot)"
   1:
     description: "Light reasoning — templated output, formulaic writing"
     role: "Formulaic tasks"
     models:
-      copilot: "Claude Haiku 3.5 (copilot)"
+      copilot: "Claude Haiku 4.5 (copilot)"
   2:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
-      copilot: "Claude Sonnet 4 (copilot)"
+      copilot: "Claude Sonnet 4.6 (copilot)"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
     models:
-      copilot: "Claude Opus 4 (copilot)"
+      copilot: "Claude Opus 4.6 (copilot)"

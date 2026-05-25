@@ -15,6 +15,7 @@ import textwrap
 
 from assembler.base import PlatformAssembler
 from assembler.registry import CanonicalRegistry
+from assembler.templates import substitute_vars
 from assembler.writer import FileWriter
 
 
@@ -35,9 +36,12 @@ class ClaudeAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_agents(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        tier_vars = registry.tier_model_vars(self.name)
+        all_vars = {**self.TEMPLATE_VARS, **tier_vars}
         for agent in registry.agents:
             slug = agent["slug"]
             body = registry.agent_body(slug)
+            body = substitute_vars(body, all_vars)
 
             lines: list[str] = []
             lines.append(f"<!-- agent: {slug} -->")

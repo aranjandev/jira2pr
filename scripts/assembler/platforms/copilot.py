@@ -7,7 +7,7 @@ from pathlib import Path
 
 from assembler.base import PlatformAssembler
 from assembler.registry import CanonicalRegistry
-from assembler.templates import generate_agents_section
+from assembler.templates import generate_agents_section, substitute_vars
 from assembler.writer import FileWriter
 
 # Capability → VS Code Copilot tool mapping
@@ -54,11 +54,14 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_agents(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        tier_vars = registry.tier_model_vars(self.name)
+        all_vars = {**self.TEMPLATE_VARS, **tier_vars}
         for agent in registry.agents:
             slug = agent["slug"]
             tier = agent["tier"]
             model = registry.model_for_tier(tier, self.name)
             body = registry.agent_body(slug)
+            body = substitute_vars(body, all_vars)
 
             tools = [COPILOT_TOOL_MAP.get(c, c) for c in agent.get("capabilities", [])]
             subagents = agent.get("subagents", [])

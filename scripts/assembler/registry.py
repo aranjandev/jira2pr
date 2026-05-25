@@ -134,6 +134,19 @@ class CanonicalRegistry:
         models = tier_data.get("models", {})
         return models.get(platform, f"Tier-{tier} (unknown for {platform})")
 
+    def tier_model_vars(self, platform: str) -> dict[str, str]:
+        """Return a dict mapping TIER_N_MODEL → concrete model name (display form) for all tiers."""
+        import re
+
+        tiers = self.model_tiers.get("tiers", {})
+        result: dict[str, str] = {}
+        for tier_num in tiers:
+            model = self.model_for_tier(int(tier_num), platform)
+            # Strip platform suffix like "(copilot)" for cleaner display in prose
+            display = re.sub(r"\s*\([^)]+\)\s*$", "", model)
+            result[f"TIER_{tier_num}_MODEL"] = display
+        return result
+
     def platform_extras_dir(self, platform: str) -> Path | None:
         """Return the platform-extras/<platform>/ directory, or None."""
         d = self.canonical_dir / "platform-extras" / platform
