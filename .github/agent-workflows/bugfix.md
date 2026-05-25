@@ -22,7 +22,6 @@ Then use this routing table for **Step G**:
 | Phase Found | Resume Point | Pre-resume Check |
 |-------------|--------------|------------------|
 | `Implementing` | **STEP-4.1** | Check `git diff --stat` and `git status` to assess regression test + fix progress. Report assessment to user. |
-| `Reviewing` | **STEP-6.1** | Verify Review Summary block is populated |
 | `Submitting` | **STEP-6.1** | Verify Review Summary block is populated |
 | `Ready` | **STOP** | Report "PR #N is already finalized and marked Ready" |
 
@@ -46,69 +45,74 @@ Then use this routing table for **Step G**:
 
 ## Phase 3: Plan & Propose
 
-* **STEP-3.1: Plan the fix**:
-   - Describe the minimal, targeted change that addresses the root cause
-   - Identify which files need to change
-   - Plan the regression test: a test that fails before the fix and passes after
+* **STEP-3.1: Delegate to `planner-lite` agent** to produce a fix plan:
+   - Pass the root cause from STEP-2.2, affected code paths from STEP-1.3, and project conventions
+   - The plan must include:
+     - The regression test (a test that fails before the fix and passes after)
+     - The minimal, targeted code change that addresses the root cause
+     - Ordered task list: regression test first, then fix
+   - Receive back a validated plan containing: Summary, File Changes, ordered Task List, Tests, and Constraints
    - For complex fixes (touches > 3 files or risky areas like auth/payments), present the plan to the user and wait for confirmation
    - For simple fixes, present and proceed immediately
 
-* **STEP-3.2: Create a bugfix branch** using the git-operations skill:
-   ```bash
-   python3 ./.github/skills/git-operations/scripts/git_helper.py create-branch <TICKET_KEY> fix
-   ```
+* **STEP-3.2: Create a bugfix branch** using the `git-operations` skill with ticket key `<TICKET_KEY>` and type `fix`.
 
 * **STEP-3.3: Create draft PR** using the `create-pull-request` skill:
    - Populate the canonical PR body template with: Status (`Implementing`), Links (include Branch name), Intent (include root cause in Problem), Plan, first Phase Log entry ("Branch created, draft PR created, entering implementation").
-   - Create as `--draft`.
    - **Store the returned `PR_NUMBER`** — it is required for all subsequent updates.
-   ```bash
-   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py create \
-     --title "<type>(<scope>): <description> [<TICKET_KEY>]" \
-     --body-file /tmp/pr_body.md \
-     --draft --labels "bugfix"
-   ```
+
+* **STEP-3.3b: Create state file** using the `manage-state` skill:
+   - Workflow type: `bugfix`
+   - Phase: `Implementing`
+   - Populate UNDERSTANDING from Phases 1–2 (bug description, root cause, constraints), PLAN from STEP-3.1
+   - Commit with message: `chore(state): initialize workflow state [<TICKET_KEY>]`
 
 ## Phase 4: Implement
 
-* **STEP-4.1: Write a regression test first**:
-    - Add a test that reproduces the bug (should fail against current code logic)
-    - This test must pass after the fix is applied
+* **STEP-4.1: Delegate to `coder` agent** for implementation:
+    - Pass the complete plan from STEP-3.1 (planner-lite output) as the execution spec
+    - Pass project conventions from `copilot-instructions.md`
+    - Pass relevant file context identified in the plan
+    - The `coder` will implement ALL changes: regression test AND fix code
+    - The regression test must be written first (as specified in the plan's task order)
+    - The `coder` will run tests and lint, and self-fix failures (up to 2 retries)
+    - Do NOT implement any code yourself — all implementation is delegated to `coder`
 
-* **STEP-4.2: Implement the fix**:
-    - Make the minimal change needed to resolve the root cause
-    - Follow project conventions from `copilot-instructions.md`
-    - Avoid unrelated changes — keep the diff focused
+* **STEP-4.2: Verify completion** after `coder` returns:
+    - Check the completion report: confirm tests pass and lint is clean
+    - If `coder` reports failure after retries → report to user and stop
+    - Confirm the regression test was added
+    - Confirm the fix addresses the root cause identified in STEP-2.2
+    - Confirm no unrelated changes were introduced
+    - Update progress via the `manage-state` skill
 
-* **STEP-4.3: Run the full test suite**:
-    ```bash
-    # Use the test command from copilot-instructions.md
-    ```
-* **STEP-4.4: Run linting** if configured:
-    ```bash
-    # Use the lint command from copilot-instructions.md
-    ```
-* **STEP-4.5: Update PR** using the `update-pull-request` skill:
+* **STEP-4.3: Update PR** using the `update-pull-request` skill:
     - No status change (still `Implementing`)
     - Append Phase Log: "Fix applied, regression test passing"
+    - Also update state file via the `manage-state` skill (same log entry)
 
 ## Phase 5: Self-Review
 
 * **STEP-5.1: Delegate to `reviewer`**: Ask the reviewer agent to analyze all changes.
-* **STEP-5.2: Address findings**:
-    - Fix any CRITICAL or HIGH findings immediately
-    - Apply MEDIUM suggestions if they're quick wins
+* **STEP-5.2: Address findings** by delegating to `coder`:
+    - Pass CRITICAL and HIGH findings to `coder` for immediate fix
+    - Pass MEDIUM suggestions to `coder` if they're quick wins
     - Note LOW/nit findings but don't block on them
-* **STEP-5.3: Re-run tests** after addressing review feedback.
+    - Do NOT fix code yourself — delegate all code changes to `coder`
+    - `coder` will run tests after fixes and self-verify
+* **STEP-5.3: Verify** `coder` completion report confirms tests pass.
 * **STEP-5.4: Update PR** using the `update-pull-request` skill:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions
     - Append Phase Log: "Self-review complete, findings addressed"
+    - Also update state file via the `manage-state` skill (same phase + review data + log entry)
 
 ## Phase 6: Submit
 
-* **STEP-6.1: Delegate to `pr-author`**: Pass the JIRA ticket key **and the PR number**. The pr-author will:
+* **STEP-6.1: Delegate to `pr-author`**: Pass the JIRA ticket key **and the PR number**. The pr-author must:
     - Commit and push changes
-    - Use the `update-pull-request` skill to finalize: Status → `Ready`, Draft → `false` (`--undraft`)
-    - Append Phase Log: "PR finalized and marked ready for review"
+    - Finalize the PR via `update-pull-request` skill: Status → `Ready`, undraft
+    - Register the artifact via `register-artifact` skill
+    - Archive the state file via `manage-state` skill
+    - Include registry update and state archive in the final commit
 * **STEP-6.2: Report to the user**: Provide the PR URL and a brief summary including the root cause and the fix.
