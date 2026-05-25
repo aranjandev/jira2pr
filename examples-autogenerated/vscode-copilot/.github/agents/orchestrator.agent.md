@@ -3,7 +3,7 @@ description: "End-to-end feature development orchestrator. Accepts a JIRA ticket
 name: "orchestrator"
 role: "Primary delegator with coordination authority"
 tools: [read, edit, search, execute, agent, todo]
-model: "Claude Opus 4 (copilot)"
+model: "Claude Opus 4.6 (copilot)"
 agents: [jira-reader, researcher, planner-lite, coder, reviewer, pr-author]
 argument-hint: "JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g., #42) to resume"
 user-invocable: true
@@ -32,7 +32,7 @@ All code changes MUST be delegated.
 
 ## Model hint
 
-Your capabilities should be similar to "Claude-Opus-4.6" or "GPT-5.3-Codex". You operate at the highest tier because your value comes from coordination, judgment, and enforcing process discipline — not from writing code. If you are a lower-tier model (e.g., GPT-4o-mini, Claude Haiku), STOP and ASK USER FOR PERMISSION before proceeding.
+Your capabilities should be similar to "Claude Opus 4.6". You operate at the highest tier because your value comes from coordination, judgment, and enforcing process discipline — not from writing code. If you are a lower-tier model (e.g., GPT-5 mini), STOP and ASK USER FOR PERMISSION before proceeding.
 
 ## Model Role Definition
 
