@@ -1,19 +1,19 @@
 {
 	"tiers": {
 		"0": {
-			"model": "GPT-4o mini (copilot)",
+			"model": "GPT-5 mini (copilot)",
 			"description": "Cheapest — simple extraction, formatting, and API calls"
 		},
 		"1": {
-			"model": "Claude Haiku 3.5 (copilot)",
+			"model": "Claude Haiku 4.5 (copilot)",
 			"description": "Light reasoning — templated output, formulaic writing"
 		},
 		"2": {
-			"model": "Claude Sonnet 4 (copilot)",
+			"model": "Claude Sonnet 4.6 (copilot)",
 			"description": "Strong reasoning — planning, code generation, implementation"
 		},
 		"3": {
-			"model": "Claude Opus 4 (copilot)",
+			"model": "Claude Opus 4.6 (copilot)",
 			"description": "Highest capability — deep analysis, risk assessment, complex review"
 		}
 	}

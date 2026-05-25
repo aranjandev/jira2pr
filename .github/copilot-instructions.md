@@ -1,11 +1,11 @@
-<!-- This file is hand-maintained for the jira2pr repo itself. Do not regenerate with assemble.py. -->
-
 # Project Instructions
 
+<!-- CUSTOMIZE: Replace with a brief description of your project — what it does, who uses it, and its primary purpose. -->
 ## Overview
 
 This repo provides a platform-agnostic multi-agent workflow system that enables AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a Pull Request. All concepts (agents, skills, prompts, workflows, instructions) are defined once in the `canonical/` folder and assembled into platform-specific output folders by scripts in `scripts/`. End users run the assembler to generate a ready-to-use setup for their tool (e.g., VS Code Copilot, Claude Code), then copy the output into their project.
 
+<!-- CUSTOMIZE: Replace with your project's language stack, formatting and linting tools, and any style rules agents should follow when generating or editing code. -->
 ## Code Style
 
 - Languages: Markdown, Shell script (Bash/Zsh), Python, JSON, YAML
@@ -13,6 +13,7 @@ This repo provides a platform-agnostic multi-agent workflow system that enables 
 - Shell scripts: Use `set -euo pipefail`, quote variables, prefer `$()` over backticks
 - Key patterns to follow: see `canonical/` for authoritative definitions; see `scripts/assembler/` for platform-specific rendering logic
 
+<!-- CUSTOMIZE: Describe your project's architecture — type of project, key directories, major modules, and how they relate. -->
 ## Architecture
 
 - Project type: Canonical definitions + assembler pipeline (not a runnable application)
@@ -31,6 +32,7 @@ This repo provides a platform-agnostic multi-agent workflow system that enables 
   ```
 - Adding a new platform means adding a renderer under `scripts/assembler/platforms/` and optional extras under `canonical/platform-extras/<platform>/`
 
+<!-- CUSTOMIZE: Describe how to build, run, and test the project. Include the commands agents should use to verify their changes compile and tests pass. -->
 ## Build and Test
 
 ```bash
@@ -50,6 +52,7 @@ python3 -m py_compile canonical/skills/read-jira-ticket/scripts/fetch_jira.py
 python3 -m py_compile canonical/skills/create-pull-request/scripts/pr_helper.py
 ```
 
+<!-- CUSTOMIZE: List any project-specific conventions agents must follow — naming patterns, file organisation rules, patterns to avoid, etc. -->
 ## Conventions
 
 - All canonical definitions live in `canonical/`; never edit generated output in `vscode-copilot/` or `claude-code/` directly
@@ -64,12 +67,14 @@ python3 -m py_compile canonical/skills/create-pull-request/scripts/pr_helper.py
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) — see `.github/instructions/commit-conventions.instructions.md`
 - Keep canonical content generic and project-agnostic; platform-specific details belong in `canonical/platform-extras/`
 
+<!-- CUSTOMIZE: List runtime and development dependencies, including any CLIs or external services agents will need access to. -->
 ## Dependencies
 
 - No runtime dependencies
 - Shell scripts require `curl`, `jq`, `gh` (GitHub CLI) — documented in each setup's README
 - No package registries; this is pure configuration
 
+<!-- CUSTOMIZE: Document required environment variables and any external tool authentication agents need (e.g. API tokens, CLI logins). -->
 ## Environment
 
 - Required env vars for the agent tools (used when developing/testing this repo):
@@ -77,53 +82,76 @@ python3 -m py_compile canonical/skills/create-pull-request/scripts/pr_helper.py
   - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
   - GitHub CLI (`gh`) must be authenticated via `gh auth login`
 
+<!-- AGENTS_SECTION:AUTO_GENERATED -->
 
 ## How Agents Contribute to Code
 
 > This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.
 
-Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is defined in the platform-agnostic `canonical/` folder and assembled into platform-specific output by `scripts/assemble.py`.
+Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.
+
+The workflow maintains **two state layers in parallel** — the PR body (human-facing, updated via the `update-pull-request` skill) and a per-workflow state file under `.github/state/` (agent-facing working memory, updated via the `manage-state` skill). Both layers must be kept in sync at every phase transition; neither alone is sufficient.
+
+**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions and owns both state layers throughout. The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+
+### State & Artifact Architecture
+
+The framework tracks state at two levels:
+
+| Layer | File | Audience | Skill | Owner |
+|-------|------|----------|-------|-------|
+| **PR body** | GitHub PR (live) | Human reviewers + agents | `update-pull-request` | orchestrator (all phases), pr-author (finalize) |
+| **Workflow state file** | `.github/state/<TICKET-KEY>.md` | Agents only | `manage-state` | orchestrator (all phases), pr-author (archive) |
+
+> **Invariant:** Both layers must be updated together at every phase boundary. Updating one without the other leaves the workflow in an inconsistent state.
+
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `.github/state/archive/<TICKET-KEY>.md`. The artifact registry at `.github/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+
 
 ### Agent Roster
 
-Five agents are available. Each has a defined scope and model tier:
+7 agents are available. Each has a defined scope and model tier:
 
 | Agent | Role | Model |
 |-------|------|-------|
-| **Orchestrator** | End-to-end workflow driver — reads the ticket, plans, implements, delegates, and submits the PR | Claude Sonnet 4 |
-| **JIRA Reader** | Fetches a JIRA ticket and produces a structured requirements document | GPT-4o mini |
-| **Reviewer** | Thorough code review — identifies risks, missing tests, and security issues | Claude Opus 4 |
-| **Researcher** | Lightweight research — evaluates packages, APIs, and algorithms | Claude Haiku 3.5 |
-| **PR Author** | Commits changes, pushes the branch, and finalises the draft PR | Claude Haiku 3.5 |
+| **orchestrator** | End-to-end feature development orchestrator | Claude Opus 4.6 |
+| **jira-reader** | Fetches and interprets JIRA tickets | GPT-5 mini |
+| **reviewer** | Reviews code changes for quality, correctness, and risks | Claude Opus 4.6 |
+| **researcher** | Lightweight research agent for technical investigation | Claude Haiku 4.5 |
+| **pr-author** | Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review | Claude Haiku 4.5 |
+| **planner-lite** | Generates a minimal, deterministic file-level implementation plan for execution by a coder agent | Claude Sonnet 4.6 |
+| **coder** | Executes a predefined implementation plan deterministically by writing minimal, correct code and tests | Claude Sonnet 4.6 |
 
-Agent definitions live in `canonical/agents/`. Each file is a plain Markdown file; the assembler adds platform-specific frontmatter (YAML for Copilot, CLAUDE.md entries for Claude Code) during generation.
+Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, `model`, and which subagents it may invoke.
 
 ### Skills
 
-Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `canonical/skills/<skill-name>/SKILL.md`.
+Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `.github/skills/<skill-name>/SKILL.md`.
 
 | Skill | Purpose |
 |-------|---------|
-| `read-jira-ticket` | Fetch and parse a JIRA ticket into structured requirements |
-| `git-operations` | Create branches, stage commits with conventional messages, and push |
-| `create-pull-request` | Open a draft PR with the canonical PR body template |
-| `update-pull-request` | Update mutable blocks and append to append-only blocks in an existing PR |
-| `summarize-changes` | Produce a human-readable summary of a git diff, grouped by component |
-| `identify-risks` | Analyse changes for breaking changes, security issues, and missing tests |
+| `read-jira-ticket` | Fetches a JIRA ticket by key or URL and extracts structured requirements including summary, description, acceptance criteria, subtasks, labels, and priority |
+| `git-operations` | Performs git operations: creating branches from ticket keys, staging and committing changes with conventional commit messages, and pushing to origin |
+| `create-pull-request` | Creates a draft Pull Request using the canonical PR body template |
+| `update-pull-request` | Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks |
+| `summarize-changes` | Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module |
+| `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
+| `manage-state` | Creates, reads, and updates the per-workflow agent state file at .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer resumption |
+| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at .github/artifacts/REGISTRY.md |
 
 ### Agent Prompts
 
-User-facing entry points are defined in `canonical/prompts/`. The assembler renders them as `.prompt.md` slash commands for Copilot and equivalent entries for other platforms:
+User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`. Invoke them with a `/` slash command in the Copilot chat:
 
 | Prompt | Slash command | What it does |
 |--------|---------------|--------------|
-| `feature.prompt.md` | `/feature` | Full feature workflow from JIRA ticket to PR, or resume from a PR link |
-| `bugfix.prompt.md` | `/bugfix` | Bugfix workflow from JIRA ticket to PR, or resume |
-| `review.prompt.md` | `/review` | Standalone code review of current changes |
+| `feature.prompt.md` | `/feature` | Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link |
+| `bugfix.prompt.md` | `/bugfix` | Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link |
+| `review.prompt.md` | `/review` | Reviews current code changes for quality, risks, and correctness |
 
 ### Workflows
 
-Multi-phase workflow definitions live in `canonical/workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:
+Multi-phase workflow definitions live in `.github/agent-workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:
 
 | Workflow | Trigger | Phases |
 |----------|---------|--------|
@@ -135,13 +163,13 @@ All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA inp
 
 ### Instructions
 
-Persistent rules that apply across all agents are defined in `canonical/instructions/`:
+Persistent rules that apply across all agents are defined as `.instructions.md` files in `.github/instructions/`:
 
 | File | Scope | What it governs |
 |------|-------|-----------------|
-| `commit-conventions.instructions.md` | All commits | [Conventional Commits](https://www.conventionalcommits.org/) format — type, scope, body, footers |
-| `pr-schema.instructions.md` | PR bodies | Block definitions, mutability rules, idempotency, and ownership model |
-| `pr-template.instructions.md` | PR bodies | Canonical PR body template that agents populate and update |
+| `commit-conventions.instructions.md` | PR bodies / commits | Conventional commit message format and rules for writing git commit messages |
+| `pr-schema.instructions.md` | PR bodies / commits | PR state document schema — block definitions, mutability rules, ownership model, idempotency rules, and scope change protocol |
+| `pr-template.instructions.md` | PR bodies / commits | Canonical PR body template for agent-maintained pull requests |
 
 ### Git Push Authentication for Agents
 
@@ -160,7 +188,7 @@ SSH remotes do not require these variables.
 Applies whenever an agent runs shell commands in a terminal. Violations produce silent, hard-to-debug corruption:
 
 - **Never write file content using heredocs** (`<< 'EOF' ... EOF`) — they get mangled in agent terminal sessions.
-- **Never use `python3 -c "..."` with double outer quotes** — the shell expands `$variables` and backticks inside.
+- **Never use `python3 -c "..."`  with double outer quotes** — the shell expands `$variables` and backticks inside.
 - **Always use `python3 -c '...'` with single outer quotes** and `\n` for newlines — this is the only reliable pattern:
   ```bash
   python3 -c 'open("/tmp/file.md","w").write("line1\nline2\n")'
@@ -168,12 +196,12 @@ Applies whenever an agent runs shell commands in a terminal. Violations produce 
   python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/file.md","w").write("# Title\nTimestamp: "+ts+"\n")'
   ```
 
-
 ### Model Tiers
 
-`canonical/model-tiers.yaml` maps model tiers (0–3) to concrete model names per platform. The assembler resolves these during generation and stamps the correct model into each agent file. Tier assignment reflects cost/capability trade-offs:
+`.github/model-tiers.json` maps model tiers (0–3) to concrete Copilot model names. The `scripts/apply_model_tiers.py` script stamps the correct model into each agent file at setup time. Tier assignment reflects cost/capability trade-offs:
 
-- **Tier 0** — Cheapest (GPT-4o mini): simple, deterministic tasks like reading tickets
-- **Tier 1** — Lightweight (Claude Haiku 3.5): formulaic tasks like committing and pushing
-- **Tier 2** — Capable (Claude Sonnet): complex reasoning and implementation
-- **Tier 3** — Most powerful (Claude Opus): thorough review and risk analysis
+- **Tier 0** — Cheapest — simple extraction, formatting, and API calls: Simple, deterministic tasks
+- **Tier 1** — Light reasoning — templated output, formulaic writing: Formulaic tasks
+- **Tier 2** — Strong reasoning — planning, code generation, implementation: Implementation and orchestration
+- **Tier 3** — Highest capability — deep analysis, risk assessment, complex review: Thorough review and analysis
+

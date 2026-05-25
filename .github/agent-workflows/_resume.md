@@ -4,11 +4,7 @@ Shared steps for resuming a workflow from an existing draft PR. Both the feature
 
 ## Steps A–F: Parse and Restore PR State
 
-* **STEP-A: Fetch PR body:**
-   ```bash
-   python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body \
-     --pr-number <PR_NUMBER> > /tmp/pr_current_body.md
-   ```
+* **STEP-A: Fetch PR body** using `pr_helper.py fetch-body --pr-number <PR_NUMBER>` (see `update-pull-request` skill).
 * **STEP-B: Validate boundary markers** — confirm all `PR_BLOCK:*:BEGIN/END` pairs exist. If any are missing, report "This PR does not use the canonical schema — cannot resume" and stop.
 * **STEP-C: Parse PR state:**
    - Status block → extract current Phase
@@ -16,6 +12,13 @@ Shared steps for resuming a workflow from an existing draft PR. Both the feature
    - Intent block → extract problem description and overview
    - Plan block → extract task list, test strategy, risks
    - Phase Log → read audit trail
+
+* **STEP-C2: Load state file if present** using the `manage-state` skill:
+   - Check for `.github/state/<TICKET_KEY>.md` (ticket key comes from the Links block)
+   - If found: read UNDERSTANDING, PLAN (with task statuses), IMPLEMENTATION, and RESEARCH blocks to enrich restored context beyond what the PR body contains
+   - If not found: continue — the PR body blocks parsed in STEP-C are sufficient for resumption
+   - **Do not create** a new state file here; that happens only at Phase 2 during a fresh start
+
 * **STEP-D: Store `PR_NUMBER`** for subsequent update calls.
 * **STEP-E: Populate the task tracker** (use the `todo` tool to plan the tasks) with tasks from the Plan block so progress tracking continues.
 * **STEP-F: Append Phase Log** entry using `update-pull-request` skill: current timestamp, current phase (not a new one), `orchestrator`, "Resumed by orchestrator".
