@@ -119,6 +119,7 @@ User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`
 | `feature.prompt.md` | `/feature` | Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link |
 | `bugfix.prompt.md` | `/bugfix` | Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link |
 | `review.prompt.md` | `/review` | Reviews current code changes for quality, risks, and correctness |
+| `scope-creep.prompt.md` | `/scope-creep` | Scope-creep workflow — inject additional work into an active feature or bugfix workflow |
 
 ### Workflows
 
