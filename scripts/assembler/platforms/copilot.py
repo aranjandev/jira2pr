@@ -240,6 +240,15 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_state(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        # Check if state/archive/ directory exists and has files (agent-managed).
+        # If it does, warn and skip assembling state files to avoid trampling archived state.
+        if writer.check_protected_dir(f"{self.GITHUB_PREFIX}/state/archive"):
+            writer.add_warning(
+                f"{self.GITHUB_PREFIX}/state/archive/ is not empty. "
+                "Skipping state assembly to protect archived workflow state files."
+            )
+            return
+        
         # No {{VAR}} substitution — state files use <PLACEHOLDER> runtime syntax filled by agents.
         for file_path in registry.state_files():
             content = file_path.read_text()
@@ -251,6 +260,17 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_artifacts(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        # Check if REGISTRY.md exists (agent-managed artifact registry).
+        # If it does, warn and skip assembling artifacts to avoid trampling the registry.
+        artifacts_dir = Path(self.GITHUB_PREFIX) / "artifacts"
+        registry_file = artifacts_dir / "REGISTRY.md"
+        if writer.check_protected_dir(str(artifacts_dir)):
+            writer.add_warning(
+                f"{artifacts_dir}/REGISTRY.md is agent-managed. "
+                "Skipping artifacts assembly to protect accumulated workflow registry."
+            )
+            return
+        
         # No {{VAR}} substitution — artifacts files use <PLACEHOLDER> runtime syntax filled by agents.
         # REGISTRY.md is excluded by registry.artifacts_files() — it is agent-managed, not generated.
         for file_path in registry.artifacts_files():

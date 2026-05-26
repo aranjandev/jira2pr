@@ -251,5 +251,126 @@ class TestClaudeAssembly(unittest.TestCase):
         self.assertIn("Orchestrator", content)
 
 
+class TestProtectionMechanisms(unittest.TestCase):
+    """Tests for safeguards against trampling agent-managed files."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.registry = CanonicalRegistry.load(CANONICAL_DIR)
+
+    def test_state_archive_protection(self):
+        """When state/archive/ exists and is not empty, skip state assembly and warn."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Create a state/archive/ directory with a file (simulating archived state)
+            archive_dir = tmppath / ".github" / "state" / "archive"
+            archive_dir.mkdir(parents=True)
+            (archive_dir / "PROJ-123.md").write_text("archived state")
+            
+            # Assemble — should skip state and warn
+            writer = FileWriter(tmppath)
+            assembler = CopilotAssembler()
+            assembler.assemble(self.registry, writer)
+            
+            # Check that warning was issued
+            summary = writer.summary()
+            self.assertIn("state/archive/", summary)
+            self.assertIn("Skipping state assembly", summary)
+            
+            # Check that state template files were NOT written (protection worked)
+            self.assertFalse(
+                (tmppath / ".github" / "state" / "workflow-state.tpl.md").exists(),
+                "State template should not be written when archive exists"
+            )
+
+    def test_artifacts_protection(self):
+        """When artifacts/ directory exists and is not empty, skip artifacts assembly and warn."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Create an artifacts/ directory with REGISTRY.md (simulating accumulated registry)
+            artifacts_dir = tmppath / ".github" / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            (artifacts_dir / "REGISTRY.md").write_text("accumulated workflows")
+            
+            # Assemble — should skip artifacts and warn
+            writer = FileWriter(tmppath)
+            assembler = CopilotAssembler()
+            assembler.assemble(self.registry, writer)
+            
+            # Check that warning was issued
+            summary = writer.summary()
+            self.assertIn("artifacts/REGISTRY.md", summary)
+            self.assertIn("Skipping artifacts assembly", summary)
+            
+            # Check that REGISTRY.md was NOT overwritten
+            existing = (artifacts_dir / "REGISTRY.md").read_text()
+            self.assertEqual(existing, "accumulated workflows", "REGISTRY.md should not be overwritten")
+            
+            # Check that schema file was NOT written (protection worked)
+            self.assertFalse(
+                (tmppath / ".github" / "artifacts" / "SCHEMA.md").exists(),
+                "Artifacts schema should not be written when registry exists"
+            )
+
+    def test_both_protected_dirs_exist(self):
+        """When both state/archive/ and artifacts/ exist, both should be skipped with warnings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Create both protected directories
+            archive_dir = tmppath / ".github" / "state" / "archive"
+            archive_dir.mkdir(parents=True)
+            (archive_dir / "PROJ-456.md").write_text("archived state")
+            
+            artifacts_dir = tmppath / ".github" / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            (artifacts_dir / "REGISTRY.md").write_text("accumulated workflows")
+            
+            # Assemble
+            writer = FileWriter(tmppath)
+            assembler = CopilotAssembler()
+            assembler.assemble(self.registry, writer)
+            
+            # Check that BOTH warnings are issued
+            summary = writer.summary()
+            self.assertIn("state/archive/", summary)
+            self.assertIn("artifacts/REGISTRY.md", summary)
+
+    def test_check_protected_dir_empty_dir_not_protected(self):
+        """Empty directories should not trigger protection."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Create empty state/ directory (should not trigger protection)
+            state_dir = tmppath / ".github" / "state"
+            state_dir.mkdir(parents=True)
+            
+            writer = FileWriter(tmppath)
+            # check_protected_dir should return False for empty directory
+            self.assertFalse(writer.check_protected_dir(".github/state"))
+
+    def test_nonexistent_dir_not_protected(self):
+        """Nonexistent directories should not trigger protection."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            writer = FileWriter(tmppath)
+            # check_protected_dir should return False for nonexistent directory
+            self.assertFalse(writer.check_protected_dir(".github/state/archive"))
+
+    def test_file_writer_add_warning(self):
+        """FileWriter.add_warning() should add warnings to summary."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = FileWriter(Path(tmpdir))
+            writer.add_warning("Test warning 1")
+            writer.add_warning("Test warning 2")
+            
+            summary = writer.summary()
+            self.assertIn("Test warning 1", summary)
+            self.assertIn("Test warning 2", summary)
+
+
 if __name__ == "__main__":
     unittest.main()
