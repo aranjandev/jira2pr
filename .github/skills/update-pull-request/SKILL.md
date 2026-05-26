@@ -67,7 +67,7 @@ Replace the **entire content** between `BEGIN` and `END` markers for each block 
 
 - **Status Block** (always updated): Set Phase, Draft, Last Updated (ISO 8601), Updated By.
 - **Links Block** (when entering `Implementing`): Update Branch to actual branch name.
-- **Review Summary Block** (when entering `Reviewing`): Populate with reviewer's findings.
+- **Review Summary Block** (when entering `Submitting`): Populate with reviewer's findings and resolutions.
 
 ### Step 4: Append to APPEND-ONLY blocks
 

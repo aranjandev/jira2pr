@@ -1,10 +1,14 @@
-<!-- This file is hand-maintained for the jira2pr repo itself. Do not regenerate with assemble.py. -->
-
 # Project Instructions
 
 ## Overview
 
-This repo provides a platform-agnostic multi-agent workflow system that enables AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a Pull Request. All concepts (agents, skills, prompts, workflows, instructions) are defined once in the `canonical/` folder and assembled into platform-specific output folders by scripts in `scripts/`. End users run the assembler to generate a ready-to-use setup for their tool (e.g., VS Code Copilot, Claude Code), then copy the output into their project.
+This repo provides a platform-agnostic multi-agent workflow system that enables 
+AI coding agents to work end-to-end — from reading a JIRA ticket to submitting a
+Pull Request. All concepts (agents, skills, prompts, workflows, instructions) are
+defined once in the `canonical/` folder and assembled into platform-specific 
+output folders by scripts in `scripts/`. End users run the assembler to generate
+a ready-to-use setup for their tool (e.g., VS Code Copilot, Claude Code), then 
+copy the output into their project.
 
 ## Code Style
 
