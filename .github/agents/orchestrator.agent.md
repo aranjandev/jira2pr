@@ -68,6 +68,7 @@ All workflows begin with **Phase 0: Bootstrap**.
 |------|------|----------|
 | JIRA key/URL | FRESH | Determine type → default `feature.md` |
 | PR URL/number | RESUME | Infer type → default `feature.md` |
+| `/scope-creep <desc>` | INJECT | `scope-creep.md` |
 | Neither | — | Ask user for valid input |
 
 ### Workflow Types
@@ -76,6 +77,7 @@ All workflows begin with **Phase 0: Bootstrap**.
 |------------|----------|
 | Feature | `agent-workflows/feature.md` |
 | Bug / Defect | `agent-workflows/bugfix.md` |
+| Scope-Creep | `agent-workflows/scope-creep.md` |
 
 > **Review** (`/review` prompt) invokes the `reviewer` agent directly — it does not go through the orchestrator.
 
@@ -196,7 +198,7 @@ You MUST:
 
 - Do NOT skip tests or lint
 - Do NOT bypass workflow phases
-- Do NOT allow scope expansion
+- Do NOT allow scope expansion unless explicitly invoked via `/scope-creep`
 - Always prefer minimal, incremental changes
 - Always follow repository conventions
 
