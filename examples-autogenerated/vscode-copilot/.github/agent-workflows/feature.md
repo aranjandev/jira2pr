@@ -24,6 +24,12 @@ Then use this routing table for **Step G**:
 | `Submitting`  | **STEP-5.1** | Verify Review Summary block is populated |
 | `Ready`       | **STOP**     | Report "PR #N is already finalized and marked Ready" |
 
+---
+
+> ⚠️ **Two-layer state invariant:** At EVERY phase transition, you MUST update BOTH the PR body (via `update-pull-request`) AND the state file (via `manage-state`). Updating one without the other leaves the workflow in an unresumable state. These are equal-priority operations — neither is optional.
+
+---
+
 ## Phase 1: Understanding
 
 * **STEP-1.1: Delegate to `jira-reader` agent**: Pass the JIRA ticket key/URL. Receive a structured requirements document.
@@ -92,13 +98,20 @@ Then use this routing table for **Step G**:
     - Check the completion report: confirm tests pass and lint is clean
     - If `coder` reports failure after retries → report to user and stop
     - Confirm all files from the plan were created/modified
-    - Update progress via the `manage-state` skill
     - Mark each task as completed in the todo list immediately after finishing it
 
 * **STEP-3.3: Update PR** using the `update-pull-request` skill:
     - Status → `Reviewing`
     - Append Phase Log: "Implementation complete, tests passing"
-    - Also update state file via the `manage-state` skill (same phase + log entry)
+
+* **STEP-3.4: Update state file** using the `manage-state` skill:
+    - Phase → `Reviewing`
+    - IMPLEMENTATION block: list all files created/modified (with brief note on each), tests added, any plan deviations
+    - PLAN block: mark all completed tasks as `done`
+    - PHASE_LOG: append entry matching STEP-3.3 ("Implementation complete, tests passing")
+    - ⚠️ **MANDATORY** — skipping this breaks workflow resumption
+
+    > Checkpoint: ☐ PR body updated (STEP-3.3)  ☐ State file updated (STEP-3.4)  ☐ Both committed
 
 ## Phase 4: Reviewing
 
@@ -118,7 +131,15 @@ Then use this routing table for **Step G**:
     - Status → `Submitting`
     - Populate Review Summary: risk level, findings, resolutions
     - Append Phase Log: "Self-review complete, findings addressed"
-    - Also update state file via the `manage-state` skill (same phase + review data + log entry)
+
+* **STEP-4.5: Update state file** using the `manage-state` skill:
+    - Phase → `Submitting`
+    - REVIEW block: populate risk level, each finding (severity + description + resolution), overall verdict
+    - IMPLEMENTATION block: update with any files modified during review fixes
+    - PHASE_LOG: append entry matching STEP-4.4 ("Self-review complete, findings addressed")
+    - ⚠️ **MANDATORY** — skipping this breaks workflow resumption
+
+    > Checkpoint: ☐ PR body updated (STEP-4.4)  ☐ State file updated (STEP-4.5)  ☐ Both committed
 
 ## Phase 5: Submitting
 
