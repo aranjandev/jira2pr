@@ -97,7 +97,7 @@
 
 ---
 
-## Implementation Progress
+## Implementation
 
 <!-- STATE_BLOCK:IMPLEMENTATION:BEGIN -->
 <!-- MUTABLE | owner: orchestrator | updated progressively during Phase 3/4 -->
