@@ -89,9 +89,9 @@ At each phase transition (after calling `update-pull-request`):
 1. Update the **PHASE block**: replace the phase value
 2. Update the **META block**: advance `Updated At` to current UTC timestamp
 3. Update phase-specific MUTABLE blocks per the **Per-Block Depth Guide**:
-   - Entering `Reviewing`: populate **REVIEW** block
-   - Entering `Submitting`: update **REVIEW** block with final resolutions
-   - Entering `Ready`: ensure **IMPLEMENTATION** block is complete
+   - Entering `Reviewing`: populate **IMPLEMENTATION** block (implementation just completed — record all files modified, tests added, plan deviations)
+   - Entering `Submitting`: populate **REVIEW** block (review just completed — record risk level, findings, resolutions)
+   - Entering `Ready`: ensure all MUTABLE blocks are complete and consistent
 4. Append a row to the **PHASE_LOG block** — apply the same dedupe rule as the PR body:
    - Do not append if the last row already has the same Phase value
 
