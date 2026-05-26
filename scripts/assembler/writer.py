@@ -22,6 +22,7 @@ class FileWriter:
         self._written: list[str] = []
         self._diffs: list[str] = []
         self._missing: list[str] = []
+        self._warnings: list[str] = []  # Warnings about protected directories
 
     # ------------------------------------------------------------------
     # Public API
@@ -60,6 +61,22 @@ class FileWriter:
                 file_rel = Path(rel_path) / src_file.relative_to(src_dir)
                 self.copy(src_file, file_rel)
 
+    def check_protected_dir(self, rel_path: str | Path) -> bool:
+        """Check if a directory exists and has files. Return True if it exists and is not empty.
+        
+        This is used to detect agent-managed directories (like state/archive/ or artifacts/)
+        that should not be overwritten by the assembler.
+        """
+        dir_path = self._target / rel_path
+        if not dir_path.is_dir():
+            return False
+        # Check if directory has any files
+        return any(dir_path.iterdir())
+
+    def add_warning(self, message: str) -> None:
+        """Add a warning message to be displayed in the summary."""
+        self._warnings.append(message)
+
     @property
     def all_ok(self) -> bool:
         """True if check mode found no differences."""
@@ -76,7 +93,13 @@ class FileWriter:
             if self._missing:
                 parts.append(f"{len(self._missing)} file(s) missing")
             return "Check failed: " + ", ".join(parts) + "."
-        return f"Wrote {len(self._written)} file(s) to {self._target}"
+        
+        lines = [f"Wrote {len(self._written)} file(s) to {self._target}"]
+        if self._warnings:
+            lines.append("\nWarnings:")
+            for warning in self._warnings:
+                lines.append(f"  ⚠️  {warning}")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Internal
