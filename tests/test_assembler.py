@@ -148,7 +148,7 @@ class TestCopilotAssembly(unittest.TestCase):
         self.assertIn("agent:", prompt)
 
     def test_workflows_no_template_vars(self):
-        for wf_name in ["feature.md", "bugfix.md", "_resume.md"]:
+        for wf_name in ["feature.md", "bugfix.md", "_resume.md", "scope-creep.md"]:
             wf = (self.out / f".github/agent-workflows/{wf_name}").read_text()
             self.assertNotIn("{{", wf, msg=f"Unresolved vars in {wf_name}")
 

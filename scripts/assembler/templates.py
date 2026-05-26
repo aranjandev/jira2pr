@@ -92,6 +92,7 @@ def generate_agents_section(
     lines.append("|----------|---------|--------|")
     lines.append("| `feature.md` | `/feature` | Bootstrap → Understand → Plan → Implement → Review → Submit |")
     lines.append("| `bugfix.md` | `/bugfix` | Bootstrap → Understand → Diagnose → Fix → Review → Submit |")
+    lines.append("| `scope-creep.md` | `/scope-creep` | Understand → Plan Delta → Implement → Update State |")
     lines.append("| `_resume.md` | Any PR link | Parses PR state and routes to the correct phase to continue |")
     lines.append("")
     lines.append("All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA input) and resume (PR link) modes automatically.")

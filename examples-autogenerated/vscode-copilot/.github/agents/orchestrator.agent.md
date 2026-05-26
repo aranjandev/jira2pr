@@ -198,7 +198,7 @@ You MUST:
 
 - Do NOT skip tests or lint
 - Do NOT bypass workflow phases
-- Do NOT allow scope expansion
+- Do NOT allow scope expansion unless explicitly invoked via `/scope-creep`
 - Always prefer minimal, incremental changes
 - Always follow repository conventions
 
