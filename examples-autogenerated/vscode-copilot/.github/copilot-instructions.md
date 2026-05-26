@@ -129,6 +129,7 @@ Multi-phase workflow definitions live in `.github/agent-workflows/`. The Orchest
 |----------|---------|--------|
 | `feature.md` | `/feature` | Bootstrap → Understand → Plan → Implement → Review → Submit |
 | `bugfix.md` | `/bugfix` | Bootstrap → Understand → Diagnose → Fix → Review → Submit |
+| `scope-creep.md` | `/scope-creep` | Understand → Plan Delta → Implement → Update State |
 | `_resume.md` | Any PR link | Parses PR state and routes to the correct phase to continue |
 
 All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA input) and resume (PR link) modes automatically.
