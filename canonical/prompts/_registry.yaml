@@ -35,3 +35,11 @@ prompts:
       actionable recommendations.'
     agent: reviewer
     argument_hint: 'Optional: specific area or concern to focus the review on'
+
+  - slug: scope-creep
+    description: 'Scope-creep workflow — inject additional work into an active
+      feature or bugfix workflow. Accepts a plain-text description of what to add,
+      plans and implements the delta, and updates the PR and state file.'
+    agent: orchestrator
+    argument_hint: 'Description of additional work to include (e.g., "also fix
+      the validation bug in the login form")'

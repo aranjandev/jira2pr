@@ -102,6 +102,8 @@ Agents chain together to cover the full development cycle:
 4. **Review** — self-review changes for risks, security, and quality  
 5. **Submit** — commit with conventional messages, push, and open a Pull Request
 
+Additionally, `/scope-creep` can be invoked at any point during an active feature or bugfix workflow to inject additional work. It plans and implements the delta against the existing plan, updating all state records without restarting the workflow.
+
 Each phase is handled by a purpose-built agent assigned the right model tier for the task (lightweight models for extraction, stronger models for planning and review). See the setup README for the full agent roster and tier assignments.
 
 ### Two-Layer State Management
