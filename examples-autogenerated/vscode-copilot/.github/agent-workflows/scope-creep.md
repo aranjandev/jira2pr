@@ -4,6 +4,8 @@ Inject additional work into an active feature or bugfix workflow. This workflow 
 
 > **Context:** This workflow never runs standalone. It is always invoked while a feature or bugfix workflow is already in progress. The PR, branch, and state file already exist.
 
+> ⚠️ **Two-layer state invariant:** At EVERY phase transition, you MUST update BOTH the PR body (via `update-pull-request`) AND the state file (via `manage-state`). Updating one without the other leaves the workflow in an unresumable state. These are equal-priority operations — neither is optional.
+
 ## Prerequisites
 
 Before this workflow begins, the following MUST already be present:
@@ -54,9 +56,12 @@ Before this workflow begins, the following MUST already be present:
    - Append Phase Log entry: "Scope expanded: <brief summary of what was added>"
 
 * **STEP-2.4: Update state file** using the `manage-state` skill:
-   - Add new tasks to the PLAN block task table (status: `pending`)
-   - Update UNDERSTANDING block if the scope-creep changes constraints or requirements
-   - Append PHASE_LOG entry matching the PR Phase Log
+   - PLAN block: add new tasks to task table (status: `pending`)
+   - UNDERSTANDING block: update if the scope-creep changes constraints or requirements
+   - PHASE_LOG: append entry matching the PR Phase Log from STEP-2.3
+   - ⚠️ **MANDATORY** — skipping this breaks workflow resumption
+
+   > Checkpoint: ☐ PR body updated (STEP-2.3)  ☐ State file updated (STEP-2.4)  ☐ Both committed
 
 ## Phase 3: Implement the Delta
 
@@ -80,8 +85,11 @@ Before this workflow begins, the following MUST already be present:
    - Append Phase Log entry: "Scope-creep implementation complete, tests passing"
 
 * **STEP-4.2: Update state file** using the `manage-state` skill:
-   - Mark new tasks as `done` in the PLAN block
-   - Update IMPLEMENTATION block with files modified and tests added
-   - Append PHASE_LOG entry: "Scope-creep implementation complete"
+   - PLAN block: mark new tasks as `done`
+   - IMPLEMENTATION block: list files modified and tests added during this scope-creep
+   - PHASE_LOG: append entry matching STEP-4.1 ("Scope-creep implementation complete")
+   - ⚠️ **MANDATORY** — skipping this breaks workflow resumption
+
+   > Checkpoint: ☐ PR body updated (STEP-4.1)  ☐ State file updated (STEP-4.2)  ☐ Both committed
 
 * **STEP-4.3: Resume outer workflow**: Return control to the outer workflow at the point where `/scope-creep` was invoked. The outer workflow continues from its current step.
