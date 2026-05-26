@@ -34,11 +34,11 @@ The caller must provide:
 | Input | Required | Description |
 |-------|----------|-------------|
 | PR number | Always | The PR number returned by `create-pull-request` |
-| Target phase | Always | One of: `Planning`, `Implementing`, `Reviewing`, `Ready` |
+| Target phase | Always | One of: `Planning`, `Implementing`, `Reviewing`, `Submitting`, `Ready` |
 | Actor | Always | Agent name performing the update (e.g., `orchestrator`, `pr-author`) |
 | Summary | Always | One-line description for the Phase Log entry |
 | Branch name | If entering `Implementing` | Branch name to populate Links block |
-| Review Summary content | If entering `Reviewing` | Risk level, findings, resolutions from reviewer |
+| Review Summary content | If entering `Submitting` | Risk level, findings, resolutions from reviewer |
 | Decisions Log entry | If scope changed | Full decision entry (date, title, decision, rationale, alternatives, impact, trigger) |
 | Title | Optional | Updated PR title (typically only at finalization) |
 | Undraft | If entering `Ready` | Flag to mark PR as ready for review |
@@ -113,7 +113,8 @@ Report the PR URL back to the caller. If the update failed, report the error and
 |--------------|---------------|-------------|------------------|----------------|---------|
 | `Implementing` (branch) | Phase → `Implementing` | Branch → name | Yes | No | No |
 | `Implementing` (impl done) | No change | No | Yes | No | No |
-| `Reviewing` | Phase → `Reviewing` | No | Yes | Yes (populate) | No |
+| `Reviewing` | Phase → `Reviewing` | No | Yes | No | No |
+| `Submitting` | Phase → `Submitting` | No | Yes | Yes (populate) | No |
 | `Ready` (finalize) | Phase → `Ready`, Draft → `false` | No | Yes | Sanitize | Yes |
 
 ## Important
