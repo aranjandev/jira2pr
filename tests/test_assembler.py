@@ -51,6 +51,7 @@ class TestCanonicalRegistry(unittest.TestCase):
         self.assertGreater(len(self.registry.skills), 0)
         slugs = [s["slug"] for s in self.registry.skills]
         self.assertIn("read-jira-ticket", slugs)
+        self.assertIn("resume-workflow", slugs)
 
     def test_loads_instructions(self):
         self.assertGreater(len(self.registry.instructions), 0)
@@ -70,14 +71,13 @@ class TestCanonicalRegistry(unittest.TestCase):
         model = self.registry.model_for_tier(2, "copilot")
         self.assertIn("Sonnet", model)
 
-    def test_workflow_files(self):
-        wfs = self.registry.workflow_files()
-        names = [w.name for w in wfs]
-        self.assertIn("feature.md", names)
-
     def test_env_example(self):
         path = self.registry.env_example_path()
         self.assertIsNotNone(path)
+
+    def test_no_workflow_files_method(self):
+        self.assertFalse(hasattr(self.registry, 'workflow_files'),
+                         "workflow_files() should have been removed")
 
 
 class TestFileWriter(unittest.TestCase):
@@ -147,10 +147,14 @@ class TestCopilotAssembly(unittest.TestCase):
         self.assertTrue(prompt.startswith("---"))
         self.assertIn("agent:", prompt)
 
-    def test_workflows_no_template_vars(self):
-        for wf_name in ["feature.md", "bugfix.md", "_resume.md", "scope-creep.md"]:
-            wf = (self.out / f".github/agent-workflows/{wf_name}").read_text()
-            self.assertNotIn("{{", wf, msg=f"Unresolved vars in {wf_name}")
+    def test_resume_workflow_skill_generated(self):
+        skill = (self.out / ".github/skills/resume-workflow/SKILL.md").read_text()
+        self.assertTrue(skill.startswith("---"))
+        self.assertIn("resume-workflow", skill)
+
+    def test_no_agent_workflows_dir(self):
+        self.assertFalse((self.out / ".github/agent-workflows").exists(),
+                         "agent-workflows/ dir should not be generated")
 
     def test_model_tiers_json(self):
         data = json.loads((self.out / ".github/model-tiers.json").read_text())
@@ -162,7 +166,8 @@ class TestCopilotAssembly(unittest.TestCase):
         content = (self.out / ".github/copilot-instructions.md").read_text()
         self.assertIn("Agent Roster", content)
         self.assertIn("Skills", content)
-        self.assertIn("Workflows", content)
+        self.assertNotIn("agent-workflows", content,
+                         "copilot-instructions.md should not reference agent-workflows/")
 
     def test_env_example_copied(self):
         self.assertTrue((self.out / ".env.example").exists())
