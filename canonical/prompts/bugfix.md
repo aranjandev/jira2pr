@@ -2,8 +2,8 @@
 
 Fix a bug end-to-end, or resume a bugfix that was interrupted.
 
-Follow the canonical workflow defined in `agent-workflows/bugfix.md`, starting from **Phase 0: Bootstrap**.
+Delegate to the **orchestrator** agent and invoke its `bugfix` state machine.
 
-- If a **JIRA ticket** is provided: fresh start from Phase 1.
-- If a **PR link or number** is provided: fetch the PR state document, determine the current phase, and resume from the next phase.
+- If a **JIRA ticket** is provided: fresh start — orchestrator runs the bugfix state machine from Understand.
+- If a **PR link or number** is provided: orchestrator invokes the `resume-workflow` skill, determines the current phase, and continues from there.
 - If **neither** is provided: ask the user for a JIRA ticket key/URL or a PR link/number.
