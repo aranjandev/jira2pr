@@ -57,24 +57,20 @@
 
 ## How Agents Contribute to Code
 
-> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and workflows.
+> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and agents.
 
 Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.
 
-The workflow maintains **two state layers in parallel** — the PR body (human-facing, updated via the `update-pull-request` skill) and a per-workflow state file under `.github/state/` (agent-facing working memory, updated via the `manage-state` skill). Both layers must be kept in sync at every phase transition; neither alone is sufficient.
+The **state file** (`.github/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from it and updated at each phase boundary via `update-pull-request`. All agents write to state first, then render to the PR — never the other way around.
 
-**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions and owns both state layers throughout. The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions via its embedded state machines (feature, bugfix, scope-creep). The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
 
 ### State & Artifact Architecture
 
-The framework tracks state at two levels:
-
-| Layer | File | Audience | Skill | Owner |
-|-------|------|----------|-------|-------|
-| **PR body** | GitHub PR (live) | Human reviewers + agents | `update-pull-request` | orchestrator (all phases), pr-author (finalize) |
-| **Workflow state file** | `.github/state/<TICKET-KEY>.md` | Agents only | `manage-state` | orchestrator (all phases), pr-author (archive) |
-
-> **Invariant:** Both layers must be updated together at every phase boundary. Updating one without the other leaves the workflow in an inconsistent state.
+| Layer | File | Audience | Skill | Role |
+|-------|------|----------|-------|------|
+| **State file** | `.github/state/<TICKET-KEY>.md` | Agents — source of truth | `manage-state` | Written first at every phase transition |
+| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
 
 The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `.github/state/archive/<TICKET-KEY>.md`. The artifact registry at `.github/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
 
@@ -109,6 +105,7 @@ Skills are reusable, domain-specific instruction sets that agents load on demand
 | `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
 | `manage-state` | Creates, reads, and updates the per-workflow agent state file at .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer resumption |
 | `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at .github/artifacts/REGISTRY.md |
+| `resume-workflow` | Restores full workflow context from an existing draft PR and its state file, then returns the current phase and all parsed context (plan, branch, ticket key, task statuses) so the orchestrator can route to the correct resume point |
 
 ### Agent Prompts
 
@@ -120,19 +117,6 @@ User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`
 | `bugfix.prompt.md` | `/bugfix` | Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link |
 | `review.prompt.md` | `/review` | Reviews current code changes for quality, risks, and correctness |
 | `scope-creep.prompt.md` | `/scope-creep` | Scope-creep workflow — inject additional work into an active feature or bugfix workflow |
-
-### Workflows
-
-Multi-phase workflow definitions live in `.github/agent-workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:
-
-| Workflow | Trigger | Phases |
-|----------|---------|--------|
-| `feature.md` | `/feature` | Bootstrap → Understand → Plan → Implement → Review → Submit |
-| `bugfix.md` | `/bugfix` | Bootstrap → Understand → Diagnose → Fix → Review → Submit |
-| `scope-creep.md` | `/scope-creep` | Understand → Plan Delta → Implement → Update State |
-| `_resume.md` | Any PR link | Parses PR state and routes to the correct phase to continue |
-
-All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA input) and resume (PR link) modes automatically.
 
 ### Instructions
 

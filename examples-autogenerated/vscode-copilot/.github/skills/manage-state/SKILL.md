@@ -5,15 +5,13 @@ argument-hint: 'operation and ticket key (e.g., create KAN-12, update KAN-12)'
 ---
 # Manage State
 
-Creates, reads, and updates the per-workflow agent state file at `.github/state/<TICKET-KEY>.md`. The state file is a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer workflow resumption.
+Creates, reads, and updates the per-workflow agent state file at `.github/state/<TICKET-KEY>.md`. The state file is the **single source of truth** for workflow context — the PR body is a rendered view produced from it at phase boundaries.
 
 > **Schema reference:** Block definitions and mutability rules are in [`.github/state/SCHEMA.md`](../../state/SCHEMA.md). The template is [`.github/state/workflow-state.tpl.md`](../../state/workflow-state.tpl.md).
 
 ## Content Depth Principle
 
-The state file is the agent's **working memory**. Write each block with enough detail that an agent resuming work in a new session can fully reconstruct context and continue from the current step **without re-reading the JIRA ticket, re-running research, re-exploring the codebase, or re-deriving decisions**.
-
-The PR body is human-facing and deliberately summarized. The state file is agent-facing and should be **comprehensive** — include the raw reasoning, not just the conclusions.
+The state file is the agent's **working memory** and the authoritative record of workflow context. The PR body is human-facing and deliberately summarized — it is rendered from state, not maintained in parallel. Write each block with enough detail that an agent resuming work in a new session can fully reconstruct context and continue from the current step **without re-reading the JIRA ticket, re-running research, re-exploring the codebase, or re-deriving decisions**.
 
 ### Per-Block Depth Guide
 
@@ -31,10 +29,10 @@ After writing a block, ask: *"If I lost my entire conversation history and only 
 
 ## When to Use
 
-- **Create**: After creating the draft PR in Phase 2 (branch + PR are both known)
-- **Read**: At workflow resume (Phase 0b) to restore context without a GitHub API call
-- **Update (phase transition)**: At each phase transition, after calling `update-pull-request`
-- **Update (task progress)**: After completing each task in Phase 3/4 to keep PLAN block current
+- **Create**: After creating the branch and before creating the draft PR — state file is created first, then `create-pull-request` renders the initial PR body from it
+- **Read**: At workflow resume to restore context via the `resume-workflow` skill
+- **Update (phase transition)**: At each phase transition; then invoke `update-pull-request` to re-render the PR body from the updated state
+- **Update (task progress)**: After completing each task in Implement phase to keep PLAN block current
 
 ## Procedure
 
@@ -46,12 +44,12 @@ After writing a block, ask: *"If I lost my entire conversation history and only 
    ```
 
 2. Populate each block per the **Per-Block Depth Guide** above. The data source for each block at creation:
-   - **META**: workflow type, ticket key/URL, branch, PR number/URL, timestamps
+   - **META**: workflow type, ticket key/URL, branch, timestamps (PR number/URL populated after `create-pull-request` returns)
    - **PHASE**: `Implementing`
-   - **UNDERSTANDING**: Phase 1 output (jira-reader + codebase exploration)
-   - **RESEARCH**: Phase 2 researcher output (leave empty if no research was needed)
-   - **PLAN**: mirror the PR body task list + per-task implementation notes
-   - **PHASE_LOG**: first row — same timestamp and summary as the PR body Phase Log entry
+   - **UNDERSTANDING**: jira-reader output + codebase exploration
+   - **RESEARCH**: researcher output (leave empty if not invoked)
+   - **PLAN**: planner-lite output + per-task implementation notes
+   - **PHASE_LOG**: first row — "Branch created, state file initialized, entering implementation"
 
 3. Write the populated content using single-quoted Python (never heredocs):
    ```bash
@@ -84,22 +82,23 @@ python3 ./.github/skills/create-pull-request/scripts/pr_helper.py fetch-body --p
 
 ### Update — Phase Transition
 
-At each phase transition (after calling `update-pull-request`):
+At each phase transition:
 
 1. Update the **PHASE block**: replace the phase value
 2. Update the **META block**: advance `Updated At` to current UTC timestamp
 3. Update phase-specific MUTABLE blocks per the **Per-Block Depth Guide**:
-   - Entering `Reviewing`: populate **IMPLEMENTATION** block (implementation just completed — record all files modified, tests added, plan deviations)
-   - Entering `Submitting`: populate **REVIEW** block (review just completed — record risk level, findings, resolutions)
+   - Entering `Reviewing`: populate **IMPLEMENTATION** block
+   - Entering `Submitting`: populate **REVIEW** block
    - Entering `Ready`: ensure all MUTABLE blocks are complete and consistent
-4. Append a row to the **PHASE_LOG block** — apply the same dedupe rule as the PR body:
-   - Do not append if the last row already has the same Phase value
+4. Append a row to the **PHASE_LOG block** — do not append if the last row already has the same Phase value
 
 5. Commit the updated state file:
    ```bash
    git add .github/state/<TICKET-KEY>.md
    # Include in the phase-transition commit
    ```
+
+6. **Then invoke `update-pull-request`** to re-render the PR body from the updated state. The PR body reflects state; state is never derived from the PR body.
 
 ### Update — Task Progress
 
@@ -127,4 +126,4 @@ Include this `git mv` in the finalization commit alongside the artifact registry
 - The state file lives in the working tree and **must be committed to git** — it is not a temp file
 - Never store secrets or credentials in the state file
 - If `STATE_BLOCK` boundary markers are missing or malformed, **stop and report** — do not proceed
-- The state file supplements the PR body; it does not replace it. The PR body remains the canonical human-visible state
+- The state file is the source of truth. The PR body is always derived from it — never the reverse
