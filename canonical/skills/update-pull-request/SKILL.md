@@ -1,6 +1,8 @@
 # Update Pull Request
 
-Updates the body of an existing draft PR at workflow phase transitions. Operates on the canonical PR state document using boundary markers (`PR_BLOCK:*:BEGIN/END`) for safe, idempotent edits.
+Renders the current workflow state to the PR body at phase transitions. Reads the updated state file and writes the corresponding PR blocks using boundary markers (`PR_BLOCK:*:BEGIN/END`) for safe, idempotent edits.
+
+The state file is the source of truth. This skill is always called **after** `manage-state` has been updated — never the other way around.
 
 > **Schema reference:** Block definitions, mutability rules, and idempotency rules are defined in [`pr-schema.instructions.md`](../../instructions/pr-schema.instructions.md). The PR body template is in [`pr-template.instructions.md`](../../instructions/pr-template.instructions.md).
 

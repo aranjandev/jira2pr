@@ -1,6 +1,6 @@
 # PR Body Template
 
-> **Schema reference:** Block definitions, mutability rules, idempotency rules, and ownership model are defined in [pr-schema.instructions.md](pr-schema.instructions.md). Phase transitions are defined in each workflow file (`agent-workflows/feature.md`, `agent-workflows/bugfix.md`).
+> **Schema reference:** Block definitions, mutability rules, idempotency rules, and ownership model are defined in [pr-schema.instructions.md](pr-schema.instructions.md). Phase transitions are defined in the orchestrator agent's embedded state machines.
 
 <!-- Everything below this line is the actual PR body that gets written to GitHub/Bitbucket. -->
 <!-- Agents: copy from here down when creating the PR. -->
