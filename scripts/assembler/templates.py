@@ -82,21 +82,6 @@ def generate_agents_section(
         purpose = prompt["description"].split(".")[0]
         lines.append(f"| `{prompt['slug']}.prompt.md` | `/{prompt['slug']}` | {purpose} |")
 
-    # --- Workflows ---
-    lines.append("")
-    lines.append("### Workflows")
-    lines.append("")
-    lines.append("Multi-phase workflow definitions live in `.github/agent-workflows/`. The Orchestrator reads the matching workflow file and executes it phase-by-phase:")
-    lines.append("")
-    lines.append("| Workflow | Trigger | Phases |")
-    lines.append("|----------|---------|--------|")
-    lines.append("| `feature.md` | `/feature` | Bootstrap → Understand → Plan → Implement → Review → Submit |")
-    lines.append("| `bugfix.md` | `/bugfix` | Bootstrap → Understand → Diagnose → Fix → Review → Submit |")
-    lines.append("| `scope-creep.md` | `/scope-creep` | Understand → Plan Delta → Implement → Update State |")
-    lines.append("| `_resume.md` | Any PR link | Parses PR state and routes to the correct phase to continue |")
-    lines.append("")
-    lines.append("All workflows include a **Phase 0: Bootstrap** that handles both fresh (JIRA input) and resume (PR link) modes automatically.")
-
     # --- Instructions ---
     lines.append("")
     lines.append("### Instructions")

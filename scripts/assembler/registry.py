@@ -102,11 +102,6 @@ class CanonicalRegistry:
             raise FileNotFoundError(f"Canonical prompt file not found: {path}")
         return path.read_text()
 
-    def workflow_files(self) -> list[Path]:
-        """List all workflow markdown files."""
-        d = self.canonical_dir / "workflows"
-        return sorted(d.glob("*.md")) if d.is_dir() else []
-
     def state_files(self) -> list[Path]:
         """List all state/ markdown files (SCHEMA, templates — not agent-managed state files)."""
         d = self.canonical_dir / "state"
