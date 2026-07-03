@@ -58,3 +58,10 @@ skills:
       at .github/artifacts/REGISTRY.md. Use exactly once per workflow when the
       PR transitions to Ready phase.'
     argument_hint: 'ticket key, PR number, PR URL, type, risk level, and summary'
+
+  - slug: resume-workflow
+    description: 'Restores full workflow context from an existing draft PR and its state
+      file, then returns the current phase and all parsed context (plan, branch,
+      ticket key, task statuses) so the orchestrator can route to the correct
+      resume point. Use when the input to a workflow is a PR URL or number.'
+    argument_hint: 'PR number or URL (e.g., 42 or https://github.com/org/repo/pull/42)'
