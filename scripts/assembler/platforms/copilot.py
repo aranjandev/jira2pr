@@ -38,7 +38,6 @@ class CopilotAssembler(PlatformAssembler):
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
         self._assemble_agents(registry, writer)
         self._assemble_skills(registry, writer)
-        self._assemble_workflows(registry, writer)
         self._assemble_instructions(registry, writer)
         self._assemble_prompts(registry, writer)
         self._assemble_project_instructions(registry, writer)
@@ -115,17 +114,6 @@ class CopilotAssembler(PlatformAssembler):
                     scripts_dir,
                     f"{self.GITHUB_PREFIX}/skills/{slug}/scripts",
                 )
-
-    # ------------------------------------------------------------------
-    # Workflows
-    # ------------------------------------------------------------------
-
-    def _assemble_workflows(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
-        for wf_path in registry.workflow_files():
-            raw = wf_path.read_text()
-            content = self.substitute(raw)
-            rel = f"{self.GITHUB_PREFIX}/agent-workflows/{wf_path.name}"
-            writer.put(rel, content)
 
     # ------------------------------------------------------------------
     # Instructions
