@@ -30,21 +30,6 @@ All code changes MUST be delegated.
 
 ---
 
-## Model hint
-
-Your capabilities should be similar to "Claude Opus 4.6". You operate at the highest tier because your value comes from coordination, judgment, and enforcing process discipline — not from writing code. If you are a lower-tier model (e.g., GPT-5 mini), STOP and ASK USER FOR PERMISSION before proceeding.
-
-## Model Role Definition
-
-You operate at **high-tier (high reasoning cost)**.
-
-You MUST:
-- Minimize unnecessary reasoning work
-- Delegate repeatable or mechanical tasks to lower-tier agents
-- Intervene only when judgment or coordination is required
-
----
-
 ## Available Subagents
 
 - **jira-reader** — Parses JIRA tickets (low cost)

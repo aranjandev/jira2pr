@@ -53,14 +53,12 @@ class CopilotAssembler(PlatformAssembler):
     # ------------------------------------------------------------------
 
     def _assemble_agents(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
-        tier_vars = registry.tier_model_vars(self.name)
-        all_vars = {**self.TEMPLATE_VARS, **tier_vars}
         for agent in registry.agents:
             slug = agent["slug"]
             tier = agent["tier"]
             model = registry.model_for_tier(tier, self.name)
             body = registry.agent_body(slug)
-            body = substitute_vars(body, all_vars)
+            body = substitute_vars(body, self.TEMPLATE_VARS)
 
             tools = [COPILOT_TOOL_MAP.get(c, c) for c in agent.get("capabilities", [])]
             subagents = agent.get("subagents", [])
