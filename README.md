@@ -4,7 +4,6 @@
 
 * Multiple agents with named roles
 * Reusable skills
-* Workflows
 * Executable automation hooks
 * State management
 * Archives
@@ -106,15 +105,16 @@ Additionally, `/scope-creep` can be invoked at any point during an active featur
 
 Each phase is handled by a purpose-built agent assigned the right model tier for the task (lightweight models for extraction, stronger models for planning and review). See the setup README for the full agent roster and tier assignments.
 
-### Two-Layer State Management
-The framework tracks workflow state at two levels simultaneously, kept in sync at every phase transition:
+### State Management
 
-| Layer | Storage | Audience | Skill |
-|-------|---------|----------|-------|
-| **PR body** | GitHub PR (live) | Human reviewers + agents | `update-pull-request` |
-| **State file** | `.github/state/<TICKET-KEY>.md` (git-tracked) | Agents only | `manage-state` |
+The framework tracks workflow state using a **single-source model**: a git-tracked state file is the source of truth, and the PR body is a rendered view derived from it at each phase boundary.
 
-The PR body is the canonical human-visible state. The state file is the canonical agent-local working memory — it enables richer resumption without round-tripping to the GitHub API on every read. Both are updated together at each phase boundary; updating one without the other leaves the workflow inconsistent.
+| Layer | Storage | Audience | Skill | Role |
+|-------|---------|----------|-------|------|
+| **State file** | `.github/state/<TICKET-KEY>.md` (git-tracked) | Agents — source of truth | `manage-state` | Written first at every phase transition |
+| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
+
+Update order is deterministic: `manage-state` → `update-pull-request`. The PR body is never written before the state file. This eliminates the need to keep two things in sync — there is one source, one derived view.
 
 State files are committed alongside code changes so context survives session restarts. When a workflow reaches `Ready`, the pr-author archives the state file to `.github/state/archive/<TICKET-KEY>.md`.
 
@@ -151,12 +151,13 @@ Every completed workflow appends exactly one row to an append-only artifact regi
 The registry is managed by the `register-artifact` skill and is never overwritten by the assembler — accumulated history is always preserved.
 
 ### Resume an Interrupted Session
-Because the PR body and state file together capture full workflow state, any agent can resume from any interruption. Pass a PR link or number to the Orchestrator instead of a JIRA key and it will:
+
+Because the state file and PR body capture full workflow context, any agent can resume from any interruption. Pass a PR link or number to the Orchestrator instead of a JIRA key and it will invoke the `resume-workflow` skill to:
 
 1. Fetch the PR body and validate all block markers
-2. Parse current phase, branch name, and task list
+2. Load the state file to restore richer context (plan task statuses, research, implementation log)
 3. Append a resume entry to the Phase Log (idempotent — no duplicate entries)
-4. Route to the correct workflow step and continue
+4. Route to the correct phase and continue
 
 No work is lost regardless of how the session ended.
 
