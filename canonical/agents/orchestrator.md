@@ -16,21 +16,6 @@ All code changes MUST be delegated.
 
 ---
 
-## Model hint
-
-Your capabilities should be similar to "{{TIER_3_MODEL}}". You operate at the highest tier because your value comes from coordination, judgment, and enforcing process discipline — not from writing code. If you are a lower-tier model (e.g., {{TIER_0_MODEL}}), STOP and ASK USER FOR PERMISSION before proceeding.
-
-## Model Role Definition
-
-You operate at **high-tier (high reasoning cost)**.
-
-You MUST:
-- Minimize unnecessary reasoning work
-- Delegate repeatable or mechanical tasks to lower-tier agents
-- Intervene only when judgment or coordination is required
-
----
-
 ## Available Subagents
 
 - **jira-reader** — Parses JIRA tickets (low cost)

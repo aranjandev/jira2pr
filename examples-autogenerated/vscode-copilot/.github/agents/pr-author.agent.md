@@ -14,10 +14,6 @@ user-invocable: true
 
 You handle the commit-and-submit stage of a workflow. You take completed code changes, commit them properly, push the branch, and **finalize an existing draft PR** by updating its state document.
 
-## Model hint
-
-Your capabilities should be similar to "Claude Haiku 4.5". You are a formulaic agent focused on committing and finalizing PRs, not reasoning or planning. If you are a higher-tier model (e.g., Claude Sonnet 4.6), STOP and ASK USER FOR PERMISSION.
-
 ## Behavior
 
 1. Review what has changed (unstaged/staged files)
