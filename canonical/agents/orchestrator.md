@@ -42,30 +42,117 @@ You MUST:
 
 ---
 
-## Workflow Selection
-
-Workflow definitions live in the platform's agent-workflows directory.
-
-All workflows begin with **Phase 0: Bootstrap**.
-
-### Input Routing
+## Input Routing
 
 | Input | Mode | Workflow |
-|------|------|----------|
-| JIRA key/URL | FRESH | Determine type → default `feature.md` |
-| PR URL/number | RESUME | Infer type → default `feature.md` |
-| `/scope-creep <desc>` | INJECT | `scope-creep.md` |
-| Neither | — | Ask user for valid input |
-
-### Workflow Types
-
-| Ticket Type | Workflow |
-|------------|----------|
-| Feature | `agent-workflows/feature.md` |
-| Bug / Defect | `agent-workflows/bugfix.md` |
-| Scope-Creep | `agent-workflows/scope-creep.md` |
+|-------|------|----------|
+| JIRA key/URL | FRESH | Infer type → run matching state machine below |
+| PR URL/number | RESUME | Invoke `resume-workflow` skill → route by returned phase |
+| `/scope-creep <desc>` | INJECT | Run `scope-creep` state machine |
+| Neither | — | Ask user for a JIRA ticket key/URL or PR link |
 
 > **Review** (`/review` prompt) invokes the `reviewer` agent directly — it does not go through the orchestrator.
+
+---
+
+## State Machines
+
+All workflows share **Phase 0: Bootstrap** — detect FRESH vs RESUME, then enter the appropriate state machine.
+
+**Bootstrap:**
+- FRESH → read `{{PROJECT_INSTRUCTIONS_FILE}}` for conventions, then enter `Understand` phase
+- RESUME → invoke `resume-workflow` skill with the PR number → use returned `phase` to route into the table below
+
+---
+
+### feature
+
+```mermaid
+stateDiagram-v2
+    [*] --> Understand
+    Understand --> Plan
+    Plan --> Implement
+    Implement --> Review
+    Review --> Submit
+    Submit --> [*]
+```
+
+| Phase | → Agent | Skills | Gate to advance |
+|-------|---------|--------|-----------------|
+| Understand | `jira-reader` | `read-jira-ticket` | requirements extracted |
+| Plan | `researcher` *(conditional)* | — | research complete (skip if not needed) |
+| Plan | `planner-lite` | — | plan validated, user approved if >5 files |
+| Plan:infra | self | `git-operations`, `create-pull-request`, `manage-state` | branch + PR + state file created |
+| Implement | `coder` | — | tests pass ∧ lint clean |
+| Review | `reviewer` | `identify-risks`, `summarize-changes` | no critical findings |
+| Submit | `pr-author` | `git-operations`, `update-pull-request`, `register-artifact` | pr.state = Ready |
+
+**Researcher trigger:** invoke `researcher` before `planner-lite` if requirements mention "best", "compare", "optimal", or reference an unfamiliar external API or library.
+
+**Resume routing:**
+
+| Phase found | Resume at |
+|-------------|-----------|
+| `Implementing` | Diff branch vs base; identify remaining tasks; re-enter Implement |
+| `Reviewing` | Verify implementation complete; re-enter Review |
+| `Submitting` | Verify Review Summary populated; re-enter Submit |
+| `Ready` | STOP — report "PR already finalized" |
+
+---
+
+### bugfix
+
+```mermaid
+stateDiagram-v2
+    [*] --> Understand
+    Understand --> Diagnose
+    Diagnose --> Plan
+    Plan --> Implement
+    Implement --> Review
+    Review --> Submit
+    Submit --> [*]
+```
+
+| Phase | → Agent | Skills | Gate to advance |
+|-------|---------|--------|-----------------|
+| Understand | `jira-reader` | `read-jira-ticket` | bug report extracted |
+| Diagnose | self | — | root cause identified; bug reproduced (or documented as non-reproducible) |
+| Plan | `planner-lite` | — | plan validated (regression test first, then fix) |
+| Plan:infra | self | `git-operations`, `create-pull-request`, `manage-state` | branch + PR + state file created |
+| Implement | `coder` | — | regression test fails pre-fix, passes post-fix; lint clean |
+| Review | `reviewer` | `identify-risks`, `summarize-changes` | no critical findings |
+| Submit | `pr-author` | `git-operations`, `update-pull-request`, `register-artifact` | pr.state = Ready |
+
+**Resume routing:**
+
+| Phase found | Resume at |
+|-------------|-----------|
+| `Implementing` | Check `git diff --stat` vs base; report progress; re-enter Implement |
+| `Submitting` | Verify Review Summary populated; re-enter Submit |
+| `Ready` | STOP — report "PR already finalized" |
+
+---
+
+### scope-creep
+
+*Precondition: an active feature or bugfix workflow must already exist (branch, PR, and state file present).*
+
+```mermaid
+stateDiagram-v2
+    [*] --> LoadState
+    LoadState --> PlanDelta
+    PlanDelta --> Implement
+    Implement --> UpdateState
+    UpdateState --> [*]
+```
+
+| Phase | → Agent | Skills | Gate to advance |
+|-------|---------|--------|-----------------|
+| LoadState | self | `manage-state` | current plan and phase loaded |
+| PlanDelta | `planner-lite` | — | delta plan produced (new task IDs continuing from existing sequence) |
+| PlanDelta:update | self | `update-pull-request`, `manage-state` | PR Plan block appended; state file updated; Decisions Log entry added |
+| Implement | `coder` | — | delta tasks complete; tests pass |
+| UpdateState | self | `manage-state`, `update-pull-request` | state file and PR body reflect new task statuses |
 
 ---
 
@@ -167,16 +254,18 @@ Delegate if requirements involve:
 
 ---
 
-## State & PR Management
+## State Management
+
+The **state file** (`.github/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from state — updated at each phase boundary, not maintained in parallel.
 
 You MUST:
 
 - Create a branch BEFORE any code changes
 - NEVER modify main/master directly
-- Create a draft PR after planning
-- **Update the PR body at each phase transition** using the `update-pull-request` skill — the PR is a live state document
-- **Maintain the workflow state file at every phase transition and after completing each task** using the `manage-state` skill — the state file is the agent's working memory and must stay in sync with the PR body at all times
-- **Pass the PR number to `pr-author`** at submit time — the pr-author finalizes the existing draft, it does not create a new PR
+- After planning: create state file (`manage-state`) → create draft PR (`create-pull-request`) — in that order
+- At each phase transition: update state file (`manage-state`) → render to PR body (`update-pull-request`)
+- After each task in Implement phase: update state file task status → render PR if phase changes
+- **Pass the PR number to `pr-author`** at Submit time — the pr-author finalizes the existing draft, it does not create a new PR
 
 ---
 
