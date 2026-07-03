@@ -2,20 +2,22 @@
 
 State files are agent-maintained per-workflow documents stored at `.github/state/<TICKET-KEY>.md`. They serve as a fast-access local mirror of workflow context — reducing the need to round-trip to the GitHub API on every state read and enabling richer workflow resumption than the PR body alone.
 
-## Purpose
+## State Model
 
-| Layer | File | Audience | Updated When |
-|-------|------|----------|--------------|
-| PR body | GitHub PR | Human reviewers | Each phase transition (via `update-pull-request`) |
-| **State file** | `.github/state/<TICKET-KEY>.md` | Agents only | Each phase transition + major task steps |
+The state file is the **single source of truth** for workflow context. The PR body is a **rendered view** — derived from state and updated at each phase boundary.
 
-The PR body is the canonical **human-visible** state. The state file is the canonical **agent-local** state. Both are always in sync at phase boundaries.
+| Layer | File | Audience | Role |
+|-------|------|----------|------|
+| **State file** | `.github/state/<TICKET-KEY>.md` | Agents — source of truth | Updated at phase transitions and after significant tasks |
+| PR body | GitHub PR | Human reviewers — rendered view | Re-rendered from state after each phase transition |
+
+Update order: **always update the state file first**, then invoke `update-pull-request` to render the new state to the PR body.
 
 ## File Naming and Lifecycle
 
 - One state file per workflow: `.github/state/<TICKET-KEY>.md`
   - Example: `.github/state/KAN-12.md`
-- **Created** by the orchestrator at Phase 2 (after branch + draft PR creation) using the `manage-state` skill
+- **Created** by the orchestrator after planning (branch exists) using the `manage-state` skill, then draft PR is created from it via `create-pull-request`
 - **Updated** at each phase transition and after completing significant tasks
 - **Committed to git** alongside code changes so context survives session restarts
 - **Archived** by the pr-author when the PR reaches `Ready` — moved to `.github/state/archive/<TICKET-KEY>.md` (see Archive section below)

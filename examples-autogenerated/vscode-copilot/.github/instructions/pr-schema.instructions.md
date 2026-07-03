@@ -31,7 +31,7 @@ Planning ──→ Implementing ──→ Reviewing ──→ Submitting ──�
 
 Valid values: `Planning` · `Implementing` · `Reviewing` · `Submitting` · `Ready`
 
-> **Phase transitions** are defined in each workflow file (`agent-workflows/feature.md`, `agent-workflows/bugfix.md`). This schema only defines the valid phase values and the rules for updating PR blocks.
+> **Phase transitions** are defined in the orchestrator agent's embedded state machines. This schema only defines the valid phase values and the rules for updating PR blocks.
 
 ### Resume Events
 
