@@ -22,7 +22,7 @@ agents:
       execution via structured planning, deterministic coding, and high-signal
       review using specialized subagents. Use this agent for full feature or
       bugfix workflows.'
-    tier: 3
+    tier: 2
     role: Primary delegator with coordination authority
     capabilities:
       - read
