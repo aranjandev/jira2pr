@@ -1,6 +1,6 @@
 # jira2pr
 
-`jira2pr` is a **multi-agent workflow framework** for AI-assisted feature development: read a JIRA ticket, plan, implement, review, and submit a PR. It's lightweight, transparent, and designed for developer supervision at every step.
+`jira2pr` is a **multi-agent framework** for AI-assisted feature development: read a JIRA ticket, plan, implement, review, and submit a PR. It's lightweight, transparent, and designed for developer supervision at every step.
 
 ## Motivation
 
@@ -17,9 +17,8 @@ This framework is for two use cases:
 - Runtime-agnostic and built for any codebase
 
 **It is not:**
-- A substitute for heavy frameworks like [LangChain/LangGraph](https://www.langchain.com/blog/deep-agents-vs-langchain-vs-langgraph)
-- A fully automated multi-agent orchestrator
-- A replacement for cloud-based agents
+- A substitute for heavy orchestration frameworks (like [LangChain/LangGraph](https://www.langchain.com/blog/deep-agents-vs-langchain-vs-langgraph) or [CrewAI](https://docs.crewai.com/v1.15.20/en/introduction))
+- A replacement for cloud-based agents (like [Copilot Cloud](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent))
 
 ## How jira2pr Works
 
