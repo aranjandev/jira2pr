@@ -26,10 +26,24 @@ def substitute_vars(text: str, variables: dict[str, str]) -> str:
 # "How Agents Contribute to Code" section generator
 # ---------------------------------------------------------------------------
 
+COPILOT_AGENTS_SECTION_LABELS: dict[str, str] = {
+    "agents_dir": ".github/agents/",
+    "agent_file_ext": ".agent.md",
+    "capability_field": "tools",
+    "skills_dir_template": ".github/skills/<skill-name>/SKILL.md",
+    "prompts_intro": "User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`. Invoke them with a `/` slash command in the Copilot chat:",
+    "prompt_file_ext": ".prompt.md",
+    "instructions_intro": "Persistent rules that apply across all agents are defined as `.instructions.md` files in `.github/instructions/`:",
+    "instruction_file_ext": ".instructions.md",
+    "model_tiers_intro": "`.github/model-tiers.json` maps model tiers (0–3) to concrete Copilot model names. The `scripts/apply_model_tiers.py` script stamps the correct model into each agent file at setup time. Tier assignment reflects cost/capability trade-offs:",
+}
+
+
 def generate_agents_section(
     registry: "CanonicalRegistry",
     platform: str,
     project_instructions_file: str,
+    labels: dict[str, str] | None = None,
 ) -> str:
     """Build the markdown for the dynamic (data-driven) table sub-sections.
 
@@ -39,6 +53,7 @@ def generate_agents_section(
     verbatim by the assembler.  This function emits only the parts that are
     generated from registry data.
     """
+    labels = labels or COPILOT_AGENTS_SECTION_LABELS
     lines: list[str] = []
 
     # --- Agent Roster ---
@@ -56,13 +71,15 @@ def generate_agents_section(
         display_model = re.sub(r"\s*\(copilot\)\s*$", "", model)
         lines.append(f"| **{agent['name']}** | {agent['description'].split('.')[0]} | {display_model} |")
     lines.append("")
-    lines.append("Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, `model`, and which subagents it may invoke.")
+    lines.append(
+        f"Agent definitions live in `{labels['agents_dir']}`. Each file is a `{labels['agent_file_ext']}` with YAML frontmatter declaring its `description`, `{labels['capability_field']}`, `model`, and which subagents it may invoke."
+    )
 
     # --- Skills ---
     lines.append("")
     lines.append("### Skills")
     lines.append("")
-    lines.append("Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `.github/skills/<skill-name>/SKILL.md`.")
+    lines.append(f"Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `{labels['skills_dir_template']}`.")
     lines.append("")
     lines.append("| Skill | Purpose |")
     lines.append("|-------|---------|")
@@ -74,24 +91,24 @@ def generate_agents_section(
     lines.append("")
     lines.append("### Agent Prompts")
     lines.append("")
-    lines.append("User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`. Invoke them with a `/` slash command in the Copilot chat:")
+    lines.append(labels["prompts_intro"])
     lines.append("")
     lines.append("| Prompt | Slash command | What it does |")
     lines.append("|--------|---------------|--------------|")
     for prompt in registry.prompts:
         purpose = prompt["description"].split(".")[0]
-        lines.append(f"| `{prompt['slug']}.prompt.md` | `/{prompt['slug']}` | {purpose} |")
+        lines.append(f"| `{prompt['slug']}{labels['prompt_file_ext']}` | `/{prompt['slug']}` | {purpose} |")
 
     # --- Instructions ---
     lines.append("")
     lines.append("### Instructions")
     lines.append("")
-    lines.append("Persistent rules that apply across all agents are defined as `.instructions.md` files in `.github/instructions/`:")
+    lines.append(labels["instructions_intro"])
     lines.append("")
     lines.append("| File | Scope | What it governs |")
     lines.append("|------|-------|-----------------|")
     for instr in registry.instructions:
-        lines.append(f"| `{instr['slug']}.instructions.md` | PR bodies / commits | {instr['description'].split('.')[0]} |")
+        lines.append(f"| `{instr['slug']}{labels['instruction_file_ext']}` | PR bodies / commits | {instr['description'].split('.')[0]} |")
 
     # --- Git Push Authentication ---
     lines.append("")
@@ -126,7 +143,7 @@ def generate_agents_section(
     lines.append("")
     lines.append("### Model Tiers")
     lines.append("")
-    lines.append(f"`.github/model-tiers.json` maps model tiers (0–3) to concrete Copilot model names. The `scripts/apply_model_tiers.py` script stamps the correct model into each agent file at setup time. Tier assignment reflects cost/capability trade-offs:")
+    lines.append(labels["model_tiers_intro"])
     lines.append("")
     tiers = registry.model_tiers.get("tiers", {})
     for tier_num in sorted(tiers.keys(), key=lambda x: int(x)):

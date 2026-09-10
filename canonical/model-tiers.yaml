@@ -5,6 +5,10 @@
 # for Copilot).
 #
 # To add a new platform, add a key under `models:` for each tier.
+#
+# NOTE: opencode model IDs below are best-effort provider/model-id guesses
+# (GitHub Copilot provider slugs are not officially confirmed for OpenCode) —
+# verify before relying on them.
 
 tiers:
   0:
@@ -12,18 +16,22 @@ tiers:
     role: "Simple, deterministic tasks"
     models:
       copilot: "GPT-5 mini (copilot)"
+      opencode: "github-copilot/gpt-5-mini"
   1:
     description: "Light reasoning — templated output, formulaic writing"
     role: "Formulaic tasks"
     models:
       copilot: "Claude Haiku 4.5 (copilot)"
+      opencode: "github-copilot/claude-haiku-4.5"
   2:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
       copilot: "Claude Sonnet 4.6 (copilot)"
+      opencode: "github-copilot/claude-sonnet-4.6"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
     models:
       copilot: "Claude Opus 4.6 (copilot)"
+      opencode: "github-copilot/claude-opus-4.6"
