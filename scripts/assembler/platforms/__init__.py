@@ -13,9 +13,11 @@ if TYPE_CHECKING:
 def _get_platforms() -> dict[str, type["PlatformAssembler"]]:
     from assembler.platforms.copilot import CopilotAssembler
     from assembler.platforms.claude import ClaudeAssembler
+    from assembler.platforms.opencode import OpenCodeAssembler
     return {
         "copilot": CopilotAssembler,
         "claude": ClaudeAssembler,
+        "opencode": OpenCodeAssembler,
     }
 
 
