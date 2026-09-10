@@ -9,8 +9,8 @@
 | Ticket Key | `KAN-4` |
 | Ticket URL | https://aranjandev-jira.atlassian.net/browse/KAN-4 |
 | Branch | feat/kan-4 |
-| PR Number | `pending` |
-| PR URL | pending |
+| PR Number | `34` |
+| PR URL | https://github.com/aranjandev/jira2pr/pull/34 |
 | Created At | 2026-09-10T15:25:19Z |
 | Updated At | 2026-09-10T15:25:19Z |
 
