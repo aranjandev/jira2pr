@@ -1,0 +1,164 @@
+# Project Instructions
+
+<!-- CUSTOMIZE: Replace with a brief description of your project — what it does, who uses it, and its primary purpose. -->
+## Overview
+
+...
+
+<!-- CUSTOMIZE: Replace with your project's language stack, formatting and linting tools, and any style rules agents should follow when generating or editing code. -->
+## Code Style
+
+- Languages: ...
+- Formatter: ...
+- Key conventions: ...
+
+<!-- CUSTOMIZE: Describe your project's architecture — type of project, key directories, major modules, and how they relate. -->
+## Architecture
+
+- Project type: ...
+- Key directories:
+  - `src/` — ...
+  - `tests/` — ...
+
+<!-- CUSTOMIZE: Describe how to build, run, and test the project. Include the commands agents should use to verify their changes compile and tests pass. -->
+## Build and Test
+
+```bash
+# Install dependencies
+...
+
+# Run tests
+...
+
+# Build
+...
+```
+
+<!-- CUSTOMIZE: List any project-specific conventions agents must follow — naming patterns, file organisation rules, patterns to avoid, etc. -->
+## Conventions
+
+- ...
+
+<!-- CUSTOMIZE: List runtime and development dependencies, including any CLIs or external services agents will need access to. -->
+## Dependencies
+
+- ...
+
+<!-- CUSTOMIZE: Document required environment variables and any external tool authentication agents need (e.g. API tokens, CLI logins). -->
+## Environment
+
+- `ENV_VAR_NAME` — Description of what it's for
+- GitHub CLI (`gh`) must be authenticated via `gh auth login`
+- JIRA credentials:
+  - `JIRA_API_TOKEN` — Personal access token for JIRA REST API
+  - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
+
+<!-- AGENTS_SECTION:AUTO_GENERATED -->
+
+## How Agents Contribute to Code
+
+> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and agents.
+
+Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.opencode/`.
+
+The **state file** (`.opencode/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from it and updated at each phase boundary via `update-pull-request`. All agents write to state first, then render to the PR — never the other way around.
+
+**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions via its embedded state machines (feature, bugfix, scope-creep). The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+
+### State & Artifact Architecture
+
+| Layer | File | Audience | Skill | Role |
+|-------|------|----------|-------|------|
+| **State file** | `.opencode/state/<TICKET-KEY>.md` | Agents — source of truth | `manage-state` | Written first at every phase transition |
+| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
+
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `.opencode/state/archive/<TICKET-KEY>.md`. The artifact registry at `.opencode/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+
+
+### Agent Roster
+
+7 agents are available. Each has a defined scope and model tier:
+
+| Agent | Role | Model |
+|-------|------|-------|
+| **orchestrator** | End-to-end feature development orchestrator | github-copilot/claude-sonnet-4.6 |
+| **jira-reader** | Fetches and interprets JIRA tickets | github-copilot/gpt-5-mini |
+| **reviewer** | Reviews code changes for quality, correctness, and risks | github-copilot/claude-opus-4.6 |
+| **researcher** | Lightweight research agent for technical investigation | github-copilot/claude-haiku-4.5 |
+| **pr-author** | Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review | github-copilot/claude-haiku-4.5 |
+| **planner-lite** | Generates a minimal, deterministic file-level implementation plan for execution by a coder agent | github-copilot/claude-sonnet-4.6 |
+| **coder** | Executes a predefined implementation plan deterministically by writing minimal, correct code and tests | github-copilot/claude-sonnet-4.6 |
+
+Agent definitions live in `.opencode/agent/`. Each file is a `.md` with YAML frontmatter declaring its `description`, `permission`, `model`, and which subagents it may invoke.
+
+### Skills
+
+Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `.opencode/skill/<skill-name>/SKILL.md`.
+
+| Skill | Purpose |
+|-------|---------|
+| `read-jira-ticket` | Fetches a JIRA ticket by key or URL and extracts structured requirements including summary, description, acceptance criteria, subtasks, labels, and priority |
+| `git-operations` | Performs git operations: creating branches from ticket keys, staging and committing changes with conventional commit messages, and pushing to origin |
+| `create-pull-request` | Creates a draft Pull Request using the canonical PR body template |
+| `update-pull-request` | Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks |
+| `summarize-changes` | Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module |
+| `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
+| `manage-state` | Creates, reads, and updates the per-workflow agent state file at .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer resumption |
+| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at .github/artifacts/REGISTRY.md |
+| `resume-workflow` | Restores full workflow context from an existing draft PR and its state file, then returns the current phase and all parsed context (plan, branch, ticket key, task statuses) so the orchestrator can route to the correct resume point |
+
+### Agent Prompts
+
+User-facing entry points are defined as command markdown files in `.opencode/command/`. Invoke them with a `/` slash command in the OpenCode CLI/TUI:
+
+| Prompt | Slash command | What it does |
+|--------|---------------|--------------|
+| `feature.md` | `/feature` | Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link |
+| `bugfix.md` | `/bugfix` | Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link |
+| `review.md` | `/review` | Reviews current code changes for quality, risks, and correctness |
+| `scope-creep.md` | `/scope-creep` | Scope-creep workflow — inject additional work into an active feature or bugfix workflow |
+
+### Instructions
+
+Persistent rules are defined as plain markdown files under `.opencode/instructions/` and referenced by path in the `instructions` array of `opencode.json`:
+
+| File | Scope | What it governs |
+|------|-------|-----------------|
+| `commit-conventions.md` | PR bodies / commits | Conventional commit message format and rules for writing git commit messages |
+| `pr-schema.md` | PR bodies / commits | PR state document schema — block definitions, mutability rules, ownership model, idempotency rules, and scope change protocol |
+| `pr-template.md` | PR bodies / commits | Canonical PR body template for agent-maintained pull requests |
+
+### Git Push Authentication for Agents
+
+Agents push code using the `git-operations` skill (`git_helper.py push`). The script reads `.env` at the repo root and injects credentials automatically via `GIT_ASKPASS` — no system credential helper or `gh auth` required.
+
+**Required `.env` variables for HTTPS remotes:**
+- GitHub: `GITHUB_TOKEN=<personal-access-token>` (needs `repo` scope)
+- Bitbucket: `BITBUCKET_TOKEN=<app-password>` and `BITBUCKET_USERNAME=<your-username>`
+
+SSH remotes do not require these variables.
+
+> **Critical:** If `GITHUB_TOKEN` is absent or expired, `git push` will hang or fail silently. Do **not** attempt to work around this by calling `gh` CLI or modifying the remote URL manually — fix the token in `.env` instead.
+
+### Shell Command Rules for Agents
+
+Applies whenever an agent runs shell commands in a terminal. Violations produce silent, hard-to-debug corruption:
+
+- **Never write file content using heredocs** (`<< 'EOF' ... EOF`) — they get mangled in agent terminal sessions.
+- **Never use `python3 -c "..."`  with double outer quotes** — the shell expands `$variables` and backticks inside.
+- **Always use `python3 -c '...'` with single outer quotes** and `\n` for newlines — this is the only reliable pattern:
+  ```bash
+  python3 -c 'open("/tmp/file.md","w").write("line1\nline2\n")'
+  # With dynamic values, concatenate inside the expression
+  python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/file.md","w").write("# Title\nTimestamp: "+ts+"\n")'
+  ```
+
+### Model Tiers
+
+`opencode.json`'s `model`/`small_model` fields and each agent's frontmatter `model` field reference tiers resolved from `canonical/model-tiers.yaml`. Tier assignment reflects cost/capability trade-offs:
+
+- **Tier 0** — Cheapest — simple extraction, formatting, and API calls: Simple, deterministic tasks
+- **Tier 1** — Light reasoning — templated output, formulaic writing: Formulaic tasks
+- **Tier 2** — Strong reasoning — planning, code generation, implementation: Implementation and orchestration
+- **Tier 3** — Highest capability — deep analysis, risk assessment, complex review: Thorough review and analysis
+

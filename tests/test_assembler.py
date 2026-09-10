@@ -1,6 +1,7 @@
 """Tests for the assembler package — end-to-end assembly from canonical definitions."""
 
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,12 +13,14 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 CANONICAL_DIR = Path(__file__).resolve().parent.parent / "canonical"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
 from assembler.templates import substitute_vars
 from assembler.platforms.copilot import CopilotAssembler
 from assembler.platforms.claude import ClaudeAssembler
+from assembler.platforms.opencode import OpenCodeAssembler
 
 
 class TestSubstituteVars(unittest.TestCase):
@@ -70,6 +73,10 @@ class TestCanonicalRegistry(unittest.TestCase):
     def test_model_for_tier(self):
         model = self.registry.model_for_tier(2, "copilot")
         self.assertIn("Sonnet", model)
+
+    def test_model_for_tier_opencode(self):
+        model = self.registry.model_for_tier(2, "opencode")
+        self.assertIn("claude-sonnet", model)
 
     def test_env_example(self):
         path = self.registry.env_example_path()
@@ -254,6 +261,129 @@ class TestClaudeAssembly(unittest.TestCase):
         content = (self.out / ".claude/commands/orchestrator.md").read_text()
         self.assertIn("CLAUDE.md", content)
         self.assertIn("Orchestrator", content)
+
+
+class TestOpenCodeAssembly(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.registry = CanonicalRegistry.load(CANONICAL_DIR)
+        cls.tmpdir = tempfile.mkdtemp()
+        writer = FileWriter(Path(cls.tmpdir))
+        assembler = OpenCodeAssembler()
+        assembler.assemble(cls.registry, writer)
+        cls.out = Path(cls.tmpdir)
+
+    def test_agents_have_frontmatter(self):
+        agent = (self.out / ".opencode/agent/orchestrator.md").read_text()
+        self.assertTrue(agent.startswith("---"))
+        self.assertIn("model:", agent)
+        self.assertIn("permission:", agent)
+        self.assertIn("mode:", agent)
+
+    def test_orchestrator_mode_is_primary_or_all(self):
+        agent = (self.out / ".opencode/agent/orchestrator.md").read_text()
+        mode_line = next(line for line in agent.splitlines() if line.startswith("mode:"))
+        mode = mode_line.split(":", 1)[1].strip()
+        self.assertIn(mode, ("primary", "all"))
+
+    def test_skills_have_frontmatter(self):
+        skill = (self.out / ".opencode/skill/read-jira-ticket/SKILL.md").read_text()
+        self.assertTrue(skill.startswith("---"))
+        self.assertIn("name: read-jira-ticket", skill)
+
+    def test_skill_scripts_copied(self):
+        self.assertTrue((self.out / ".opencode/skill/read-jira-ticket/scripts/fetch_jira.py").exists())
+
+    def test_instructions_no_frontmatter(self):
+        instr = (self.out / ".opencode/instructions/commit-conventions.md").read_text()
+        self.assertFalse(instr.startswith("---"))
+
+    def test_commands_have_frontmatter(self):
+        cmd = (self.out / ".opencode/command/feature.md").read_text()
+        self.assertTrue(cmd.startswith("---"))
+        self.assertIn("agent:", cmd)
+        self.assertIn("$ARGUMENTS", cmd)
+
+    def test_agents_md_generated(self):
+        content = (self.out / "AGENTS.md").read_text()
+        self.assertIn("Agent Roster", content)
+        self.assertIn(".opencode/agent/", content)
+        # Note: canonical/skills/_registry.yaml descriptions for manage-state /
+        # register-artifact hardcode literal ".github/..." paths in their prose
+        # (out of scope here — that registry file must not be touched), so we
+        # assert absence of the specific platform-parameterized paths instead
+        # of a blanket ".github" absence.
+        self.assertNotIn(".github/agents/", content)
+        self.assertNotIn(".github/prompts/", content)
+        self.assertNotIn(".github/instructions/", content)
+
+    def test_opencode_config_json(self):
+        data = json.loads((self.out / "opencode.json").read_text())
+        self.assertIn("$schema", data)
+        self.assertIn("model", data)
+        self.assertIn("small_model", data)
+        self.assertEqual(data.get("default_agent"), "orchestrator")
+
+    def test_env_example_copied(self):
+        self.assertTrue((self.out / ".env.example").exists())
+
+    def test_readme_generated(self):
+        readme = self.out / ".opencode/README.md"
+        self.assertTrue(readme.exists())
+        self.assertIn("OpenCode", readme.read_text())
+
+    def test_idempotent(self):
+        writer = FileWriter(Path(self.tmpdir), check=True)
+        assembler = OpenCodeAssembler()
+        assembler.assemble(self.registry, writer)
+        self.assertTrue(writer.all_ok, writer.summary())
+
+    def test_state_schema_generated(self):
+        self.assertTrue(
+            (self.out / ".opencode/state/SCHEMA.md").exists(),
+            "Missing .opencode/state/SCHEMA.md",
+        )
+        content = (self.out / ".opencode/state/SCHEMA.md").read_text()
+        self.assertIn("STATE_BLOCK", content)
+        self.assertIn("manage-state", content)
+
+    def test_state_template_generated(self):
+        self.assertTrue(
+            (self.out / ".opencode/state/workflow-state.tpl.md").exists(),
+            "Missing .opencode/state/workflow-state.tpl.md",
+        )
+        content = (self.out / ".opencode/state/workflow-state.tpl.md").read_text()
+        self.assertIn("STATE_BLOCK:META:BEGIN", content)
+        self.assertIn("STATE_BLOCK:PHASE_LOG:BEGIN", content)
+        for block in ["META", "PHASE", "UNDERSTANDING", "RESEARCH", "PLAN", "IMPLEMENTATION", "REVIEW", "PHASE_LOG"]:
+            self.assertIn(f"STATE_BLOCK:{block}:BEGIN", content, f"Missing block {block}")
+        self.assertNotIn("{{", content, "Unresolved {{VAR}} in workflow-state.tpl.md")
+
+
+class TestMakefile(unittest.TestCase):
+
+    def test_make_install_opencode(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = subprocess.run(
+                ["make", "install", "PLATFORM=opencode", f"TARGET_DIR={tmpdir}"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((Path(tmpdir) / "AGENTS.md").exists())
+            self.assertTrue((Path(tmpdir) / "opencode.json").exists())
+
+    def test_make_install_missing_platform(self):
+        result = subprocess.run(
+            ["make", "install"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PLATFORM is required", result.stdout + result.stderr)
 
 
 class TestProtectionMechanisms(unittest.TestCase):
