@@ -81,7 +81,7 @@ The state file is committed to git alongside code changes so context survives se
 
 | Agent | Role | Model |
 |-------|------|-------|
-| **orchestrator** | End-to-end feature development orchestrator | Claude Opus 4.6 |
+| **orchestrator** | End-to-end feature development orchestrator | Claude Sonnet 4.6 |
 | **jira-reader** | Fetches and interprets JIRA tickets | GPT-5 mini |
 | **reviewer** | Reviews code changes for quality, correctness, and risks | Claude Opus 4.6 |
 | **researcher** | Lightweight research agent for technical investigation | Claude Haiku 4.5 |
