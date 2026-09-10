@@ -168,6 +168,22 @@ restores the task list, and continues from the last recorded phase. No work is l
 
 See `opencode.json` (project root) for concrete model assignments.
 
+## Known Limitations
+
+Some generated skill instructions and the `state/SCHEMA.md` / `artifacts/SCHEMA.md`
+reference files still contain literal `.github/...` path references inherited
+from the shared canonical source (e.g. `python3 ./.github/skills/git-operations/scripts/git_helper.py push`
+instead of `.opencode/skill/git-operations/scripts/git_helper.py push`). This is
+a known, tracked limitation — not a bug introduced in this generation run — and
+affects the bodies of `skill/*/SKILL.md`, `state/SCHEMA.md`, `artifacts/SCHEMA.md`,
+and `agent/orchestrator.md`. A full fix requires templating those canonical
+sources with a path placeholder, which is tracked separately and out of scope
+for now. Until then, mentally substitute `.opencode/` for `.github/` when
+following any file paths mentioned inside those generated skill/schema/agent
+instruction bodies. This does **not** affect `AGENTS.md`, `opencode.json`, or
+the generated `agent/`/`command/` files themselves — those are correctly
+path-aware.
+
 ## Directory Structure
 
 ```
