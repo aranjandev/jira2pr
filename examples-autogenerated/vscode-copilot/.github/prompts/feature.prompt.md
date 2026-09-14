@@ -1,14 +1,23 @@
 ---
-description: "Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link. Reads the ticket (or PR state), plans implementation, writes code, self-reviews, and submits a Pull Request."
-agent: "orchestrator"
-argument-hint: "JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g., #42) to resume"
+description: "Run the feature workflow end-to-end from a JIRA ticket."
+agent: "supervisor"
+argument-hint: "JIRA ticket key (e.g., PROJ-123) or URL"
 ---
-# Feature Workflow
 
-Implement a feature end-to-end, or resume one that was interrupted.
+# /feature
 
-Delegate to the **orchestrator** agent and invoke its `feature` state machine.
+Execute the `feature` workflow defined in `.jira2pr/workflows/feature.workflow.yaml`, starting from `jira-ingest`.
 
-- If a **JIRA ticket** is provided: fresh start — orchestrator runs the feature state machine from Understand.
-- If a **PR link or number** is provided: orchestrator invokes the `resume-workflow` skill, determines the current phase, and continues from there.
-- If **neither** is provided: ask the user for a JIRA ticket key/URL or a PR link/number.
+## States
+
+| State | Worker | Success Criteria | Max Attempts |
+|-------|--------|-------------------|---------------|
+| `jira-ingest` | `jira-reader` | `jira-ingest` | 1 |
+| `plan` | `planner` | `planning` | 2 |
+| `implement` | `coder` | `implementation` | 2 |
+| `review` | `reviewer` | `review` | 1 |
+| `submit` | `pr-author` | `submit` | 1 |
+| `done` | — | terminal (outcome: success) | — |
+| `human-review` | — | terminal (outcome: escalated) | — |
+
+For each non-terminal state: invoke the named worker agent, then invoke `supervisor` to evaluate its output against the state's success criteria (see `.github/instructions/workflow-protocol.instructions.md` for the full protocol and `.jira2pr/artifacts/` for artifact schemas). Persist the outcome to `.jira2pr/state/<TICKET-KEY>.yaml` before transitioning to the next state.

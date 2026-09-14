@@ -57,108 +57,64 @@
 
 ## How Agents Contribute to Code
 
-> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and agents.
+> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available agents and workflows.
 
-Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `.github/`.
+Agents in this project execute **workflows** — deterministic state machines defined in `.jira2pr/workflows/*.workflow.yaml` (e.g. `feature`). Each state names a worker agent, the artifacts it consumes/produces, and success criteria; the **supervisor** agent evaluates the worker's output against those criteria and returns `success`, `failure`, or `escalate`, which drives the transition to the next state.
 
-The **state file** (`.github/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from it and updated at each phase boundary via `update-pull-request`. All agents write to state first, then render to the PR — never the other way around.
+Workflow state is the single source of truth and lives outside `.github/`, in `.jira2pr/state/<TICKET-KEY>.yaml` — this keeps it identical regardless of which platform (Copilot, Aider) is executing the workflow. Artifacts produced along the way (`requirements.md`, `plan.md`, `review.md`, ...) are written under `.jira2pr/artifacts/<TICKET-KEY>/`.
 
-**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions via its embedded state machines (feature, bugfix, scope-creep). The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+**State lifecycle (feature workflow):** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). Retries are bounded per state (`retry.max_attempts`); exhausting retries escalates rather than looping forever.
 
 ### State & Artifact Architecture
 
-| Layer | File | Audience | Skill | Role |
-|-------|------|----------|-------|------|
-| **State file** | `.github/state/<TICKET-KEY>.md` | Agents — source of truth | `manage-state` | Written first at every phase transition |
-| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
+| Layer | Location | Audience | Owner |
+|-------|----------|----------|-------|
+| **Workflow state** | `.jira2pr/state/<TICKET-KEY>.yaml` | Agents — source of truth | runtime executor only; workers read, never write |
+| **Artifacts** | `.jira2pr/artifacts/<TICKET-KEY>/<name>.md` | Agents + human reviewers | produced by the worker named in the current state |
+| **PR body** | GitHub PR (live) | Human reviewers | `pr-author`, once the `submit` state runs |
 
-The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `.github/state/archive/<TICKET-KEY>.md`. The artifact registry at `.github/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion it is archived to `.jira2pr/state/archive/<TICKET-KEY>.yaml`.
 
 
 ### Agent Roster
 
-7 agents are available. Each has a defined scope and model tier:
+7 agents are available:
 
-| Agent | Role | Model |
-|-------|------|-------|
-| **orchestrator** | End-to-end feature development orchestrator | Claude Sonnet 4.6 |
-| **jira-reader** | Fetches and interprets JIRA tickets | GPT-5 mini |
-| **reviewer** | Reviews code changes for quality, correctness, and risks | Claude Opus 4.6 |
-| **researcher** | Lightweight research agent for technical investigation | Claude Haiku 4.5 |
-| **pr-author** | Handles the final stage of a feature workflow: creating git commits with conventional commit messages, pushing the branch, and finalizing an existing draft PR by updating its state to Ready and marking it as ready for review | Claude Haiku 4.5 |
-| **planner-lite** | Generates a minimal, deterministic file-level implementation plan for execution by a coder agent | Claude Sonnet 4.6 |
-| **coder** | Executes a predefined implementation plan deterministically by writing minimal, correct code and tests | Claude Sonnet 4.6 |
+| Agent | Kind | Model | Artifact |
+|-------|------|-------|----------|
+| **supervisor** | supervisor | Claude Sonnet 4.6 | — |
+| **jira reader** | worker | GPT-5 mini | `requirements-schema.md` |
+| **researcher** | worker | Claude Haiku 4.5 | `decision-schema.md` |
+| **planner** | worker | Claude Sonnet 4.6 | `plan-schema.md` |
+| **coder** | worker | Claude Haiku 4.5 | — |
+| **reviewer** | worker | Claude Opus 4.6 | `review-schema.md` |
+| **pr author** | worker | Claude Haiku 4.5 | `pr-schema.md` |
 
-Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, `model`, and which subagents it may invoke.
+Agent definitions live in `.github/agents/`. Each file is a `.agent.md` with YAML frontmatter declaring its `description`, `tools`, and `model`.
 
-### Skills
+### Workflows
 
-Skills are reusable, domain-specific instruction sets that agents load on demand. They live in `.github/skills/<skill-name>/SKILL.md`.
+| Workflow | Initial State | States |
+|----------|---------------|--------|
+| `feature` | `jira-ingest` | `jira-ingest`, `plan`, `implement`, `review`, `submit`, `done`, `human-review` |
 
-| Skill | Purpose |
-|-------|---------|
-| `read-jira-ticket` | Fetches a JIRA ticket by key or URL and extracts structured requirements including summary, description, acceptance criteria, subtasks, labels, and priority |
-| `git-operations` | Performs git operations: creating branches from ticket keys, staging and committing changes with conventional commit messages, and pushing to origin |
-| `create-pull-request` | Creates a draft Pull Request using the canonical PR body template |
-| `update-pull-request` | Updates an existing PR body by modifying MUTABLE blocks and appending to APPEND-ONLY blocks |
-| `summarize-changes` | Analyzes git diff output and produces a human-readable summary of all changes, grouped by component or module |
-| `identify-risks` | Analyzes code changes for potential risks: breaking changes, missing error handling, untested paths, security concerns, performance regressions, and missing migrations |
-| `manage-state` | Creates, reads, and updates the per-workflow agent state file at .github/state/<TICKET-KEY>.md — a fast-access local mirror of workflow context that reduces GitHub API round-trips and enables richer resumption |
-| `register-artifact` | Appends a completed workflow entry to the repo-level artifact registry at .github/artifacts/REGISTRY.md |
-| `resume-workflow` | Restores full workflow context from an existing draft PR and its state file, then returns the current phase and all parsed context (plan, branch, ticket key, task statuses) so the orchestrator can route to the correct resume point |
+### Capabilities
 
-### Agent Prompts
-
-User-facing entry points are defined as `.prompt.md` files in `.github/prompts/`. Invoke them with a `/` slash command in the Copilot chat:
-
-| Prompt | Slash command | What it does |
-|--------|---------------|--------------|
-| `feature.prompt.md` | `/feature` | Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link |
-| `bugfix.prompt.md` | `/bugfix` | Bugfix workflow — start fresh from a JIRA ticket, or resume an in-progress bugfix from a PR link |
-| `review.prompt.md` | `/review` | Reviews current code changes for quality, risks, and correctness |
-| `scope-creep.prompt.md` | `/scope-creep` | Scope-creep workflow — inject additional work into an active feature or bugfix workflow |
-
-### Instructions
-
-Persistent rules that apply across all agents are defined as `.instructions.md` files in `.github/instructions/`:
-
-| File | Scope | What it governs |
-|------|-------|-----------------|
-| `commit-conventions.instructions.md` | PR bodies / commits | Conventional commit message format and rules for writing git commit messages |
-| `pr-schema.instructions.md` | PR bodies / commits | PR state document schema — block definitions, mutability rules, ownership model, idempotency rules, and scope change protocol |
-| `pr-template.instructions.md` | PR bodies / commits | Canonical PR body template for agent-maintained pull requests |
-
-### Git Push Authentication for Agents
-
-Agents push code using the `git-operations` skill (`git_helper.py push`). The script reads `.env` at the repo root and injects credentials automatically via `GIT_ASKPASS` — no system credential helper or `gh auth` required.
-
-**Required `.env` variables for HTTPS remotes:**
-- GitHub: `GITHUB_TOKEN=<personal-access-token>` (needs `repo` scope)
-- Bitbucket: `BITBUCKET_TOKEN=<app-password>` and `BITBUCKET_USERNAME=<your-username>`
-
-SSH remotes do not require these variables.
-
-> **Critical:** If `GITHUB_TOKEN` is absent or expired, `git push` will hang or fail silently. Do **not** attempt to work around this by calling `gh` CLI or modifying the remote URL manually — fix the token in `.env` instead.
-
-### Shell Command Rules for Agents
-
-Applies whenever an agent runs shell commands in a terminal. Violations produce silent, hard-to-debug corruption:
-
-- **Never write file content using heredocs** (`<< 'EOF' ... EOF`) — they get mangled in agent terminal sessions.
-- **Never use `python3 -c "..."`  with double outer quotes** — the shell expands `$variables` and backticks inside.
-- **Always use `python3 -c '...'` with single outer quotes** and `\n` for newlines — this is the only reliable pattern:
-  ```bash
-  python3 -c 'open("/tmp/file.md","w").write("line1\nline2\n")'
-  # With dynamic values, concatenate inside the expression
-  python3 -c 'import datetime; ts=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); open("/tmp/file.md","w").write("# Title\nTimestamp: "+ts+"\n")'
-  ```
+| Capability | Type | Resolution |
+|------------|------|------------|
+| `diff.read` | context | native platform tool |
+| `git.commit` | action | `python3 runtime/integrations/git.py commit <message>` |
+| `git.push` | action | `python3 runtime/integrations/git.py push` |
+| `git.status` | context | `python3 runtime/integrations/git.py status` |
+| `jira.read` | context | `python3 runtime/integrations/jira.py <ticket_key_or_url>` |
+| `pr.update` | action | `python3 runtime/integrations/github.py update --pr-number <pr_number> --body-file <body_file>` |
+| `test.results` | context | native platform tool |
+| `web.search` | context | native platform tool |
 
 ### Model Tiers
 
-`.github/model-tiers.json` maps model tiers (0–3) to concrete Copilot model names. The `scripts/apply_model_tiers.py` script stamps the correct model into each agent file at setup time. Tier assignment reflects cost/capability trade-offs:
-
-- **Tier 0** — Cheapest — simple extraction, formatting, and API calls: Simple, deterministic tasks
-- **Tier 1** — Light reasoning — templated output, formulaic writing: Formulaic tasks
-- **Tier 2** — Strong reasoning — planning, code generation, implementation: Implementation and orchestration
-- **Tier 3** — Highest capability — deep analysis, risk assessment, complex review: Thorough review and analysis
+- **Tier 0** — Cheapest — simple extraction, formatting, and API calls: Simple, deterministic tasks (GPT-5 mini)
+- **Tier 1** — Light reasoning — templated output, formulaic writing: Formulaic tasks (Claude Haiku 4.5)
+- **Tier 2** — Strong reasoning — planning, code generation, implementation: Implementation and orchestration (Claude Sonnet 4.6)
+- **Tier 3** — Highest capability — deep analysis, risk assessment, complex review: Thorough review and analysis (Claude Opus 4.6)
 

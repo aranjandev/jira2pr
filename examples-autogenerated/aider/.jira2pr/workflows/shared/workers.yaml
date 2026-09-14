@@ -1,0 +1,40 @@
+workers:
+
+  jira-reader:
+    runtime_context:
+      - jira.read
+    can_delegate: []
+
+  researcher:
+    runtime_context:
+      - web.search
+    can_delegate: []
+
+  planner:
+    runtime_context: []
+    can_delegate:
+      - researcher
+
+  coder:
+    runtime_context: []
+    can_delegate: []
+
+  reviewer:
+    runtime_context:
+      - diff.read
+      - test.results
+    can_delegate:
+      - researcher
+
+  pr-author:
+    runtime_context:
+      - git.status
+    can_delegate: []
+    actions:
+      - git.commit
+      - git.push
+      - pr.update
+
+  supervisor:
+    runtime_context: []
+    can_delegate: []

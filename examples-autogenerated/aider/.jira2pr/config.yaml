@@ -1,0 +1,37 @@
+generated_by: jira2pr
+generator_version: 2.0.0
+platform: aider
+models:
+  '0': gpt-5-mini
+  '1': claude-haiku-4-5
+  '2': claude-sonnet-4-5
+  '3': claude-opus-4-1
+agents:
+- slug: supervisor
+  kind: supervisor
+  model_tier: 2
+  artifact_schema: null
+- slug: jira-reader
+  kind: worker
+  model_tier: 0
+  artifact_schema: requirements-schema.md
+- slug: researcher
+  kind: worker
+  model_tier: 1
+  artifact_schema: decision-schema.md
+- slug: planner
+  kind: worker
+  model_tier: 2
+  artifact_schema: plan-schema.md
+- slug: coder
+  kind: worker
+  model_tier: 1
+  artifact_schema: null
+- slug: reviewer
+  kind: worker
+  model_tier: 3
+  artifact_schema: review-schema.md
+- slug: pr-author
+  kind: worker
+  model_tier: 1
+  artifact_schema: pr-schema.md

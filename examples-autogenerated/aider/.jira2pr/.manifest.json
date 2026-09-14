@@ -1,0 +1,31 @@
+{
+  "files": [
+    ".aider.conf.yml",
+    ".aiderignore",
+    ".env.example",
+    ".jira2pr/README.md",
+    ".jira2pr/agents/coder.md",
+    ".jira2pr/agents/jira-reader.md",
+    ".jira2pr/agents/planner.md",
+    ".jira2pr/agents/pr-author.md",
+    ".jira2pr/agents/researcher.md",
+    ".jira2pr/agents/reviewer.md",
+    ".jira2pr/agents/supervisor.md",
+    ".jira2pr/artifacts/decision-schema.md",
+    ".jira2pr/artifacts/plan-schema.md",
+    ".jira2pr/artifacts/pr-schema.md",
+    ".jira2pr/artifacts/requirements-schema.md",
+    ".jira2pr/artifacts/review-schema.md",
+    ".jira2pr/capabilities.yaml",
+    ".jira2pr/config.yaml",
+    ".jira2pr/config/aider.yaml",
+    ".jira2pr/state/workflow-state.template.yaml",
+    ".jira2pr/workflows/bugfix.workflow.yaml",
+    ".jira2pr/workflows/feature.workflow.yaml",
+    ".jira2pr/workflows/scope-creep.workflow.yaml",
+    ".jira2pr/workflows/shared/execution-policy.yaml",
+    ".jira2pr/workflows/shared/success-criteria.yaml",
+    ".jira2pr/workflows/shared/supervisor.yaml",
+    ".jira2pr/workflows/shared/workers.yaml"
+  ]
+}
