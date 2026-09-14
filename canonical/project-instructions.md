@@ -57,21 +57,22 @@
 
 ## How Agents Contribute to Code
 
-> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and agents.
+> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available agents and workflows.
 
-Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `{{AGENTS_DIR}}/`.
+Agents in this project execute **workflows** — deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (e.g. `feature`). Each state names a worker agent, the artifacts it consumes/produces, and success criteria; the **supervisor** agent evaluates the worker's output against those criteria and returns `success`, `failure`, or `escalate`, which drives the transition to the next state.
 
-The **state file** (`{{AGENTS_DIR}}/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from it and updated at each phase boundary via `update-pull-request`. All agents write to state first, then render to the PR — never the other way around.
+Workflow state is the single source of truth and lives outside `{{AGENTS_DIR}}/`, in `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` — this keeps it identical regardless of which platform (Copilot, Aider) is executing the workflow. Artifacts produced along the way (`requirements.md`, `plan.md`, `review.md`, ...) are written under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
 
-**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions via its embedded state machines (feature, bugfix, scope-creep). The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+**State lifecycle (feature workflow):** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). Retries are bounded per state (`retry.max_attempts`); exhausting retries escalates rather than looping forever.
 
 ### State & Artifact Architecture
 
-| Layer | File | Audience | Skill | Role |
-|-------|------|----------|-------|------|
-| **State file** | `{{AGENTS_DIR}}/state/<TICKET-KEY>.md` | Agents — source of truth | `manage-state` | Written first at every phase transition |
-| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
+| Layer | Location | Audience | Owner |
+|-------|----------|----------|-------|
+| **Workflow state** | `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` | Agents — source of truth | runtime executor only; workers read, never write |
+| **Artifacts** | `{{CORE_DIR}}/artifacts/<TICKET-KEY>/<name>.md` | Agents + human reviewers | produced by the worker named in the current state |
+| **PR body** | GitHub PR (live) | Human reviewers | `pr-author`, once the `submit` state runs |
 
-The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `{{AGENTS_DIR}}/state/archive/<TICKET-KEY>.md`. The artifact registry at `{{AGENTS_DIR}}/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+The state file is committed to git alongside code changes so context survives session restarts. At workflow completion it is archived to `{{CORE_DIR}}/state/archive/<TICKET-KEY>.yaml`.
 
 <!-- AGENTS_SECTION:DYNAMIC_TABLES -->

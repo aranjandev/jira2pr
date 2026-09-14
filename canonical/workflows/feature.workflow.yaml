@@ -42,8 +42,7 @@ states:
       - plan.md
       - requirements.md
       - decisions/*.md
-    produces:
-      - []
+    produces: []
     updates:
       - workflow-state.md
     validation:
@@ -94,7 +93,9 @@ states:
 
   done:
     terminal: true
+    outcome: success
 
   human-review:
     terminal: true
+    outcome: escalated
 

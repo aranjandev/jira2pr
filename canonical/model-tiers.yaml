@@ -9,6 +9,10 @@
 # NOTE: opencode model IDs below are best-effort provider/model-id guesses
 # (GitHub Copilot provider slugs are not officially confirmed for OpenCode) —
 # verify before relying on them.
+#
+# NOTE: aider model IDs follow LiteLLM naming (see https://aider.chat/docs/llms.html)
+# and are provider-agnostic defaults. Users should edit .jira2pr/config/aider.yaml
+# to point at whichever provider/API key they have configured.
 
 tiers:
   0:
@@ -17,21 +21,25 @@ tiers:
     models:
       copilot: "GPT-5 mini (copilot)"
       opencode: "github-copilot/gpt-5-mini"
+      aider: "gpt-5-mini"
   1:
     description: "Light reasoning — templated output, formulaic writing"
     role: "Formulaic tasks"
     models:
       copilot: "Claude Haiku 4.5 (copilot)"
       opencode: "github-copilot/claude-haiku-4.5"
+      aider: "claude-haiku-4-5"
   2:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
       copilot: "Claude Sonnet 4.6 (copilot)"
       opencode: "github-copilot/claude-sonnet-4.6"
+      aider: "claude-sonnet-4-5"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
     models:
       copilot: "Claude Opus 4.6 (copilot)"
       opencode: "github-copilot/claude-opus-4.6"
+      aider: "claude-opus-4-1"

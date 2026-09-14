@@ -1,0 +1,69 @@
+# Each capability optionally declares a `binding` telling the runtime how to
+# fulfil it:
+#
+#   kind: native  -> resolved by the platform's own tools (no runtime script;
+#                    e.g. Copilot's built-in fetch/search tools, aider's repo map)
+#   kind: script  -> resolved by running `python3 <script> <args...>` where
+#                    `script` is a path relative to the repo root and `args`
+#                    is the CLI argv template. `<angle-bracket>` entries are
+#                    placeholders the caller must supply a value for.
+
+capabilities:
+
+  jira.read:
+    description: Fetch and parse a JIRA issue
+    type: context
+    binding:
+      kind: script
+      script: runtime/integrations/jira.py
+      args: ["<ticket_key_or_url>"]
+
+  web.search:
+    description: Search external documentation and websites
+    type: context
+    binding:
+      kind: native
+
+  diff.read:
+    description: Read repository diff
+    type: context
+    binding:
+      kind: native
+
+  test.results:
+    description: Read latest test execution results
+    type: context
+    binding:
+      kind: native
+
+  git.status:
+    description: Read git status and branch information
+    type: context
+    binding:
+      kind: script
+      script: runtime/integrations/git.py
+      args: ["status"]
+
+  git.commit:
+    description: Create git commits
+    type: action
+    binding:
+      kind: script
+      script: runtime/integrations/git.py
+      args: ["commit", "<message>"]
+
+  git.push:
+    description: Push commits
+    type: action
+    binding:
+      kind: script
+      script: runtime/integrations/git.py
+      args: ["push"]
+
+  pr.update:
+    description: Create or update pull requests
+    type: action
+    binding:
+      kind: script
+      script: runtime/integrations/github.py
+      args: ["update", "--pr-number", "<pr_number>", "--body-file", "<body_file>"]

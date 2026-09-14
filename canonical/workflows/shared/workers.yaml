@@ -1,22 +1,40 @@
 workers:
+
   jira-reader:
-    type: primary
-    can_delegate: 
-      - researcher
+    runtime_context:
+      - jira.read
+    can_delegate: []
+
   researcher:
-    type: secondary
+    runtime_context:
+      - web.search
+    can_delegate: []
+
   planner:
-    type: primary
-    can_delegate: 
+    runtime_context: []
+    can_delegate:
       - researcher
+
   coder:
-    type: primary
-    can_delegate: 
-      - researcher
+    runtime_context: []
+    can_delegate: []
+
   reviewer:
-    type: primary
-    can_delegate: 
+    runtime_context:
+      - diff.read
+      - test.results
+    can_delegate:
       - researcher
+
   pr-author:
-    type: primary
- 
+    runtime_context:
+      - git.status
+    can_delegate: []
+    actions:
+      - git.commit
+      - git.push
+      - pr.update
+
+  supervisor:
+    runtime_context: []
+    can_delegate: []
