@@ -1,0 +1,19 @@
+supervisor:
+
+  output_schema:
+    outcome:
+      type: enum
+      values:
+        - success
+        - failure
+        - escalate
+    reason:
+      type: string
+    feedback:
+      type: string
+    violations:
+      type: list
+
+  instructions: |
+    Evaluate worker output against gates.
+    Return only valid YAML.

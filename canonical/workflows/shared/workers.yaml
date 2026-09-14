@@ -1,0 +1,22 @@
+workers:
+  jira-reader:
+    type: primary
+    can_delegate: 
+      - researcher
+  researcher:
+    type: secondary
+  planner:
+    type: primary
+    can_delegate: 
+      - researcher
+  coder:
+    type: primary
+    can_delegate: 
+      - researcher
+  reviewer:
+    type: primary
+    can_delegate: 
+      - researcher
+  pr-author:
+    type: primary
+ 

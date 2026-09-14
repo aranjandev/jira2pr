@@ -1,0 +1,100 @@
+version: 1
+
+workflow: feature
+
+initial_state: jira-ingest
+
+states:
+  jira-ingest:
+    worker: jira-reader
+    produces:
+      - requirements.md
+    updates:
+      - workflow-state.md
+    validation:
+      success_criteria: jira-ingest
+    transitions:
+      success: plan
+      failure: jira-ingest
+      escalate: human-review
+
+  plan:
+    worker: planner
+    produces:
+      - plan.md
+    consumes:
+      - requirements.md
+      - decisions/*.md
+    updates:
+      - workflow-state.md
+    validation:
+      success_criteria: planning
+    retry:
+      max_attempts: 2
+    transitions:
+      success: implement
+      failure: plan
+      escalate: human-review
+
+  implement:
+    worker: coder
+    consumes:
+      - plan.md
+      - requirements.md
+      - decisions/*.md
+    produces:
+      - []
+    updates:
+      - workflow-state.md
+    validation:
+      success_criteria: implementation
+    retry:
+      max_attempts: 2
+    transitions:
+      success: review
+      failure: implement
+      escalate: human-review
+
+  review:
+    worker: reviewer
+    consumes:
+      - plan.md
+      - requirements.md
+      - decisions/*.md
+    produces:
+      - review.md
+    updates:
+      - workflow-state.md
+    validation:
+      success_criteria: review
+    retry:
+      max_attempts: 1
+    transitions:
+      success: submit
+      failure: implement
+      escalate: human-review
+
+  submit:
+    worker: pr-author
+    consumes:
+      - requirements.md
+      - plan.md
+      - review.md
+      - decisions/*.md
+    updates:
+      - workflow-state.md
+    validation:
+      success_criteria: submit
+    retry:
+      max_attempts: 1
+    transitions:
+      success: done
+      failure: submit
+      escalate: human-review
+
+  done:
+    terminal: true
+
+  human-review:
+    terminal: true
+
