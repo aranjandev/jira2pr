@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jira2pr"
+version = "2.0.0"
+description = "Multi-agent, multi-platform framework for JIRA ticket -> Pull Request workflows."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+jira2pr = "jira2pr.cli:main"
+
+[tool.hatch.build.targets.wheel]
+# `packages` entries are directories whose *basename* becomes the installed
+# top-level package name (a "flat" src-style layout). This lets
+# `compiler/assembler` install as the top-level `assembler` package without
+# rewriting its internal `from assembler.xxx import ...` imports.
+packages = ["compiler/assembler", "runtime", "jira2pr"]
+
+[tool.hatch.build.targets.wheel.force-include]
+# Bundle the canonical/ source tree (one level up, at the repo root) into the
+# wheel so `jira2pr init` works in any target repo without requiring a
+# jira2pr source checkout.
+"../canonical" = "jira2pr/_canonical"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
