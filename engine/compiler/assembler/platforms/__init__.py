@@ -1,4 +1,11 @@
-"""Platform registry — maps platform names to assembler classes."""
+"""Platform registry — maps platform names to assembler classes.
+
+OpenCode is intentionally excluded: it was written against the old
+skills/prompts/instructions canonical layout and has not been ported to the
+new workflow-driven DSL. Its source is kept at
+``platforms/_opencode_quarantined.py`` (not imported by anything) as a
+reference for a future port.
+"""
 
 from __future__ import annotations
 
@@ -9,13 +16,15 @@ if TYPE_CHECKING:
 
 # Lazy imports to avoid circular dependencies at module level.
 
+UNSUPPORTED_PLATFORMS = {"opencode"}
+
 
 def _get_platforms() -> dict[str, type["PlatformAssembler"]]:
+    from assembler.platforms.aider import AiderAssembler
     from assembler.platforms.copilot import CopilotAssembler
-    from assembler.platforms.opencode import OpenCodeAssembler
     return {
         "copilot": CopilotAssembler,
-        "opencode": OpenCodeAssembler,
+        "aider": AiderAssembler,
     }
 
 
@@ -32,9 +41,17 @@ class _PlatformRegistry:
         return self._loaded
 
     def __getitem__(self, key: str) -> type["PlatformAssembler"]:
+        if key in UNSUPPORTED_PLATFORMS:
+            raise KeyError(
+                f"Platform '{key}' is not supported. It predates the current "
+                "canonical DSL and has not been ported. See "
+                "platforms/_opencode_quarantined.py for the old implementation."
+            )
         return self._ensure()[key]
 
     def __contains__(self, key: object) -> bool:
+        if key in UNSUPPORTED_PLATFORMS:
+            return False
         return key in self._ensure()
 
     def keys(self):  # noqa: ANN201
@@ -48,3 +65,4 @@ class _PlatformRegistry:
 
 
 PLATFORMS = _PlatformRegistry()
+

@@ -1,0 +1,94 @@
+"""Shared dataclasses describing the canonical DSL.
+
+Both the compiler (parse -> validate -> project) and the runtime workflow
+engine (`runtime/workflow/loader.py`) import these so the schema can never
+silently diverge between "what gets generated" and "what gets executed".
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class AgentSpec:
+    slug: str
+    name: str
+    kind: str  # "supervisor" | "worker"
+    model_tier: int
+    description: str
+    artifact_schema: str | None = None
+
+
+@dataclass(frozen=True)
+class CapabilityBinding:
+    kind: str  # "native" (platform tool, no runtime script) | "script"
+    script: str | None = None  # path to the script, relative to repo root
+    args: tuple[str, ...] = ()  # CLI argv template; "<name>" entries are placeholders
+
+
+@dataclass(frozen=True)
+class CapabilitySpec:
+    id: str
+    description: str
+    type: str  # "context" | "action"
+    binding: CapabilityBinding
+
+
+@dataclass(frozen=True)
+class WorkerBinding:
+    slug: str
+    runtime_context: tuple[str, ...] = ()
+    can_delegate: tuple[str, ...] = ()
+    actions: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TransitionSpec:
+    success: str | None = None
+    failure: str | None = None
+    escalate: str | None = None
+
+
+@dataclass(frozen=True)
+class StateSpec:
+    name: str
+    worker: str | None = None
+    consumes: tuple[str, ...] = ()
+    produces: tuple[str, ...] = ()
+    updates: tuple[str, ...] = ()
+    success_criteria: str | None = None
+    max_attempts: int | None = None
+    transitions: TransitionSpec = field(default_factory=TransitionSpec)
+    terminal: bool = False
+    outcome: str | None = None  # required when terminal is True: "success" | "escalated"
+
+
+@dataclass(frozen=True)
+class WorkflowSpec:
+    name: str
+    version: int
+    initial_state: str
+    states: dict[str, StateSpec]
+    source_path: str = ""
+
+
+@dataclass(frozen=True)
+class SuccessCriteria:
+    criteria: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class SupervisorContract:
+    output_schema: dict
+    criteria_evaluation: tuple[str, ...]
+    instructions: str
+
+
+@dataclass(frozen=True)
+class ExecutionPolicy:
+    default_max_attempts: int
+    on_exhaustion: str  # "escalate"
+    criteria_mode: str  # "all_pass"
+    terminal_success_state: str
+    terminal_escalated_state: str
