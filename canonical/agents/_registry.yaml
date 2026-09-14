@@ -1,6 +1,6 @@
 # Agent Registry — platform-agnostic metadata for all agents.
 #
-# Each platform adapter (`.github/agents/`, `.claude/commands/`, etc.)
+# Each platform adapter (`.github/agents/` etc.)
 # reads this file to generate its own agent definitions.
 #
 # Fields:

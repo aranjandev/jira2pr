@@ -19,7 +19,6 @@ from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
 from assembler.templates import substitute_vars
 from assembler.platforms.copilot import CopilotAssembler
-from assembler.platforms.claude import ClaudeAssembler
 from assembler.platforms.opencode import OpenCodeAssembler
 
 
@@ -236,31 +235,6 @@ class TestCopilotAssembly(unittest.TestCase):
             (self.out / ".github/skills/register-artifact/SKILL.md").exists(),
             "Missing register-artifact skill",
         )
-
-
-class TestClaudeAssembly(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.registry = CanonicalRegistry.load(CANONICAL_DIR)
-        cls.tmpdir = tempfile.mkdtemp()
-        writer = FileWriter(Path(cls.tmpdir))
-        assembler = ClaudeAssembler()
-        assembler.assemble(cls.registry, writer)
-        cls.out = Path(cls.tmpdir)
-
-    def test_generates_command_files(self):
-        for agent in self.registry.agents:
-            slug = agent["slug"]
-            self.assertTrue(
-                (self.out / f".claude/commands/{slug}.md").exists(),
-                f"Missing {slug}.md",
-            )
-
-    def test_command_has_preamble(self):
-        content = (self.out / ".claude/commands/orchestrator.md").read_text()
-        self.assertIn("CLAUDE.md", content)
-        self.assertIn("Orchestrator", content)
 
 
 class TestOpenCodeAssembly(unittest.TestCase):

@@ -3,12 +3,12 @@
 
 Usage:
     python scripts/assemble.py --target-dir vscode-copilot --platform copilot
-    python scripts/assemble.py --target-dir my-project     --platform claude
+    python scripts/assemble.py --target-dir my-project     --platform opencode
     python scripts/assemble.py --target-dir vscode-copilot --platform copilot --check
 
 Options:
     --target-dir DIR    Output root directory (required).
-    --platform NAME     Platform to assemble: copilot, claude (required).
+    --platform NAME     Platform to assemble: copilot, opencode (required).
     --canonical-dir DIR Path to canonical definitions (default: canonical/).
     --check             Dry-run: exit 1 if any generated file would change.
 """

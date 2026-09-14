@@ -12,7 +12,7 @@ from assembler.writer import FileWriter
 class PlatformAssembler(ABC):
     """Contract that every platform adapter implements."""
 
-    name: str  # "copilot", "claude", etc.
+    name: str  # "copilot", "opencode", etc.
 
     # Template variables for {{VAR}} substitution in workflows / instructions.
     # Subclasses must define this.
