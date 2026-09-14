@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import urllib.error
 
-SCRIPT = Path(__file__).parent.parent / "canonical/skills/read-jira-ticket/scripts/fetch_jira.py"
+SCRIPT = Path(__file__).parent.parent / "runtime/integrations/jira.py"
 
 
 def _load():
