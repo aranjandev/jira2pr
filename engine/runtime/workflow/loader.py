@@ -1,0 +1,113 @@
+"""Loads workflow definitions and agent metadata from a generated `.jira2pr/` tree.
+
+Mirrors `assembler.registry.CanonicalRegistry` but reads the *generated*
+package inside a target repo (produced by `jira2pr init`) instead of the
+`canonical/` source tree, using the same parsing functions from
+`assembler.dsl_parser` so the schema can never diverge between compile time
+and run time.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from assembler.dsl_parser import (
+    load_yaml,
+    parse_capabilities,
+    parse_execution_policy,
+    parse_success_criteria,
+    parse_supervisor_contract,
+    parse_workers,
+    parse_workflows_dir,
+)
+from assembler.model import (
+    AgentSpec,
+    CapabilitySpec,
+    ExecutionPolicy,
+    SuccessCriteria,
+    SupervisorContract,
+    WorkerBinding,
+    WorkflowSpec,
+)
+
+CORE_DIRNAME = ".jira2pr"
+
+
+class WorkflowNotFoundError(Exception):
+    """Raised when a requested workflow name has no definition."""
+
+
+@dataclass
+class RuntimeProject:
+    """Everything the runtime engine needs, loaded from `<repo>/.jira2pr/`."""
+
+    core_dir: Path
+    agents: list[AgentSpec] = field(default_factory=list)
+    workflows: dict[str, WorkflowSpec] = field(default_factory=dict)
+    success_criteria: SuccessCriteria = field(
+        default_factory=lambda: SuccessCriteria(criteria={})
+    )
+    workers: dict[str, WorkerBinding] = field(default_factory=dict)
+    supervisor_contract: SupervisorContract | None = None
+    execution_policy: ExecutionPolicy | None = None
+    capabilities: dict[str, CapabilitySpec] = field(default_factory=dict)
+    config: dict = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+
+    @classmethod
+    def load(cls, repo_root: Path) -> "RuntimeProject":
+        core_dir = Path(repo_root).resolve() / CORE_DIRNAME
+        if not core_dir.is_dir():
+            raise FileNotFoundError(
+                f"{core_dir} not found — run `jira2pr init --platform <copilot|aider>` first."
+            )
+
+        project = cls(core_dir=core_dir)
+        project.config = load_yaml(core_dir / "config.yaml") or {}
+        for item in project.config.get("agents", []):
+            project.agents.append(
+                AgentSpec(
+                    slug=item["slug"],
+                    name=item["slug"].replace("-", " "),
+                    kind=item["kind"],
+                    model_tier=int(item["model_tier"]),
+                    description="",
+                    artifact_schema=item.get("artifact_schema"),
+                )
+            )
+
+        workflows_dir = core_dir / "workflows"
+        project.workflows, project.warnings = parse_workflows_dir(workflows_dir, core_dir)
+
+        shared_dir = workflows_dir / "shared"
+        project.success_criteria = parse_success_criteria(shared_dir / "success-criteria.yaml")
+        project.workers = parse_workers(shared_dir / "workers.yaml")
+        project.supervisor_contract = parse_supervisor_contract(shared_dir / "supervisor.yaml")
+        project.execution_policy = parse_execution_policy(shared_dir / "execution-policy.yaml")
+        project.capabilities = parse_capabilities(core_dir / "capabilities.yaml")
+        return project
+
+    def workflow(self, name: str) -> WorkflowSpec:
+        try:
+            return self.workflows[name]
+        except KeyError as exc:
+            raise WorkflowNotFoundError(
+                f"Unknown workflow '{name}'. Available: {sorted(self.workflows)}"
+            ) from exc
+
+    def agent(self, slug: str) -> AgentSpec | None:
+        return next((a for a in self.agents if a.slug == slug), None)
+
+    def agent_body(self, slug: str) -> str:
+        path = self.core_dir / "agents" / f"{slug}.md"
+        return path.read_text()
+
+    def artifacts_dir(self, ticket_key: str) -> Path:
+        return self.core_dir / "artifacts" / ticket_key
+
+    def artifact_schema_body(self, filename: str) -> str:
+        return (self.core_dir / "artifacts" / filename).read_text()
+
+    def state_dir(self) -> Path:
+        return self.core_dir / "state"

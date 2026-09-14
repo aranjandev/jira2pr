@@ -1,0 +1,132 @@
+"""State manager — the runtime engine is the ONLY writer of workflow state.
+
+Workers may read state; they must never write it (see
+`canonical/state/workflow-state.template.yaml`). Writes are atomic
+(temp file + `os.replace`) so a crash mid-write can never corrupt the file
+a resumed run reads.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import tempfile
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
+
+# Conservative JIRA-style key: one or more uppercase letters, then -<digits>.
+TICKET_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*-[0-9]+$")
+
+
+class InvalidTicketKeyError(ValueError):
+    """Raised when a ticket key fails validation before it is used in a path."""
+
+
+def validate_ticket_key(ticket_key: str) -> str:
+    """Reject anything that isn't a well-formed ticket key before it touches a path.
+
+    This is a path-traversal boundary: ticket keys come from user/CLI input
+    and are joined directly into a filesystem path.
+    """
+    if not TICKET_KEY_RE.match(ticket_key):
+        raise InvalidTicketKeyError(
+            f"Invalid ticket key: {ticket_key!r} (expected e.g. 'PROJ-123')"
+        )
+    return ticket_key
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@dataclass
+class WorkflowState:
+    workflow: str
+    work_item: str
+    status: str = "active"  # active | completed | escalated | failed
+    current_state: str = ""
+    retry_counts: dict[str, int] = field(default_factory=dict)
+    artifacts: list[str] = field(default_factory=list)
+    decisions: list[str] = field(default_factory=list)
+    escalations: list[dict] = field(default_factory=list)
+    history: list[dict] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "WorkflowState":
+        return cls(
+            workflow=data.get("workflow", ""),
+            work_item=data.get("work_item", ""),
+            status=data.get("status", "active"),
+            current_state=data.get("current_state", ""),
+            retry_counts=dict(data.get("retry_counts") or {}),
+            artifacts=list(data.get("artifacts") or []),
+            decisions=list(data.get("decisions") or []),
+            escalations=list(data.get("escalations") or []),
+            history=list(data.get("history") or []),
+            metadata=dict(data.get("metadata") or {}),
+        )
+
+    def record_history(self, state: str, attempt: int, outcome: str, notes: str = "") -> None:
+        self.history.append(
+            {"timestamp": _now(), "state": state, "attempt": attempt, "outcome": outcome, "notes": notes}
+        )
+
+    def record_escalation(self, state: str, reason: str) -> None:
+        self.escalations.append({"timestamp": _now(), "state": state, "reason": reason})
+
+
+class StateManager:
+    """Reads/writes `<core_dir>/state/<TICKET-KEY>.yaml` atomically."""
+
+    def __init__(self, core_dir: Path) -> None:
+        self._state_dir = Path(core_dir) / "state"
+        self._archive_dir = self._state_dir / "archive"
+
+    def _path(self, ticket_key: str) -> Path:
+        validate_ticket_key(ticket_key)
+        return self._state_dir / f"{ticket_key}.yaml"
+
+    def exists(self, ticket_key: str) -> bool:
+        return self._path(ticket_key).exists()
+
+    def create(self, ticket_key: str, workflow: str, initial_state: str) -> WorkflowState:
+        if self.exists(ticket_key):
+            raise FileExistsError(f"State already exists for {ticket_key}; use load()/resume instead.")
+        state = WorkflowState(workflow=workflow, work_item=ticket_key, current_state=initial_state)
+        self.save(ticket_key, state)
+        return state
+
+    def load(self, ticket_key: str) -> WorkflowState:
+        path = self._path(ticket_key)
+        if not path.exists():
+            raise FileNotFoundError(f"No workflow state found for {ticket_key} at {path}")
+        data = yaml.safe_load(path.read_text()) or {}
+        return WorkflowState.from_dict(data)
+
+    def save(self, ticket_key: str, state: WorkflowState) -> None:
+        path = self._path(ticket_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = yaml.safe_dump(state.to_dict(), sort_keys=False)
+        fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(content)
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def archive(self, ticket_key: str) -> Path:
+        """Move a completed/escalated state file to state/archive/."""
+        src = self._path(ticket_key)
+        self._archive_dir.mkdir(parents=True, exist_ok=True)
+        dest = self._archive_dir / src.name
+        os.replace(src, dest)
+        return dest
