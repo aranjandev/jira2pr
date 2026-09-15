@@ -24,11 +24,11 @@ def resolve(cap: CapabilitySpec, repo_root: str, params: dict[str, str]) -> list
     """
     if cap.binding.kind != "script":
         raise CapabilityError(f"Capability '{cap.id}' has no script binding (kind={cap.binding.kind})")
-    if not cap.binding.script:
-        raise CapabilityError(f"Capability '{cap.id}' binding is missing 'script'")
+    if not cap.binding.handler:
+        raise CapabilityError(f"Capability '{cap.id}' binding is missing 'handler'")
 
     declared: set[str] = set()
-    argv = ["python3", f"{repo_root.rstrip('/')}/{cap.binding.script}"]
+    argv = ["python3", f"{repo_root.rstrip('/')}/{cap.binding.handler}"]
     for arg in cap.binding.args:
         m = _PLACEHOLDER_RE.match(arg)
         if not m:

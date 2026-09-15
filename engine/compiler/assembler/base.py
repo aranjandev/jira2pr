@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import runtime 
 from pathlib import Path
 
 from assembler.registry import CanonicalRegistry
@@ -22,12 +23,12 @@ class PlatformAssembler(ABC):
     @property 
     def engine_root(self) -> Path:
         """Return the root directory of the engine."""
-        return Path(__file__).resolve().parent
+        return Path(runtime.__file__).resolve().parent
 
     @property 
     def runtime_root(self) -> Path:
         """Return the root directory of the runtime."""
-        return self.engine_root / "runtime"
+        return self.engine_root
 
     @abstractmethod
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:

@@ -37,6 +37,27 @@ COPILOT_AGENTS_SECTION_LABELS: dict[str, str] = {
     "capability_field": "tools",
 }
 
+CAPABILITY_HANDLER_SCRIPT_MAP = {
+    "jira": ".jira2pr/runtime/integrations/jira.py",
+    "git": ".jira2pr/runtime/integrations/git.py",
+    "github": ".jira2pr/runtime/integrations/github.py",
+}
+
+CAPABILITY_ARGS_MAP = {
+    "jira.read": ["<ticket_key_or_url>"],
+
+    "git.status": ["status"],
+    "git.commit": ["commit", "<message>"],
+    "git.push": ["push"],
+
+    "pr.update": [
+        "update",
+        "--pr-number",
+        "<pr_number>",
+        "--body-file",
+        "<body_file>",
+    ],
+}
 
 def generate_agents_section(
     registry: "CanonicalRegistry",
@@ -94,7 +115,9 @@ def generate_agents_section(
         if cap.binding.kind == "native":
             resolution = "native platform tool"
         else:
-            resolution = f"`python3 {cap.binding.script} {' '.join(cap.binding.args)}`"
+                script = CAPABILITY_HANDLER_SCRIPT_MAP[cap.binding.handler]
+                args = CAPABILITY_ARGS_MAP.get(cap.id, [])
+                resolution = f"`python3 {script} {' '.join(args)}`"
         lines.append(f"| `{cap.id}` | {cap.type} | {resolution} |")
 
     # --- Model Tiers ---

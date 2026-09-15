@@ -24,10 +24,13 @@ def assemble_core(registry: CanonicalRegistry, writer: FileWriter, platform: str
     """Emit the shared `.jira2pr/` payload."""
     writer.copy_tree(registry.canonical_dir / "workflows", f"{CORE_PREFIX}/workflows")
     # copy runtime integrations
-    print(f"Copying runtime integrations from {runtime_dir / 'integrations'} to {CORE_PREFIX}/runtime/integrations", file=sys.stderr)
+    src = runtime_dir / "integrations"
+    destination = f"{CORE_PREFIX}/runtime/integrations"
+    assert src.exists(), f"Runtime integrations source directory does not exist: {src}"
+    print(f"Copying runtime integrations from {src} to {destination}")
     writer.copy_tree(
-        runtime_dir / "integrations",
-        f"{CORE_PREFIX}/runtime/integrations",
+        src,
+        destination,
     )
 
     for schema_file in registry.artifact_schema_files():

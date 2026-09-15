@@ -160,13 +160,13 @@ def parse_execution_policy(path: Path) -> ExecutionPolicy:
 def parse_capabilities(path: Path) -> dict[str, CapabilitySpec]:
     raw = load_yaml(path) or {}
     capabilities: dict[str, CapabilitySpec] = {}
+
     for cap_id, data in (raw.get("capabilities") or {}).items():
         data = data or {}
         binding_raw = data.get("binding") or {"kind": "native"}
         binding = CapabilityBinding(
             kind=binding_raw.get("kind", "native"),
-            script=binding_raw.get("script"),
-            args=as_str_tuple(binding_raw.get("args")),
+            handler=binding_raw.get("handler"),
         )
         capabilities[cap_id] = CapabilitySpec(
             id=cap_id,
@@ -174,4 +174,5 @@ def parse_capabilities(path: Path) -> dict[str, CapabilitySpec]:
             type=data.get("type", "context"),
             binding=binding,
         )
+
     return capabilities
