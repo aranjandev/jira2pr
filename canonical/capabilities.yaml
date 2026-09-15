@@ -1,12 +1,26 @@
-# Each capability optionally declares a `binding` telling the runtime how to
-# fulfil it:
+# Capability bindings describe how a capability is resolved.
 #
-#   kind: native  -> resolved by the platform's own tools (no runtime script;
-#                    e.g. Copilot's built-in fetch/search tools, aider's repo map)
-#   kind: script  -> resolved by running `python3 <script> <args...>` where
-#                    `script` is a path relative to the repo root and `args`
-#                    is the CLI argv template. `<angle-bracket>` entries are
-#                    placeholders the caller must supply a value for.
+# Bindings intentionally identify logical handlers rather than
+# filesystem paths or platform-specific tools.
+#
+# Platform adapters map handlers to concrete implementations.
+#
+# Examples:
+#
+#   jira
+#       -> .jira2pr/runtime/integrations/jira.py      (Copilot package)
+#       -> runtime.integrations.jira                  (Aider runtime)
+#       -> Jira MCP server                            (future platform)
+#
+# Binding kinds:
+#
+#   native
+#       Capability is fulfilled by platform-native tooling.
+#
+#   script
+#       Capability is fulfilled by a named runtime handler.
+#       Platform adapters resolve the handler to an actual
+#       implementation.
 
 capabilities:
 
@@ -15,8 +29,7 @@ capabilities:
     type: context
     binding:
       kind: script
-      script: runtime/integrations/jira.py
-      args: ["<ticket_key_or_url>"]
+      handler: jira
 
   web.search:
     description: Search external documentation and websites
@@ -41,29 +54,25 @@ capabilities:
     type: context
     binding:
       kind: script
-      script: runtime/integrations/git.py
-      args: ["status"]
+      handler: git
 
   git.commit:
     description: Create git commits
     type: action
     binding:
       kind: script
-      script: runtime/integrations/git.py
-      args: ["commit", "<message>"]
+      handler: git
 
   git.push:
     description: Push commits
     type: action
     binding:
       kind: script
-      script: runtime/integrations/git.py
-      args: ["push"]
+      handler: git
 
   pr.update:
     description: Create or update pull requests
     type: action
     binding:
       kind: script
-      script: runtime/integrations/github.py
-      args: ["update", "--pr-number", "<pr_number>", "--body-file", "<body_file>"]
+      handler: github

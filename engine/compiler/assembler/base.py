@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from assembler.registry import CanonicalRegistry
 from assembler.templates import substitute_vars
@@ -17,6 +18,16 @@ class PlatformAssembler(ABC):
     # Template variables for {{VAR}} substitution in workflows / instructions.
     # Subclasses must define this.
     TEMPLATE_VARS: dict[str, str] = {}
+
+    @property 
+    def engine_root(self) -> Path:
+        """Return the root directory of the engine."""
+        return Path(__file__).resolve().parent
+
+    @property 
+    def runtime_root(self) -> Path:
+        """Return the root directory of the runtime."""
+        return self.engine_root / "runtime"
 
     @abstractmethod
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:

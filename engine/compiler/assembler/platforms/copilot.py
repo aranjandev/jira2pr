@@ -19,6 +19,27 @@ COPILOT_NATIVE_TOOL_MAP: dict[str, str] = {
     "test.results": "search",
 }
 
+CAPABILITY_HANDLER_SCRIPT_MAP = {
+    "jira": ".jira2pr/runtime/integrations/jira.py",
+    "git": ".jira2pr/runtime/integrations/git.py",
+    "github": ".jira2pr/runtime/integrations/github.py",
+}
+
+CAPABILITY_ARGS_MAP = {
+    "jira.read": ["<ticket_key_or_url>"],
+
+    "git.status": ["status"],
+    "git.commit": ["commit", "<message>"],
+    "git.push": ["push"],
+
+    "pr.update": [
+        "update",
+        "--pr-number",
+        "<pr_number>",
+        "--body-file",
+        "<body_file>",
+    ],
+}
 
 class CopilotAssembler(PlatformAssembler):
     name = "copilot"
@@ -34,7 +55,7 @@ class CopilotAssembler(PlatformAssembler):
     GITHUB_PREFIX = ".github"
 
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
-        assemble_core(registry, writer, self.name)
+        assemble_core(registry, writer, self.name, self.runtime_root)
         self._assemble_agents(registry, writer)
         self._assemble_prompts(registry, writer)
         self._assemble_instructions(registry, writer)
@@ -263,7 +284,9 @@ class CopilotAssembler(PlatformAssembler):
             if cap.binding.kind == "native":
                 resolution = "native platform tool"
             else:
-                resolution = f"`python3 {cap.binding.script} {' '.join(cap.binding.args)}`"
+                script = CAPABILITY_HANDLER_SCRIPT_MAP[cap.binding.handler]
+                args = CAPABILITY_ARGS_MAP.get(cap.id, [])
+                resolution = f"`python3 {script} {' '.join(args)}`"
             lines.append(f"| `{cap.id}` | {cap.type} | {resolution} |")
         return "\n".join(lines) + "\n"
 

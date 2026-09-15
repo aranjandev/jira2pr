@@ -7,19 +7,28 @@ directory, so it survives a platform switch untouched.
 """
 
 from __future__ import annotations
+from pathlib import Path
+import sys
 
 import yaml
 
 from assembler import __version__
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
+from assembler import writer
+from assembler import registry
 
 CORE_PREFIX = ".jira2pr"
 
-
-def assemble_core(registry: CanonicalRegistry, writer: FileWriter, platform: str) -> None:
+def assemble_core(registry: CanonicalRegistry, writer: FileWriter, platform: str, runtime_dir: Path) -> None:
     """Emit the shared `.jira2pr/` payload."""
     writer.copy_tree(registry.canonical_dir / "workflows", f"{CORE_PREFIX}/workflows")
+    # copy runtime integrations
+    print(f"Copying runtime integrations from {runtime_dir / 'integrations'} to {CORE_PREFIX}/runtime/integrations", file=sys.stderr)
+    writer.copy_tree(
+        runtime_dir / "integrations",
+        f"{CORE_PREFIX}/runtime/integrations",
+    )
 
     for schema_file in registry.artifact_schema_files():
         writer.copy(schema_file, f"{CORE_PREFIX}/artifacts/{schema_file.name}")

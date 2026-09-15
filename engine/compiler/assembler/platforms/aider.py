@@ -29,7 +29,7 @@ class AiderAssembler(PlatformAssembler):
     }
 
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
-        assemble_core(registry, writer, self.name)
+        assemble_core(registry, writer, self.name, self.runtime_root)
         self._assemble_agent_bodies(registry, writer)
         self._assemble_aider_config(registry, writer)
         self._assemble_aider_cli_files(registry, writer)

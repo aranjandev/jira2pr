@@ -23,9 +23,7 @@ class AgentSpec:
 @dataclass(frozen=True)
 class CapabilityBinding:
     kind: str  # "native" (platform tool, no runtime script) | "script"
-    script: str | None = None  # path to the script, relative to repo root
-    args: tuple[str, ...] = ()  # CLI argv template; "<name>" entries are placeholders
-
+    handler: str  # handler key that will be resolved by the engine for platform specific implementation
 
 @dataclass(frozen=True)
 class CapabilitySpec:
