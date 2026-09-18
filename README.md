@@ -75,6 +75,24 @@ packages into your active environment (a virtualenv is recommended, e.g.
 `python3 -m venv engine/.venv && source engine/.venv/bin/activate` before the
 `pip install -e .` above).
 
+For common source-checkout commands without installing the package, use the
+root `Makefile`:
+
+```bash
+make help
+make init PLATFORM=copilot TARGET_DIR=./my-project
+make check PLATFORM=copilot TARGET_DIR=./my-project
+make status TICKET=PROJ-123 TARGET_DIR=./my-project
+```
+
+The complete CLI can also be invoked directly. The `PYTHONPATH` entries expose
+the source packages that would otherwise be installed:
+
+```bash
+PYTHONPATH="$PWD/engine/compiler:$PWD/engine" \
+python3 engine/jira2pr/cli.py --help
+```
+
 ### Generate the setup for your platform
 
 Run from **any directory** (this uses the installed `jira2pr` console script, not the source checkout):
