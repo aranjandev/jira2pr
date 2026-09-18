@@ -8,7 +8,7 @@ from assembler.base import PlatformAssembler
 from assembler.core_package import assemble_core
 from assembler.model import AgentSpec, WorkflowSpec
 from assembler.registry import CanonicalRegistry
-from assembler.templates import generate_agents_section
+from assembler.templates import execution_policy_vars, generate_agents_section
 from assembler.writer import FileWriter
 
 # Native (non-script) capability -> VS Code Copilot tool mapping.
@@ -55,6 +55,7 @@ class CopilotAssembler(PlatformAssembler):
     GITHUB_PREFIX = ".github"
 
     def assemble(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
+        self.TEMPLATE_VARS = {**self.TEMPLATE_VARS, **execution_policy_vars(registry.execution_policy)}
         assemble_core(registry, writer, self.name, self.runtime_root)
         self._assemble_agents(registry, writer)
         self._assemble_prompts(registry, writer)
@@ -91,7 +92,7 @@ class CopilotAssembler(PlatformAssembler):
     def _assemble_agents(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
         for agent in registry.agents:
             model = registry.model_for_tier(agent.model_tier, self.name)
-            body = registry.agent_body(agent.slug)
+            body = self.substitute(registry.agent_body(agent.slug))
             binding = registry.workers.get(agent.slug)
 
             lines: list[str] = ["---"]

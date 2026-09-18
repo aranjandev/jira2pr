@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from assembler.model import ExecutionPolicy
     from assembler.registry import CanonicalRegistry
 
 
@@ -20,6 +21,19 @@ def substitute_vars(text: str, variables: dict[str, str]) -> str:
     if remaining:
         raise ValueError(f"Unresolved template variable(s): {', '.join(remaining)}")
     return text
+
+
+def execution_policy_vars(policy: "ExecutionPolicy") -> dict[str, str]:
+    """``{{...}}`` vars every platform injects into agent bodies that reference
+    execution-policy defaults (currently only the orchestrator agent).
+    """
+    return {
+        "DEFAULT_MAX_ATTEMPTS": str(policy.default_max_attempts),
+        "ON_EXHAUSTION": policy.on_exhaustion,
+        "DEFAULT_MAX_TOTAL_ITERATIONS": str(policy.max_total_iterations),
+        "TERMINAL_SUCCESS_STATE": policy.terminal_success_state,
+        "TERMINAL_ESCALATED_STATE": policy.terminal_escalated_state,
+    }
 
 
 def _display_model(model: str, platform: str) -> str:
