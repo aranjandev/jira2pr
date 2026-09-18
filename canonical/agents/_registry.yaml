@@ -40,7 +40,7 @@ agents:
       are translated into state transitions.
 
   - slug: jira-reader
-    name: jira reader
+    name: jira-reader
     kind: worker
     model-tier: 0
     artifact_schema: requirements-schema.md
@@ -86,7 +86,7 @@ agents:
       coverage, risks, and test quality, producing a structured review.
 
   - slug: pr-author
-    name: pr author
+    name: pr-author
     kind: worker
     model-tier: 1
     artifact_schema: pr-schema.md
