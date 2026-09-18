@@ -27,9 +27,9 @@ def test_generates_agent_bodies(tmp_path):
         assert (out / ".jira2pr/agents" / f"{slug}.md").exists()
 
 
-def test_no_generated_python(tmp_path):
+def test_runtime_integrations_generated(tmp_path):
     out = _assemble(tmp_path)
-    assert list(out.rglob("*.py")) == []
+    assert (out / ".jira2pr/runtime/integrations/jira.py").exists()
 
 
 def test_aider_cli_files_generated(tmp_path):

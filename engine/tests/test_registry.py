@@ -71,7 +71,7 @@ def test_capabilities_loaded_with_bindings():
     jira_read = reg.capabilities["jira.read"]
     assert jira_read.type == "context"
     assert jira_read.binding.kind == "script"
-    assert jira_read.binding.script == "runtime/integrations/jira.py"
+    assert jira_read.binding.handler == "jira"
     web_search = reg.capabilities["web.search"]
     assert web_search.binding.kind == "native"
 

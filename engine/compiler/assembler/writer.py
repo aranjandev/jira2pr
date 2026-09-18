@@ -80,7 +80,7 @@ class FileWriter:
     def copy_tree(self, src_dir: Path, rel_path: str | Path) -> None:
         """Recursively copy a directory from *src_dir* to *target_dir/rel_path*."""
         for src_file in sorted(src_dir.rglob("*")):
-            if src_file.is_file():
+            if src_file.is_file() and "__pycache__" not in src_file.parts and src_file.suffix != ".pyc":
                 file_rel = Path(rel_path) / src_file.relative_to(src_dir)
                 self.copy(src_file, file_rel)
 
