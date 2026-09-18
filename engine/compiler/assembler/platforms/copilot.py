@@ -83,13 +83,12 @@ class CopilotAssembler(PlatformAssembler):
                 tools.add("execute")
             if binding.can_delegate:
                 tools.add("agent")
-        if agent.kind == "supervisor":
+        if agent.kind == "orchestrator":
             tools.add("agent")
             tools.add("plan")
         return sorted(tools)
 
     def _assemble_agents(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
-        worker_slugs = [a.slug for a in registry.agents if a.kind == "worker"]
         for agent in registry.agents:
             model = registry.model_for_tier(agent.model_tier, self.name)
             body = registry.agent_body(agent.slug)
@@ -100,13 +99,12 @@ class CopilotAssembler(PlatformAssembler):
             lines.append(f'name: "{agent.name}"')
             lines.append(f"tools: [{', '.join(self._tools_for_agent(agent, registry))}]")
             lines.append(f'model: "{model}"')
-            if agent.kind == "supervisor":
-                lines.append(f"agents: [{', '.join(worker_slugs)}]")
+            if binding and binding.can_delegate:
+                lines.append(f"agents: [{', '.join(binding.can_delegate)}]")
+            if agent.kind == "orchestrator":
                 lines.append('argument-hint: "JIRA ticket key/URL, or ticket key to resume"')
                 lines.append("user-invocable: true")
             else:
-                if binding and binding.can_delegate:
-                    lines.append(f"agents: [{', '.join(binding.can_delegate)}]")
                 lines.append("user-invocable: false")
             lines.append("---")
             lines.append("")
@@ -136,7 +134,7 @@ class CopilotAssembler(PlatformAssembler):
         agents_dir = self.TEMPLATE_VARS["AGENTS_DIR"]
         lines = ["---"]
         lines.append(f'description: "Run the {workflow.name} workflow end-to-end from a JIRA ticket."')
-        lines.append('agent: "supervisor"')
+        lines.append('agent: "orchestrator"')
         lines.append('argument-hint: "JIRA ticket key (e.g., PROJ-123) or URL"')
         lines.append("---")
         lines.append("")
@@ -179,7 +177,7 @@ class CopilotAssembler(PlatformAssembler):
         lines = [
             "---",
             'description: "Resume an in-progress workflow from its persisted state file."',
-            'agent: "supervisor"',
+            'agent: "orchestrator"',
             'argument-hint: "JIRA ticket key (e.g., PROJ-123)"',
             "---",
             "",
@@ -195,7 +193,7 @@ class CopilotAssembler(PlatformAssembler):
         lines = [
             "---",
             'description: "Report the current status of a workflow without executing anything."',
-            'agent: "supervisor"',
+            'agent: "orchestrator"',
             'argument-hint: "JIRA ticket key (e.g., PROJ-123)"',
             "---",
             "",

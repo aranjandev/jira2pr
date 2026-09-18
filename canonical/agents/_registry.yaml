@@ -20,6 +20,16 @@
 
 agents:
 
+  - slug: orchestrator
+    name: orchestrator
+    kind: orchestrator
+    model-tier: 2
+    description: >
+      Drives a workflow from its initial state to a terminal state: invokes
+      the worker for each state, invokes supervisor to evaluate the worker's
+      output, applies transition/retry/escalation logic, and persists
+      workflow state.
+
   - slug: supervisor
     name: supervisor
     kind: supervisor

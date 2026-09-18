@@ -9,7 +9,7 @@ from assembler.writer import FileWriter
 
 CANONICAL_DIR = Path(__file__).resolve().parent.parent.parent / "canonical"
 
-AGENT_SLUGS = ["supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author"]
+AGENT_SLUGS = ["orchestrator", "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author"]
 
 
 def _assemble(tmp_path):

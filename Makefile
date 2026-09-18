@@ -1,4 +1,4 @@
-.PHONY: help install init check run resume status list
+.PHONY: help install init check run resume status list test
 
 PYTHON ?= python3
 ENGINE := $(CURDIR)/engine
@@ -29,3 +29,6 @@ status: ## Show workflow status (TICKET=PROJ-123)
 
 list: ## List known workflows
 	$(CLI) list --target-dir "$(TARGET_DIR)"
+
+test: ## Run the full unit test suite
+	cd $(ENGINE) && $(PYTHON) -m pytest tests/ -q

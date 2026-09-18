@@ -11,16 +11,19 @@ def _load():
     return CanonicalRegistry.load(CANONICAL_DIR)
 
 
-def test_loads_all_seven_agents():
+def test_loads_all_eight_agents():
     reg = _load()
     slugs = {a.slug for a in reg.agents}
     assert slugs == {
-        "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author",
+        "orchestrator", "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author",
     }
 
 
 def test_agent_model_tier_and_kind():
     reg = _load()
+    orchestrator = reg.agent("orchestrator")
+    assert orchestrator.kind == "orchestrator"
+    assert orchestrator.model_tier == 2
     supervisor = reg.agent("supervisor")
     assert supervisor.kind == "supervisor"
     assert supervisor.model_tier == 2
@@ -58,6 +61,9 @@ def test_workers_loaded():
     reg = _load()
     assert reg.workers["planner"].can_delegate == ("researcher",)
     assert reg.workers["pr-author"].actions == ("git.commit", "git.push", "pr.update")
+    assert reg.workers["orchestrator"].can_delegate == (
+        "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author", "supervisor",
+    )
 
 
 def test_capabilities_loaded_with_bindings():

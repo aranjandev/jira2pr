@@ -9,7 +9,7 @@ from assembler.writer import FileWriter
 
 CANONICAL_DIR = Path(__file__).resolve().parent.parent.parent / "canonical"
 
-AGENT_SLUGS = ["supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author"]
+AGENT_SLUGS = ["orchestrator", "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author"]
 
 
 def _assemble(tmp_path):
@@ -21,17 +21,23 @@ def _assemble(tmp_path):
     return tmp_path
 
 
-def test_generates_all_seven_agents(tmp_path):
+def test_generates_all_eight_agents(tmp_path):
     out = _assemble(tmp_path)
     for slug in AGENT_SLUGS:
         assert (out / ".github/agents" / f"{slug}.agent.md").exists()
 
 
-def test_supervisor_agent_is_user_invocable_with_all_workers(tmp_path):
+def test_orchestrator_agent_is_user_invocable_with_all_workers_and_supervisor(tmp_path):
+    out = _assemble(tmp_path)
+    content = (out / ".github/agents/orchestrator.agent.md").read_text()
+    assert "user-invocable: true" in content
+    assert "agents: [jira-reader, researcher, planner, coder, reviewer, pr-author, supervisor]" in content
+
+
+def test_supervisor_agent_not_user_invocable(tmp_path):
     out = _assemble(tmp_path)
     content = (out / ".github/agents/supervisor.agent.md").read_text()
-    assert "user-invocable: true" in content
-    assert "agents: [jira-reader, researcher, planner, coder, reviewer, pr-author]" in content
+    assert "user-invocable: false" in content
 
 
 def test_worker_agents_not_user_invocable(tmp_path):
@@ -52,7 +58,7 @@ def test_core_package_emitted(tmp_path):
 def test_feature_prompt_generated(tmp_path):
     out = _assemble(tmp_path)
     content = (out / ".github/prompts/feature.prompt.md").read_text()
-    assert 'agent: "supervisor"' in content
+    assert 'agent: "orchestrator"' in content
     assert "jira-ingest" in content
 
 

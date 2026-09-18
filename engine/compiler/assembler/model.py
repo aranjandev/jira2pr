@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 class AgentSpec:
     slug: str
     name: str
-    kind: str  # "supervisor" | "worker"
+    kind: str  # "orchestrator" | "supervisor" | "worker"
     model_tier: int
     description: str
     artifact_schema: str | None = None

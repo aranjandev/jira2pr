@@ -1,5 +1,16 @@
 workers:
 
+  orchestrator:
+    runtime_context: []
+    can_delegate:
+      - jira-reader
+      - researcher
+      - planner
+      - coder
+      - reviewer
+      - pr-author
+      - supervisor
+
   jira-reader:
     runtime_context:
       - jira.read

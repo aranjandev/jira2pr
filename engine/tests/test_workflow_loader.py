@@ -29,7 +29,7 @@ def test_load_raises_if_no_jira2pr_dir(tmp_path):
 def test_loads_agents_and_workflows(project_dir):
     project = RuntimeProject.load(project_dir)
     assert {a.slug for a in project.agents} == {
-        "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author",
+        "orchestrator", "supervisor", "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author",
     }
     assert "feature" in project.workflows
 
