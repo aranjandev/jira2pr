@@ -44,6 +44,24 @@ class WorkflowExecutor:
                 self._state_manager.save(ticket_key, state)
                 return state
 
+            max_total_iterations = (
+                workflow.max_total_iterations
+                if workflow.max_total_iterations is not None
+                else policy.max_total_iterations
+            )
+            if state.total_iterations >= max_total_iterations:
+                # Global safety net: bounds oscillation between ANY states (not just
+                # self-looping ones), independent of every state's own max_attempts.
+                state.record_escalation(
+                    current.name,
+                    f"global iteration cap ({max_total_iterations}) exceeded; "
+                    "possible transition cycle",
+                )
+                state.current_state = policy.terminal_escalated_state
+                self._state_manager.save(ticket_key, state)
+                continue
+
+            state.total_iterations += 1
             attempt = state.retry_counts.get(current.name, 0) + 1
             produced = invoke_worker(self._project, workflow, current, ticket_key, self._backend)
             result = invoke_supervisor(

@@ -80,12 +80,16 @@ def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
         source_path = str(path.relative_to(root))
     except ValueError:
         source_path = str(path)
+    workflow_max_total_iterations = (raw.get("retry") or {}).get("max_total_iterations")
     return WorkflowSpec(
         name=name,
         version=int(raw.get("version", 1)),
         initial_state=raw["initial_state"],
         states=states,
         source_path=source_path,
+        max_total_iterations=(
+            int(workflow_max_total_iterations) if workflow_max_total_iterations is not None else None
+        ),
     )
 
 
@@ -154,6 +158,7 @@ def parse_execution_policy(path: Path) -> ExecutionPolicy:
         criteria_mode=criteria.get("mode", "all_pass"),
         terminal_success_state=terminal.get("success", "done"),
         terminal_escalated_state=terminal.get("escalated", "human-review"),
+        max_total_iterations=int(retry.get("max_total_iterations", 40)),
     )
 
 

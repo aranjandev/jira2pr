@@ -69,6 +69,7 @@ class WorkflowSpec:
     initial_state: str
     states: dict[str, StateSpec]
     source_path: str = ""
+    max_total_iterations: int | None = None  # None -> use ExecutionPolicy.max_total_iterations
 
 
 @dataclass(frozen=True)
@@ -90,3 +91,4 @@ class ExecutionPolicy:
     criteria_mode: str  # "all_pass"
     terminal_success_state: str
     terminal_escalated_state: str
+    max_total_iterations: int

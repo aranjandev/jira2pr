@@ -235,6 +235,10 @@ class CopilotAssembler(PlatformAssembler):
             f"Every state has bounded retries (default max attempts: {policy.default_max_attempts}). "
             f"Exhausting retries **{policy.on_exhaustion}s** the workflow rather than looping forever.",
             "",
+            f"A global safety net additionally caps total state visits per run at "
+            f"**{policy.max_total_iterations}** (a workflow may override this), guarding against "
+            "oscillation between any two or more states independent of their individual retry budgets.",
+            "",
             "## Success Criteria",
             "",
             "| Key | Required Labels |",

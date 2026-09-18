@@ -34,12 +34,24 @@ def validate(registry: CanonicalRegistry, platform: str) -> None:
     agent_slugs = {a.slug for a in registry.agents}
     worker_slugs = {a.slug for a in registry.agents if a.kind == "worker"}
 
+    if registry.execution_policy is not None and registry.execution_policy.max_total_iterations <= 0:
+        errors.append(
+            "workflows/shared/execution-policy.yaml: retry.max_total_iterations must be a "
+            "positive integer"
+        )
+
     for workflow in registry.workflows.values():
         src = workflow.source_path
 
         if workflow.initial_state not in workflow.states:
             errors.append(
                 f"{src}: initial_state '{workflow.initial_state}' is not a defined state"
+            )
+
+        if workflow.max_total_iterations is not None and workflow.max_total_iterations <= 0:
+            errors.append(
+                f"{src}: retry.max_total_iterations must be a positive integer "
+                f"(found: {workflow.max_total_iterations})"
             )
 
         for state in workflow.states.values():

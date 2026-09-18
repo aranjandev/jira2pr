@@ -49,6 +49,7 @@ class WorkflowState:
     status: str = "active"  # active | completed | escalated | failed
     current_state: str = ""
     retry_counts: dict[str, int] = field(default_factory=dict)
+    total_iterations: int = 0
     artifacts: list[str] = field(default_factory=list)
     decisions: list[str] = field(default_factory=list)
     escalations: list[dict] = field(default_factory=list)
@@ -66,6 +67,7 @@ class WorkflowState:
             status=data.get("status", "active"),
             current_state=data.get("current_state", ""),
             retry_counts=dict(data.get("retry_counts") or {}),
+            total_iterations=int(data.get("total_iterations", 0)),
             artifacts=list(data.get("artifacts") or []),
             decisions=list(data.get("decisions") or []),
             escalations=list(data.get("escalations") or []),

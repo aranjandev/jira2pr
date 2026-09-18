@@ -62,6 +62,28 @@ def test_retry_then_escalation(project):
     assert [h["outcome"] for h in state.history] == ["success", "success", "failure", "failure"]
 
 
+def test_global_iteration_cap_forces_escalation_on_unbounded_rework_loop(project):
+    # implement always succeeds but review always rejects it: implement's own
+    # retry_counts never increments (it only fails on its OWN failure), and
+    # review's failure routes to implement (not itself), so no per-state cap
+    # ever trips. Only the workflow-level max_total_iterations (20) should
+    # stop this from looping forever.
+    def responder(system_prompt, user_prompt, model):
+        if "State: review" in user_prompt and "Required success criteria" in user_prompt:
+            return "outcome: failure\nreason: needs more work\nfeedback: fix\nviolations: [no_critical_findings]\n"
+        if "Required success criteria" in user_prompt:
+            return SUCCESS_YAML
+        return "# Content\n"
+
+    backend = MockBackend(responder=responder)
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-5")
+    assert state.status == "escalated"
+    assert state.current_state == "human-review"
+    assert state.total_iterations == 20
+    assert state.retry_counts == {}
+    assert "iteration cap" in state.escalations[-1]["reason"]
+
+
 def test_malformed_supervisor_output_treated_as_failure(project):
     backend = MockBackend()  # default response is not valid supervisor YAML
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-3")

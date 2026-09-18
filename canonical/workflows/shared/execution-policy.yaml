@@ -12,6 +12,13 @@ execution_policy:
     # supervisor still returns "failure": treat it as an escalation instead
     # of looping forever or silently succeeding.
     on_exhaustion: escalate
+    # Global safety net across the WHOLE run, independent of any single
+    # state's own max_attempts. Bounds total loop iterations regardless of
+    # which states are oscillating (e.g. review<->implement, or a future
+    # plan<->implement loop) without needing per-pair configuration.
+    # Exceeding it escalates via terminal_outcomes.escalated below, same as
+    # any other escalation. A workflow may override this in its own file.
+    max_total_iterations: 40
 
   criteria_evaluation:
     # "all_pass": every label listed for the state's success_criteria key

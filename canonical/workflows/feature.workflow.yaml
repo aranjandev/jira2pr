@@ -4,6 +4,14 @@ workflow: feature
 
 initial_state: jira-ingest
 
+# Global safety net across ALL states (not per-state retries): bounds total
+# loop iterations for the whole run regardless of which states are
+# oscillating, overriding the shared default in
+# workflows/shared/execution-policy.yaml. Exceeding it escalates to the same
+# terminal as any other escalation (see terminal_outcomes.escalated there).
+retry:
+  max_total_iterations: 20
+
 states:
   jira-ingest:
     worker: jira-reader
@@ -13,6 +21,8 @@ states:
       - workflow-state.md
     validation:
       success_criteria: jira-ingest
+    retry:
+      max_attempts: 2
     transitions:
       success: plan
       failure: jira-ingest
@@ -66,8 +76,9 @@ states:
       - workflow-state.md
     validation:
       success_criteria: review
+    # bounds total review<->implement rework cycles, not a self-retry
     retry:
-      max_attempts: 1
+      max_attempts: 3
     transitions:
       success: submit
       failure: implement
@@ -85,7 +96,7 @@ states:
     validation:
       success_criteria: submit
     retry:
-      max_attempts: 1
+      max_attempts: 2
     transitions:
       success: done
       failure: submit

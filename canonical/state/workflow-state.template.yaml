@@ -51,6 +51,14 @@ current_state: ""
 #   implement: 0
 retry_counts: {}
 
+# Total non-terminal state visits across the whole run so far.
+#
+# Global safety net independent of any single state's retry_counts: bounds
+# oscillation between ANY states, not just self-looping ones. See
+# execution_policy.retry.max_total_iterations / this workflow's own
+# retry.max_total_iterations override.
+total_iterations: 0
+
 # Artifacts created during execution.
 #
 # Examples:

@@ -89,6 +89,7 @@ def test_execution_policy_loaded():
     assert reg.execution_policy.on_exhaustion == "escalate"
     assert reg.execution_policy.terminal_success_state == "done"
     assert reg.execution_policy.terminal_escalated_state == "human-review"
+    assert reg.execution_policy.max_total_iterations == 40
 
 
 def test_artifact_schema_files_exclude_registry():
