@@ -193,7 +193,7 @@ model assignments per agent.
 |----------------|-------|-------|
 | Project conventions | `copilot-instructions.md` | Always customize this first |
 | Model assignments | `canonical/model-tiers.yaml` upstream, then regenerate | Models are baked in at generation time |
-| JIRA field mapping | `engine/runtime/integrations/jira.py` | If you use custom JIRA fields |
-| Branch naming | `engine/runtime/integrations/git.py` | To match your branch conventions |
-| PR creation logic | `engine/runtime/integrations/github.py` | For Bitbucket or custom endpoints |
+| JIRA field mapping | `{{CORE_DIR}}/runtime/integrations/jira.py` | If you use custom JIRA fields |
+| Branch naming | `{{CORE_DIR}}/runtime/integrations/git.py` | To match your branch conventions |
+| PR creation logic | `{{CORE_DIR}}/runtime/integrations/github.py` | For Bitbucket or custom endpoints |
 
