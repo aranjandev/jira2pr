@@ -19,7 +19,7 @@ tiers:
     description: "Cheapest — simple extraction, formatting, and API calls"
     role: "Simple, deterministic tasks"
     models:
-      copilot: "GPT-5 mini (copilot)"
+      copilot: "GPT-5.6 Luna (copilot)"
       opencode: "github-copilot/gpt-5-mini"
       aider: "gpt-5-mini"
   1:
@@ -33,13 +33,13 @@ tiers:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
-      copilot: "Claude Sonnet 4.6 (copilot)"
-      opencode: "github-copilot/claude-sonnet-4.6"
-      aider: "claude-sonnet-4-5"
+      copilot: "GPT-5.6 Terra (copilot)"
+      opencode: "github-copilot/claude-sonnet-5"
+      aider: "claude-sonnet-5"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
     models:
-      copilot: "Claude Opus 4.6 (copilot)"
-      opencode: "github-copilot/claude-opus-4.6"
-      aider: "claude-opus-4-1"
+      copilot: "Claude Sonnet 5 (copilot)"
+      opencode: "github-copilot/claude-sonnet-5"
+      aider: "claude-sonnet-5"

@@ -23,7 +23,7 @@ agents:
   - slug: orchestrator
     name: orchestrator
     kind: orchestrator
-    model-tier: 2
+    model-tier: 0
     description: >
       Drives a workflow from its initial state to a terminal state: invokes
       the worker for each state, invokes supervisor to evaluate the worker's
@@ -62,7 +62,7 @@ agents:
   - slug: planner
     name: planner
     kind: worker
-    model-tier: 2
+    model-tier: 3
     artifact_schema: plan-schema.md
     description: >
       Produces deterministic implementation plans from requirements,
@@ -79,7 +79,7 @@ agents:
   - slug: reviewer
     name: reviewer
     kind: worker
-    model-tier: 3
+    model-tier: 2
     artifact_schema: review-schema.md
     description: >
       Evaluates completed implementations for correctness, requirements
