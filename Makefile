@@ -10,7 +10,7 @@ help: ## Show available make targets
 	@awk 'BEGIN {FS = ":.*## "; print "Usage: make <target>\n"} /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 install: ## Install jira2pr from this checkout with uv
-	uv tool install --editable ./engine
+	uv tool install --reinstall --editable ./engine
 
 init: ## Generate a platform-specific agent setup (PLATFORM=copilot|aider)
 	$(CLI) init --platform "$(PLATFORM)" --target-dir "$(TARGET_DIR)"
