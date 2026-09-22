@@ -59,7 +59,9 @@
 
 > This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available agents and workflows.
 
-Agents in this project execute **workflows** — deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (e.g. `feature`). Each state names a worker agent, the artifacts it consumes/produces, and success criteria. The **orchestrator** agent is the entry point: for each state it invokes the named worker, then invokes **supervisor** to evaluate that worker's output against the state's success criteria and return `success`, `failure`, or `escalate`, which the orchestrator uses to transition to the next state.
+Agents in this project execute **workflows** — deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (e.g. `feature`). Each state names a worker agent, the artifacts it consumes/produces, and success criteria. Depending on the platform, there are two possible ways to transition through the workflow states:
+1. For platforms that support built-in agents (like Copilot or Opencode), the **orchestrator** agent is responsible for invoking the various agents and transitioning states based on the specific workflow.
+1. For platforms requiring a runtime engine (like Aider), there is not orchestrator agent, only workers and supervisor. The runtime code is responsible for state transitions. 
 
 Workflow state is the single source of truth and lives outside `{{AGENTS_DIR}}/`, in `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` — this keeps it identical regardless of which platform (Copilot, Aider) is executing the workflow. Artifacts produced along the way (`requirements.md`, `plan.md`, `review.md`, ...) are written under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
 
