@@ -52,29 +52,33 @@
 - JIRA credentials:
   - `JIRA_API_TOKEN` — Personal access token for JIRA REST API
   - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
-
 <!-- AGENTS_SECTION:AUTO_GENERATED -->
 
 ## How Agents Contribute to Code
 
-> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available agents and workflows.
+> This section is managed by jira2pr. Do not remove or modify it. Agents rely on it to understand available agents and workflows.
 
-Agents in this project execute **workflows** — deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (e.g. `feature`). Each state names a worker agent, the artifacts it consumes/produces, and success criteria. Depending on the platform, there are two possible ways to transition through the workflow states:
-1. For platforms that support built-in agents (like Copilot or Opencode), the **orchestrator** agent is responsible for invoking the various agents and transitioning states based on the specific workflow.
-1. For platforms requiring a runtime engine (like Aider), there is not orchestrator agent, only workers and supervisor. The runtime code is responsible for state transitions. 
+Agents in this project execute **workflows**, deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (for example, `feature`). Each state defines its worker, consumed and produced artifacts, success criteria, retry policy, and transitions.
 
-Workflow state is the single source of truth and lives outside `{{AGENTS_DIR}}/`, in `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` — this keeps it identical regardless of which platform (Copilot, Aider) is executing the workflow. Artifacts produced along the way (`requirements.md`, `plan.md`, `review.md`, ...) are written under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
+Workflow execution depends on the platform:
 
-**State lifecycle (feature workflow):** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). Retries are bounded per state (`retry.max_attempts`); exhausting retries escalates rather than looping forever.
+1. **Agent-driven platforms** such as Copilot and OpenCode use the **orchestrator** agent. It invokes the worker for the current state, asks the **supervisor** to evaluate the result, applies the workflow-defined transition, and persists state.
+2. **Runtime-driven platforms** such as Aider do not use an orchestrator agent. The jira2pr runtime invokes workers and the **supervisor**, applies workflow-defined transitions, and persists state.
+
+The **supervisor** has the same role in both models: evaluate completed worker output against the state's success criteria and return `success`, `failure`, or `escalate`. It does not define the next state; transitions come from the workflow YAML.
+
+Workflow state is the single source of truth and lives at `{{CORE_DIR}}/state/<TICKET-KEY>.yaml`, independent of the execution platform. Artifacts produced during execution (`requirements.md`, `plan.md`, `review.md`, etc.) are stored under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
+
+**Example feature lifecycle:** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). The selected workflow YAML is authoritative. Retries are bounded per state; exhausting retries escalates rather than looping indefinitely.
 
 ### State & Artifact Architecture
 
-| Layer | Location | Audience | Owner |
-|-------|----------|----------|-------|
-| **Workflow state** | `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` | Agents — source of truth | runtime executor only; workers read, never write |
-| **Artifacts** | `{{CORE_DIR}}/artifacts/<TICKET-KEY>/<name>.md` | Agents + human reviewers | produced by the worker named in the current state |
-| **PR body** | GitHub PR (live) | Human reviewers | `pr-author`, once the `submit` state runs |
+| Layer | Location | Owner |
+|-------|----------|-------|
+| **Workflow state** | `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` | workflow executor; workers read, never write |
+| **Artifacts** | `{{CORE_DIR}}/artifacts/<TICKET-KEY>/<name>.md` | worker assigned to the current state |
+| **PR body** | GitHub PR | `pr-author` during `submit` |
 
-The state file is committed to git alongside code changes so context survives session restarts. At workflow completion it is archived to `{{CORE_DIR}}/state/archive/<TICKET-KEY>.yaml`.
+The state file is committed with the workflow changes so execution can resume across sessions. On completion, it is archived to `{{CORE_DIR}}/state/archive/<TICKET-KEY>.yaml`.
 
 <!-- AGENTS_SECTION:DYNAMIC_TABLES -->
