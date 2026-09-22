@@ -77,6 +77,7 @@ def generate_agents_section(
     registry: "CanonicalRegistry",
     platform: str,
     labels: dict[str, str] | None = None,
+    include_orchestrator: bool = True,
 ) -> str:
     """Build the markdown for the dynamic (registry-driven) table sub-sections.
 
@@ -90,24 +91,28 @@ def generate_agents_section(
     lines: list[str] = []
 
     # --- Agent Roster ---
+    roster_agents = [a for a in registry.agents if include_orchestrator or a.kind != "orchestrator"]
     lines.append("")
     lines.append("### Agent Roster")
     lines.append("")
-    lines.append(f"{len(registry.agents)} agents are available:")
+    lines.append(f"{len(roster_agents)} agents are available:")
     lines.append("")
     lines.append("| Agent | Kind | Model | Artifact |")
     lines.append("|-------|------|-------|----------|")
-    for agent in registry.agents:
+    for agent in roster_agents:
         model = registry.model_for_tier(agent.model_tier, platform)
         display_model = _display_model(model, platform)
         artifact = f"`{agent.artifact_schema}`" if agent.artifact_schema else "—"
         lines.append(f"| **{agent.name}** | {agent.kind} | {display_model} | {artifact} |")
     lines.append("")
-    lines.append(
-        f"Agent definitions live in `{labels['agents_dir']}`. Each file is a "
-        f"`{labels['agent_file_ext']}` with YAML frontmatter declaring its "
-        f"`description`, `{labels['capability_field']}`, and `model`."
-    )
+    if "agent_definitions_note" in labels:
+        lines.append(labels["agent_definitions_note"])
+    else:
+        lines.append(
+            f"Agent definitions live in `{labels['agents_dir']}`. Each file is a "
+            f"`{labels['agent_file_ext']}` with YAML frontmatter declaring its "
+            f"`description`, `{labels['capability_field']}`, and `model`."
+        )
 
     # --- Workflows ---
     lines.append("")

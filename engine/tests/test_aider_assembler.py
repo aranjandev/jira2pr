@@ -64,3 +64,24 @@ def test_idempotent(tmp_path):
     AiderAssembler().assemble(reg, writer)
     writer.finalize()
     assert writer.all_ok
+
+
+def test_project_instructions_generated_at_root(tmp_path):
+    out = _assemble(tmp_path)
+    agents_file = out / "AGENTS.md"
+    assert agents_file.exists()
+    content = agents_file.read_text()
+    assert "How Agents Contribute to Code" in content
+    assert "### Agent Roster" in content
+
+
+def test_orchestrator_excluded_from_aider_roster(tmp_path):
+    out = _assemble(tmp_path)
+    content = (out / "AGENTS.md").read_text()
+    # Orchestrator row should not appear in the roster table for Aider
+    assert "| **orchestrator**" not in content
+    # But other agents should still be there
+    assert "| **coder**" in content
+    assert "| **supervisor**" in content
+    # The static prose can still mention orchestrator (explaining Copilot vs Aider difference)
+    # but the dynamic roster table should exclude it
