@@ -26,13 +26,13 @@ tiers:
     role: "Formulaic tasks"
     models:
       copilot: "Claude Haiku 4.5 (copilot)"
-      aider: "github_copilot/claude-haiku-4-5"
+      aider: "ollama_chat/qwen-coder-16k"
   2:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
       copilot: "GPT-5.6 Terra (copilot)"
-      aider: "github_copilot/gpt-5-terra"
+      aider: "github_copilot/claude-haiku-4.5"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
