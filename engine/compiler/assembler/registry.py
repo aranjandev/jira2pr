@@ -48,7 +48,6 @@ class CanonicalRegistry:
     supervisor_contract: SupervisorContract | None = None
     execution_policy: ExecutionPolicy | None = None
     capabilities: dict[str, CapabilitySpec] = field(default_factory=dict)
-    model_tiers: dict = field(default_factory=dict)
     project_instructions_tpl: str = ""
     warnings: list[str] = field(default_factory=list)
 
@@ -69,7 +68,6 @@ class CanonicalRegistry:
         reg._load_workflows()
         reg._load_shared()
         reg.capabilities = parse_capabilities(canonical_dir / "capabilities.yaml")
-        reg.model_tiers = load_yaml(canonical_dir / "model-tiers.yaml")
         reg.project_instructions_tpl = (canonical_dir / "project-instructions.md").read_text()
         return reg
 
@@ -85,7 +83,6 @@ class CanonicalRegistry:
                     slug=item["slug"],
                     name=item["name"],
                     kind=item["kind"],
-                    model_tier=int(item["model-tier"]),
                     description=(item.get("description") or "").strip(),
                     artifact_schema=item.get("artifact_schema"),
                 )
@@ -136,13 +133,6 @@ class CanonicalRegistry:
     def workflow_shared_dir(self) -> Path:
         return self.canonical_dir / "workflows" / "shared"
 
-    def model_for_tier(self, tier: int, platform: str) -> str:
-        """Look up the model name for a tier + platform combination."""
-        tiers = self.model_tiers.get("tiers", {})
-        tier_data = tiers.get(tier, tiers.get(str(tier), {}))
-        models = tier_data.get("models", {})
-        return models.get(platform, f"Tier-{tier} (unknown for {platform})")
-
     def platform_extras_dir(self, platform: str) -> Path | None:
         """Return the platform-extras/<platform>/ directory, or None."""
         d = self.canonical_dir / "platform-extras" / platform
@@ -152,3 +142,30 @@ class CanonicalRegistry:
         """Return the .env.example path, or None."""
         p = self.canonical_dir / ".env.example"
         return p if p.is_file() else None
+
+    def platform_models(
+        self,
+        platform: str,
+    ) -> dict[str, str]:
+        extras = self.platform_extras_dir(platform)
+
+        if extras is None:
+            return {}
+
+        path = extras / "models.yaml"
+
+        if not path.is_file():
+            return {}
+
+        raw = load_yaml(path) or {}
+        models = raw.get("models", {})
+
+        if not isinstance(models, dict):
+            raise ValueError(
+                f"Expected 'models' mapping in {path}"
+            )
+
+        return {
+            str(slug): str(model)
+            for slug, model in models.items()
+        }

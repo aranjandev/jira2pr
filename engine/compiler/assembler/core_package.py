@@ -49,27 +49,27 @@ def assemble_core(registry: CanonicalRegistry, writer: FileWriter, platform: str
     if env_example is not None:
         writer.copy(env_example, ".env.example")
 
-
-def _render_config(registry: CanonicalRegistry, platform: str) -> str:
-    tiers = registry.model_tiers.get("tiers", {})
-    resolved_models = {
-        str(tier_num): tier_data.get("models", {}).get(platform, "")
-        for tier_num, tier_data in tiers.items()
-    }
+def _render_config(
+    registry: CanonicalRegistry,
+    platform: str,
+) -> str:
     agents = [
         {
             "slug": agent.slug,
             "kind": agent.kind,
-            "model_tier": agent.model_tier,
             "artifact_schema": agent.artifact_schema,
         }
         for agent in registry.agents
     ]
+
     config = {
         "generated_by": "jira2pr",
         "generator_version": __version__,
         "platform": platform,
-        "models": resolved_models,
         "agents": agents,
     }
-    return yaml.safe_dump(config, sort_keys=False)
+
+    return yaml.safe_dump(
+        config,
+        sort_keys=False,
+    )

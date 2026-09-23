@@ -23,7 +23,6 @@ agents:
   - slug: orchestrator
     name: orchestrator
     kind: orchestrator
-    model-tier: 0
     description: >
       Drives a workflow from its initial state to a terminal state: invokes
       the worker for each state, invokes supervisor to evaluate the worker's
@@ -33,7 +32,6 @@ agents:
   - slug: supervisor
     name: supervisor
     kind: supervisor
-    model-tier: 2
     description: >
       Evaluates worker outputs against workflow success criteria and returns
       structured outcomes. Workflow definitions determine how those outcomes
@@ -42,7 +40,6 @@ agents:
   - slug: jira-reader
     name: jira-reader
     kind: worker
-    model-tier: 0
     artifact_schema: requirements-schema.md
     description: >
       Converts JIRA issue information into a structured requirements document.
@@ -52,7 +49,6 @@ agents:
   - slug: researcher
     name: researcher
     kind: worker
-    model-tier: 1
     artifact_schema: decision-schema.md
     description: >
       Investigates technical questions, evaluates alternatives, and produces
@@ -62,7 +58,6 @@ agents:
   - slug: planner
     name: planner
     kind: worker
-    model-tier: 3
     artifact_schema: plan-schema.md
     description: >
       Produces deterministic implementation plans from requirements,
@@ -71,7 +66,6 @@ agents:
   - slug: coder
     name: coder
     kind: worker
-    model-tier: 1
     description: >
       Implements approved plans with minimal scope, updates required tests,
       and follows existing repository conventions.
@@ -79,7 +73,6 @@ agents:
   - slug: reviewer
     name: reviewer
     kind: worker
-    model-tier: 2
     artifact_schema: review-schema.md
     description: >
       Evaluates completed implementations for correctness, requirements
@@ -88,7 +81,6 @@ agents:
   - slug: pr-author
     name: pr-author
     kind: worker
-    model-tier: 1
     artifact_schema: pr-schema.md
     description: >
       Prepares pull request content, summarizes completed work, follows

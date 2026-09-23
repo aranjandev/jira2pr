@@ -93,7 +93,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     from runtime.workflow.loader import RuntimeProject
 
     target_dir = Path(args.target_dir).resolve()
-    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+    log_level = "DEBUG" if args.debug else "INFO"
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs", log_level=log_level)
 
     logger.info(f"Starting workflow: {args.workflow} for ticket: {args.ticket}")
     logger.debug(f"Target directory: {target_dir}")
@@ -118,7 +119,8 @@ def cmd_resume(args: argparse.Namespace) -> int:
     from runtime.workflow.loader import RuntimeProject
 
     target_dir = Path(args.target_dir).resolve()
-    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+    log_level = "DEBUG" if args.debug else "INFO"
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs", log_level=log_level)
 
     logger.info(f"Resuming workflow for ticket: {args.ticket}")
     logger.debug(f"Target directory: {target_dir}")
@@ -143,7 +145,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     from runtime.workflow.state_manager import StateManager
 
     target_dir = Path(args.target_dir).resolve()
-    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+    log_level = "DEBUG" if args.debug else "INFO"
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs", log_level=log_level)
 
     logger.info(f"Getting status for ticket: {args.ticket}")
 
@@ -163,7 +166,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     from runtime.workflow.state_manager import TICKET_KEY_RE
 
     target_dir = Path(args.target_dir).resolve()
-    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+    log_level = "DEBUG" if args.debug else "INFO"
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs", log_level=log_level)
 
     logger.info("Listing all known workflows")
 
@@ -202,6 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jira2pr", description="jira2pr — JIRA ticket to Pull Request, multi-agent, multi-platform."
     )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Generate a platform-specific agent setup.")

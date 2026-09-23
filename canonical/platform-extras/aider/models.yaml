@@ -1,0 +1,10 @@
+# canonical/platform-extras/aider/models.yaml
+
+models:
+  jira-reader: github_copilot/gpt-5-mini
+  researcher: ollama_chat/gemma3:12b
+  planner: github_copilot/gpt-5-mini
+  coder: ollama_chat/qwen3-coder:30b
+  reviewer: github_copilot/gpt-5-mini
+  pr-author: github_copilot/gpt-5-mini
+  supervisor: github_copilot/gpt-5-mini

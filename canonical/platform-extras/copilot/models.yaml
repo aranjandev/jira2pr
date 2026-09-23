@@ -1,0 +1,11 @@
+# canonical/platform-extras/copilot/models.yaml
+
+models:
+  orchestrator: github-copilot/gpt-5-mini
+  jira-reader: github-copilot/gpt-5-mini
+  researcher: github-copilot/claude-sonnet-4.6
+  planner: github-copilot/claude-sonnet-4.6
+  coder: github-copilot/claude-sonnet-4.6
+  reviewer: github-copilot/gpt-5
+  pr-author: github-copilot/gpt-5-mini
+  supervisor: github-copilot/gpt-5

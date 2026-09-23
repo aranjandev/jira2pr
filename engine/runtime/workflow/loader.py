@@ -56,6 +56,7 @@ class RuntimeProject:
     execution_policy: ExecutionPolicy | None = None
     capabilities: dict[str, CapabilitySpec] = field(default_factory=dict)
     config: dict = field(default_factory=dict)
+    backend_config: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
     @classmethod
@@ -71,9 +72,40 @@ class RuntimeProject:
         logger.debug(f"Core directory found: {core_dir}")
         project = cls(core_dir=core_dir)
 
-        logger.debug("Loading configuration")
-        project.config = load_yaml(core_dir / "config.yaml") or {}
-        logger.debug(f"Configuration loaded: {len(project.config)} top-level keys")
+        # Load the core configuration and backend configuration for the runtime project.
+        logger.debug("Loading core configuration")
+        project.config = (
+            load_yaml(core_dir / "config.yaml")
+            or {}
+        )
+        platform = project.config.get("platform")
+        if not platform:
+            raise ValueError(
+                f"Missing 'platform' in {core_dir / 'config.yaml'}"
+            )
+
+        logger.debug(
+            "Runtime platform: %s",
+            platform,
+        )
+        backend_config_path = (
+            core_dir
+            / "config"
+            / f"{platform}.yaml"
+        )
+        if not backend_config_path.is_file():
+            raise FileNotFoundError(
+                f"Backend configuration not found: "
+                f"{backend_config_path}"
+            )
+        logger.debug(
+            "Loading backend configuration: %s",
+            backend_config_path,
+        )
+        project.backend_config = (
+            load_yaml(backend_config_path)
+            or {}
+        )
 
         logger.debug("Parsing agents")
         for item in project.config.get("agents", []):
@@ -82,7 +114,6 @@ class RuntimeProject:
                     slug=item["slug"],
                     name=item["slug"].replace("-", " "),
                     kind=item["kind"],
-                    model_tier=int(item["model_tier"]),
                     description="",
                     artifact_schema=item.get("artifact_schema"),
                 )
@@ -215,3 +246,23 @@ class RuntimeProject:
 
         logger.debug("No project instructions found")
         return None
+
+
+    def model_for_agent(
+        self,
+        slug: str,
+    ) -> str:
+        """Return the platform-configured model for an agent."""
+
+        model = (
+            self.backend_config
+            .get("models", {})
+            .get(slug)
+        )
+
+        if not model:
+            raise ValueError(
+                f"No model configured for agent '{slug}'"
+            )
+
+        return model

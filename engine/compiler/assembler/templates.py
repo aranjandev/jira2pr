@@ -38,11 +38,6 @@ def execution_policy_vars(policy: "ExecutionPolicy") -> dict[str, str]:
     }
 
 
-def _display_model(model: str, platform: str) -> str:
-    """Strip the "(copilot)" style platform suffix for readable prose."""
-    return re.sub(rf"\s*\({re.escape(platform)}\)\s*$", "", model)
-
-
 # ---------------------------------------------------------------------------
 # "How Agents Contribute to Code" section generator
 # ---------------------------------------------------------------------------
@@ -57,6 +52,7 @@ COPILOT_AGENTS_SECTION_LABELS: dict[str, str] = {
 def generate_agents_section(
     registry: "CanonicalRegistry",
     platform: str,
+    models: dict[str, str],
     labels: dict[str, str] | None = None,
     include_orchestrator: bool = True,
 ) -> str:
@@ -72,7 +68,12 @@ def generate_agents_section(
     lines: list[str] = []
 
     # --- Agent Roster ---
-    roster_agents = [a for a in registry.agents if include_orchestrator or a.kind != "orchestrator"]
+    roster_agents = [
+        agent
+        for agent in registry.agents
+        if include_orchestrator or agent.kind != "orchestrator"
+    ]
+
     lines.append("")
     lines.append("### Agent Roster")
     lines.append("")
@@ -80,19 +81,21 @@ def generate_agents_section(
     lines.append("")
     lines.append("| Agent | Kind | Model | Artifact |")
     lines.append("|-------|------|-------|----------|")
+
     for agent in roster_agents:
-        model = registry.model_for_tier(agent.model_tier, platform)
-        display_model = _display_model(model, platform)
-        artifact = f"`{agent.artifact_schema}`" if agent.artifact_schema else "—"
-        lines.append(f"| **{agent.name}** | {agent.kind} | {display_model} | {artifact} |")
-    lines.append("")
-    if "agent_definitions_note" in labels:
-        lines.append(labels["agent_definitions_note"])
-    else:
+        model = models.get(agent.slug, "not configured")
+
+        artifact = (
+            f"`{agent.artifact_schema}`"
+            if agent.artifact_schema
+            else "—"
+        )
+
         lines.append(
-            f"Agent definitions live in `{labels['agents_dir']}`. Each file is a "
-            f"`{labels['agent_file_ext']}` with YAML frontmatter declaring its "
-            f"`description`, `{labels['capability_field']}`, and `model`."
+            f"| **{agent.name}** | "
+            f"{agent.kind} | "
+            f"`{model}` | "
+            f"{artifact} |"
         )
 
     # --- Workflows ---
@@ -119,20 +122,6 @@ def generate_agents_section(
                 args = CAPABILITY_ARGS_MAP.get(cap.id, [])
                 resolution = f"`python3 {script} {' '.join(args)}`"
         lines.append(f"| `{cap.id}` | {cap.type} | {resolution} |")
-
-    # --- Model Tiers ---
-    lines.append("")
-    lines.append("### Model Tiers")
-    lines.append("")
-    tiers = registry.model_tiers.get("tiers", {})
-    for tier_num in sorted(tiers.keys(), key=lambda x: int(x)):
-        tier_data = tiers[tier_num]
-        model = tier_data.get("models", {}).get(platform, "?")
-        display_model = _display_model(model, platform)
-        lines.append(
-            f"- **Tier {tier_num}** — {tier_data.get('description', '')}: "
-            f"{tier_data.get('role', '')} ({display_model})"
-        )
 
     return "\n".join(lines) + "\n"
 

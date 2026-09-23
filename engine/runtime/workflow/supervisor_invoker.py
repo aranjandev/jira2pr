@@ -93,16 +93,12 @@ def invoke_supervisor(
             "Supervisor agent is not defined in runtime project"
         )
 
-    model = (
-        project.config
-        .get("models", {})
-        .get(str(supervisor_agent.model_tier), "")
-    )
+    model = project.model_for_agent("supervisor")
 
     if not model:
         raise ValueError(
             f"No model configured for supervisor tier "
-            f"{supervisor_agent.model_tier}"
+            f"{model}"
         )
 
     logger.debug(

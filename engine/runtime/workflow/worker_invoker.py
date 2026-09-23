@@ -245,22 +245,16 @@ def invoke_worker(
 
     worker = project.workers.get(state.worker)
 
-    model = (
-        project.config
-        .get("models", {})
-        .get(str(agent.model_tier), "")
-    )
-
+    model = project.model_for_agent(state.worker)
+    
     if not model:
         raise ValueError(
-            f"No model configured for tier {agent.model_tier} "
-            f"(worker '{state.worker}')"
+            f"No model configured for worker '{state.worker}'"
         )
 
     logger.debug(
-        "Worker '%s' uses model tier %s: %s",
+        "Worker '%s' uses model: %s",
         state.worker,
-        agent.model_tier,
         model,
     )
 
