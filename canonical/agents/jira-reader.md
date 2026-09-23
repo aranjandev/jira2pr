@@ -20,6 +20,8 @@ You may receive:
 
 Produce `requirements.md` conforming to `requirements-schema.md`.
 
+Output ONLY the structured requirements document. Do NOT include reasoning, analysis, preamble, or commentary. The artifact schema specifies the exact format and sections required.
+
 ## Principles
 
 - Preserve ticket fidelity.

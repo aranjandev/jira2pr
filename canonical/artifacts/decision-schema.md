@@ -1,5 +1,21 @@
 # Decision Schema
 
+## Output Format
+
+Output ONLY the structured markdown document defined below.
+
+Do NOT include:
+- Preamble or introduction
+- Reasoning or analysis
+- Agent conversation or commentary
+- Code blocks or examples unless specified in sections
+- Any text before the first section header
+- Any text after the last section
+
+Each section must appear exactly as specified. Missing sections are acceptable (mark "N/A" or omit), but do not add extra sections.
+
+---
+
 A decision document captures an important technical choice that should remain visible throughout the workflow.
 
 ## Question
