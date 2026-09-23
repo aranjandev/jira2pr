@@ -151,7 +151,7 @@ def create_github_pr(owner_repo: str, token: str, title: str, body: str,
     if base:
         payload["base"] = base
     if labels:
-        payload["labels"] = [l.strip() for l in labels.split(",") if l.strip()]
+        payload["labels"] = [label.strip() for label in labels.split(",") if label.strip()]
 
     status, resp = http_request(
         "POST",
@@ -409,29 +409,39 @@ def parse_args():
     while i < len(args):
         a = args[i]
         if a == "--title":
-            opts["title"] = args[i + 1]; i += 2
+            opts["title"] = args[i + 1]
+            i += 2
         elif a == "--body":
-            opts["body"] = args[i + 1]; i += 2
+            opts["body"] = args[i + 1]
+            i += 2
         elif a == "--body-file":
             path = args[i + 1]
             if not Path(path).is_file():
                 print(f"ERROR: Body file not found: {path}", file=sys.stderr)
                 sys.exit(1)
-            opts["body"] = Path(path).read_text(); i += 2
+            opts["body"] = Path(path).read_text()
+            i += 2
         elif a == "--base":
-            opts["base"] = args[i + 1]; i += 2
+            opts["base"] = args[i + 1]
+            i += 2
         elif a == "--labels":
-            opts["labels"] = args[i + 1]; i += 2
+            opts["labels"] = args[i + 1]
+            i += 2
         elif a == "--draft":
-            opts["draft"] = True; i += 1
+            opts["draft"] = True
+            i += 1
         elif a == "--undraft":
-            opts["undraft"] = True; i += 1
+            opts["undraft"] = True
+            i += 1
         elif a == "--pr-number":
-            opts["pr_number"] = args[i + 1]; i += 2
+            opts["pr_number"] = args[i + 1]
+            i += 2
         elif a == "--dry-run":
-            opts["dry_run"] = True; i += 1
+            opts["dry_run"] = True
+            i += 1
         elif a in ("-h", "--help"):
-            print(USAGE, end=""); sys.exit(0)
+            print(USAGE, end="")
+            sys.exit(0)
         else:
             print(f"ERROR: Unknown option: {a}", file=sys.stderr)
             sys.exit(1)
@@ -445,18 +455,22 @@ def validate(opts: dict):
     cmd = opts["command"]
     if cmd == "create":
         if not opts["title"]:
-            print("ERROR: --title is required for create", file=sys.stderr); sys.exit(1)
+            print("ERROR: --title is required for create", file=sys.stderr)
+            sys.exit(1)
         if not opts["body"]:
-            print("ERROR: --body or --body-file is required for create", file=sys.stderr); sys.exit(1)
+            print("ERROR: --body or --body-file is required for create", file=sys.stderr)
+            sys.exit(1)
     elif cmd == "update":
         if not opts["pr_number"]:
-            print("ERROR: --pr-number is required for update", file=sys.stderr); sys.exit(1)
+            print("ERROR: --pr-number is required for update", file=sys.stderr)
+            sys.exit(1)
         if not opts["body"] and not opts["undraft"] and not opts["title"]:
             print("ERROR: --body, --body-file, --title, or --undraft is required for update", file=sys.stderr)
             sys.exit(1)
     elif cmd == "fetch-body":
         if not opts["pr_number"]:
-            print("ERROR: --pr-number is required for fetch-body", file=sys.stderr); sys.exit(1)
+            print("ERROR: --pr-number is required for fetch-body", file=sys.stderr)
+            sys.exit(1)
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────

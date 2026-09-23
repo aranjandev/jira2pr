@@ -1,4 +1,4 @@
-.PHONY: help install init check run resume status list test
+.PHONY: help install init check run resume status list test lint
 
 PYTHON ?= python3
 ENGINE := $(CURDIR)/engine
@@ -32,3 +32,6 @@ list: ## List known workflows
 
 test: ## Run the full unit test suite
 	cd $(ENGINE) && $(PYTHON) -m pytest tests/ -q
+
+lint: ## Lint the code using ruff
+	$(PYTHON) -m ruff check $(ENGINE)

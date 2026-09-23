@@ -8,15 +8,12 @@ directory, so it survives a platform switch untouched.
 
 from __future__ import annotations
 from pathlib import Path
-import sys
 
 import yaml
 
 from assembler import __version__
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
-from assembler import writer
-from assembler import registry
 
 CORE_PREFIX = ".jira2pr"
 

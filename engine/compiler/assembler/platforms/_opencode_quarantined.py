@@ -244,7 +244,6 @@ class OpenCodeAssembler(PlatformAssembler):
 
     def _assemble_artifacts(self, registry: CanonicalRegistry, writer: FileWriter) -> None:
         artifacts_dir = Path(self.OPENCODE_PREFIX) / "artifacts"
-        registry_file = artifacts_dir / "REGISTRY.md"
         if writer.check_protected_dir(str(artifacts_dir)):
             writer.add_warning(
                 f"{artifacts_dir}/REGISTRY.md is agent-managed. "

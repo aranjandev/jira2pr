@@ -3,7 +3,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 SCRIPT = Path(__file__).parent.parent / "runtime/integrations/git.py"
 
