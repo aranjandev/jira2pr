@@ -49,6 +49,7 @@ class AiderAssembler(PlatformAssembler):
         self._assemble_aider_config(registry, writer)
         self._assemble_aider_cli_files(registry, writer)
         self._assemble_readme(registry, writer)
+        self._assemble_runtime_prompts(writer)
 
     # ------------------------------------------------------------------
     # Agent bodies (used as system prompts by runtime/workflow/worker_invoker.py)
@@ -148,3 +149,25 @@ class AiderAssembler(PlatformAssembler):
             return
         content = self.substitute(tpl_path.read_text())
         writer.put(f"{CORE_PREFIX}/README.md", content)
+
+
+    def _assemble_runtime_prompts(
+        self,
+        writer: FileWriter,
+    ) -> None:
+        src = (
+            self.runtime_root
+            / "backends"
+            / "prompts"
+            / "aider-artifact-worker.md"
+        )
+
+        if not src.is_file():
+            raise FileNotFoundError(
+                f"Aider artifact worker prompt not found: {src}"
+            )
+
+        writer.copy(
+            src,
+            f"{CORE_PREFIX}/runtime/backends/prompts/aider-artifact-worker.md",
+        )

@@ -138,22 +138,80 @@ class RuntimeProject:
             logger.warning(f"Agent not found: {slug}")
         return agent
 
-    def agent_body(self, slug: str) -> str:
+    def agent_path(self, slug: str) -> Path:
+        """Return the path to an agent definition."""
         path = self.core_dir / "agents" / f"{slug}.md"
-        logger.debug(f"Loading agent body from: {path}")
-        return path.read_text()
+
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Agent definition not found: {path}"
+            )
+
+        logger.debug(f"Agent definition for '{slug}': {path}")
+        return path
+
+
+    def agent_body(self, slug: str) -> str:
+        """Return the contents of an agent definition."""
+        return self.agent_path(slug).read_text()
+
+
+    def artifact_schema_path(self, filename: str) -> Path:
+        """Return the path to an artifact schema."""
+        path = self.core_dir / "artifacts" / filename
+
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Artifact schema not found: {path}"
+            )
+
+        logger.debug(f"Artifact schema '{filename}': {path}")
+        return path
+
+
+    def artifact_schema_body(self, filename: str) -> str:
+        """Return the contents of an artifact schema."""
+        return self.artifact_schema_path(filename).read_text()
+
 
     def artifacts_dir(self, ticket_key: str) -> Path:
+        """Return the runtime artifact directory for a work item."""
         path = self.core_dir / "artifacts" / ticket_key
         logger.debug(f"Artifacts directory for {ticket_key}: {path}")
         return path
 
-    def artifact_schema_body(self, filename: str) -> str:
-        path = self.core_dir / "artifacts" / filename
-        logger.debug(f"Loading artifact schema from: {path}")
-        return path.read_text()
+
+    def context_dir(self, ticket_key: str) -> Path:
+        """Return the runtime context directory for a work item."""
+        path = self.core_dir / "context" / ticket_key
+        logger.debug(f"Context directory for {ticket_key}: {path}")
+        return path
+
 
     def state_dir(self) -> Path:
+        """Return the workflow-state directory."""
         path = self.core_dir / "state"
         logger.debug(f"State directory: {path}")
         return path
+
+
+    def project_instructions_path(self) -> Path | None:
+        """Return repository-level project instructions when available.
+
+        AGENTS.md is the platform-neutral/default location used by the Aider
+        runtime. Copilot may instead use .github/copilot-instructions.md.
+        """
+        repo_root = self.core_dir.parent
+
+        candidates = [
+            repo_root / "AGENTS.md",
+            repo_root / ".github" / "copilot-instructions.md",
+        ]
+
+        for path in candidates:
+            if path.is_file():
+                logger.debug(f"Project instructions found: {path}")
+                return path
+
+        logger.debug("No project instructions found")
+        return None
