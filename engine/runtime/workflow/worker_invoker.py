@@ -186,35 +186,35 @@ def invoke_worker(
     backend: LLMBackend,
     context_strategy: ContextStrategy | None = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
-
     """Execute the worker assigned to a workflow state.
 
-    The workflow defines required artifact dependencies through ``consumes`` and
-    ``produces``. Runtime capabilities are resolved before invocation, and
-    ``ContextStrategy`` selects the final read-only context presented to the
-    backend.
+    The workflow defines mandatory artifact dependencies through ``consumes``
+    and expected outputs through ``produces``. Required runtime capabilities
+    are resolved before invocation, while ``ContextStrategy`` selects optional
+    execution context such as repository-level project instructions.
 
-    Artifact-producing workers use a file-oriented execution contract:
+    Artifact-producing workers use a file-oriented contract:
 
-    read-only context:
+      read-only context:
         - worker agent definition
         - output artifact schema
         - consumed workflow artifacts
         - materialized runtime context
-        - optional repository instructions selected by ContextStrategy
+        - optional context selected by ContextStrategy
 
-    editable output:
+      editable output:
         - exactly one artifact declared by ``state.produces``
 
-    The produced file is authoritative. Backend stdout is not treated as the
-    artifact content.
+    The backend is responsible for producing the requested output file.
+    The resulting filesystem artifact is authoritative; backend stdout is not
+    treated as artifact content.
 
     Workers with no produced artifact, currently primarily ``coder``, use the
     repository execution path instead. Their output is repository state rather
     than a workflow artifact.
 
     Returns:
-        A tuple of:
+        A tuple containing:
 
         produced_artifacts:
             Mapping of produced artifact filename to final file contents.
@@ -224,9 +224,10 @@ def invoke_worker(
             Structured metadata required by runtime actions. Empty when the
             worker declares no actions.
     """
-
     logger.info(
-        f"Invoking worker agent: {state.worker} for state: {state.name}"
+        "Invoking worker agent: %s for state: %s",
+        state.worker,
+        state.name,
     )
 
     if state.worker is None:
@@ -244,9 +245,11 @@ def invoke_worker(
 
     worker = project.workers.get(state.worker)
 
-    model = project.config.get(
-        "models", {}
-    ).get(str(agent.model_tier), "")
+    model = (
+        project.config
+        .get("models", {})
+        .get(str(agent.model_tier), "")
+    )
 
     if not model:
         raise ValueError(
@@ -255,17 +258,26 @@ def invoke_worker(
         )
 
     logger.debug(
-        f"Worker '{state.worker}' uses model tier "
-        f"{agent.model_tier}: {model}"
+        "Worker '%s' uses model tier %s: %s",
+        state.worker,
+        agent.model_tier,
+        model,
     )
 
+    repo_root = project.core_dir.parent
+
     artifacts_dir = project.artifacts_dir(ticket_key)
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    artifacts_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     # ------------------------------------------------------------------
-    # Resolve execution context
+    # Resolve worker context
     # ------------------------------------------------------------------
 
+    # Mandatory runtime capabilities such as jira.read or git.status
+    # are resolved first and materialized as files.
     runtime_context_files = _fetch_runtime_context(
         project,
         state.worker,
@@ -277,6 +289,16 @@ def invoke_worker(
         len(runtime_context_files),
     )
 
+    # ContextStrategy assembles:
+    #
+    #   mandatory:
+    #     agent definition
+    #     artifact schema
+    #     consumed workflow artifacts
+    #     runtime capability context
+    #
+    #   optional:
+    #     repository/project instructions and other execution context
     read_files = context_strategy.build_read_files(
         project=project,
         state=state,
@@ -297,9 +319,9 @@ def invoke_worker(
             f"  - {path}" for path in read_files
         ),
     )
-    
+
     # ------------------------------------------------------------------
-    # Artifact-producing workers
+    # Artifact-producing worker
     # ------------------------------------------------------------------
 
     if state.produces:
@@ -320,64 +342,85 @@ def invoke_worker(
         )
 
         logger.info(
-            f"Worker '{state.worker}' will produce: {output_path}"
+            "Worker '%s' will produce artifact: %s",
+            state.worker,
+            output_path,
         )
 
-        # Treat the filesystem as authoritative. Backends such as
-        # Aider directly edit the artifact rather than returning it
-        # through stdout.
-        if not output_path.is_file():
-            raise RuntimeError(
-                f"Worker '{state.worker}' did not produce "
-                f"expected artifact: {output_path}"
+        try:
+            # The backend owns physical artifact creation.
+            #
+            # For Aider this translates to:
+            #
+            #   --read agent.md
+            #   --read schema.md
+            #   --read consumed/context files
+            #   <output-file>
+            #
+            # The backend validates that the output file was actually
+            # produced and is non-empty.
+            backend.produce_artifact(
+                model=model,
+                read_files=read_files,
+                output_file=output_path,
+                repo_root=repo_root,
             )
 
-        artifact_content = output_path.read_text()
-
-        if not artifact_content.strip():
-            raise RuntimeError(
-                f"Worker '{state.worker}' produced an empty "
-                f"artifact: {output_path}"
+        except Exception as exc:
+            logger.exception(
+                "Artifact worker '%s' failed: %s",
+                state.worker,
+                exc,
             )
+            raise
+
+        # The backend guarantees that the artifact exists.
+        # The workflow layer now reads the authoritative result.
+        artifact_content = output_path.read_text(
+            encoding="utf-8"
+        )
 
         logger.info(
-            f"Produced artifact '{output_name}' "
-            f"({len(artifact_content)} characters)"
+            "Produced artifact '%s' (%d characters)",
+            output_name,
+            len(artifact_content),
         )
 
         produced = {
             output_name: artifact_content,
         }
 
-        # Artifact-producing workers should generally not need
-        # conversational action metadata. If actions are eventually
-        # required here, model them as a separate structured output
-        # rather than embedding metadata in the artifact.
+        # Artifact content and runtime action metadata are intentionally
+        # separate concerns. Do not embed control metadata inside artifacts.
         action_metadata: dict[str, str] = {}
 
         if worker and worker.actions:
             logger.warning(
-                f"Worker '{state.worker}' declares runtime actions "
-                "while also producing an artifact. Action metadata "
-                "should be handled separately from artifact content."
+                "Worker '%s' declares runtime actions while also producing "
+                "an artifact. Action metadata should be handled separately "
+                "from artifact content.",
+                state.worker,
             )
 
         return produced, action_metadata
 
     # ------------------------------------------------------------------
-    # Non-artifact workers
+    # Repository-editing worker
     # ------------------------------------------------------------------
     #
-    # Coder is the current primary example. Its output is repository
-    # state rather than a Markdown artifact.
+    # Coder is currently the primary worker whose output is repository
+    # state rather than a workflow artifact.
     #
-    # This remains a separate backend execution mode and should
-    # eventually become backend.edit_repository(...).
+    # TODO:
+    # Replace complete() with an explicit backend.edit_repository()
+    # operation. Context files should remain read-only, while only source
+    # and test files selected for the current implementation task should
+    # be editable.
     # ------------------------------------------------------------------
 
     logger.info(
-        f"Worker '{state.worker}' produces no artifact; "
-        "using repository execution mode"
+        "Worker '%s' produces no artifact; using repository execution mode",
+        state.worker,
     )
 
     system_prompt = project.agent_body(state.worker)
@@ -388,8 +431,6 @@ def invoke_worker(
         f"State: {state.name}",
     ]
 
-    # For backends that still use complete(), provide paths rather
-    # than duplicating entire file contents where possible.
     if read_files:
         invocation_context.append(
             "Read-only context files:\n"
@@ -405,18 +446,26 @@ def invoke_worker(
             model=model,
             files=read_files,
         )
+
     except Exception as exc:
         logger.exception(
-            f"Worker '{state.worker}' invocation failed: {exc}"
+            "Worker '%s' invocation failed: %s",
+            state.worker,
+            exc,
         )
         raise
+
+    # ------------------------------------------------------------------
+    # Runtime action metadata
+    # ------------------------------------------------------------------
 
     action_metadata: dict[str, str] = {}
 
     if worker and worker.actions:
         logger.debug(
-            f"Worker '{state.worker}' declares "
-            f"{len(worker.actions)} runtime action(s)"
+            "Worker '%s' declares %d runtime action(s)",
+            state.worker,
+            len(worker.actions),
         )
 
         try:
@@ -427,15 +476,17 @@ def invoke_worker(
             action_metadata = parse_pr_actions(response)
 
             logger.info(
-                "Parsed action metadata: %s",
+                "Parsed action metadata from '%s': %s",
+                state.worker,
                 list(action_metadata),
             )
 
         except Exception as exc:
             logger.exception(
-                f"Failed to parse action metadata: {exc}"
+                "Failed to parse action metadata from '%s': %s",
+                state.worker,
+                exc,
             )
             raise
 
     return {}, action_metadata
-

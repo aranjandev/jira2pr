@@ -153,9 +153,10 @@ class AiderBackend(LLMBackend):
             exist_ok=True,
         )
 
-        # Explicitly add the destination file to Aider's editable file set.
-        output_file.touch(exist_ok=True)
-
+        # The artifact must be produced by this invocation, not inherited
+        # from a previous attempt.
+        output_file.unlink(missing_ok=True)
+        
         argv = [
             "aider",
             "--model",
