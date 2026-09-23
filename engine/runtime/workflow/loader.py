@@ -30,6 +30,9 @@ from assembler.model import (
     WorkerBinding,
     WorkflowSpec,
 )
+from runtime.logging_config import get_logger
+
+logger = get_logger("workflow.loader")
 
 CORE_DIRNAME = ".jira2pr"
 
@@ -57,14 +60,22 @@ class RuntimeProject:
 
     @classmethod
     def load(cls, repo_root: Path) -> "RuntimeProject":
+        logger.info(f"Loading RuntimeProject from {repo_root}")
         core_dir = Path(repo_root).resolve() / CORE_DIRNAME
         if not core_dir.is_dir():
+            logger.error(f"{core_dir} not found")
             raise FileNotFoundError(
                 f"{core_dir} not found — run `jira2pr init --platform <copilot|aider>` first."
             )
 
+        logger.debug(f"Core directory found: {core_dir}")
         project = cls(core_dir=core_dir)
+
+        logger.debug("Loading configuration")
         project.config = load_yaml(core_dir / "config.yaml") or {}
+        logger.debug(f"Configuration loaded: {len(project.config)} top-level keys")
+
+        logger.debug("Parsing agents")
         for item in project.config.get("agents", []):
             project.agents.append(
                 AgentSpec(
@@ -76,38 +87,73 @@ class RuntimeProject:
                     artifact_schema=item.get("artifact_schema"),
                 )
             )
+        logger.info(f"Loaded {len(project.agents)} agents")
 
+        logger.debug("Parsing workflows")
         workflows_dir = core_dir / "workflows"
         project.workflows, project.warnings = parse_workflows_dir(workflows_dir, core_dir)
+        logger.info(f"Loaded {len(project.workflows)} workflows: {sorted(project.workflows.keys())}")
 
+        logger.debug("Parsing shared workflow definitions")
         shared_dir = workflows_dir / "shared"
         project.success_criteria = parse_success_criteria(shared_dir / "success-criteria.yaml")
+        logger.debug(f"Success criteria loaded: {len(project.success_criteria.criteria)} entries")
+
         project.workers = parse_workers(shared_dir / "workers.yaml")
+        logger.debug(f"Workers loaded: {len(project.workers)} entries")
+
         project.supervisor_contract = parse_supervisor_contract(shared_dir / "supervisor.yaml")
+        logger.debug("Supervisor contract loaded")
+
         project.execution_policy = parse_execution_policy(shared_dir / "execution-policy.yaml")
+        logger.debug(
+            f"Execution policy loaded: max_total_iterations={project.execution_policy.max_total_iterations}"
+        )
+
         project.capabilities = parse_capabilities(core_dir / "capabilities.yaml")
+        logger.debug(f"Capabilities loaded: {len(project.capabilities)} entries")
+
+        if project.warnings:
+            for warning in project.warnings:
+                logger.warning(f"Project warning: {warning}")
+
+        logger.info("RuntimeProject loaded successfully")
         return project
 
     def workflow(self, name: str) -> WorkflowSpec:
         try:
+            logger.debug(f"Loading workflow: {name}")
             return self.workflows[name]
         except KeyError as exc:
+            logger.error(f"Workflow not found: {name}")
             raise WorkflowNotFoundError(
                 f"Unknown workflow '{name}'. Available: {sorted(self.workflows)}"
             ) from exc
 
     def agent(self, slug: str) -> AgentSpec | None:
-        return next((a for a in self.agents if a.slug == slug), None)
+        agent = next((a for a in self.agents if a.slug == slug), None)
+        if agent:
+            logger.debug(f"Found agent: {slug}")
+        else:
+            logger.warning(f"Agent not found: {slug}")
+        return agent
 
     def agent_body(self, slug: str) -> str:
         path = self.core_dir / "agents" / f"{slug}.md"
+        logger.debug(f"Loading agent body from: {path}")
         return path.read_text()
 
     def artifacts_dir(self, ticket_key: str) -> Path:
-        return self.core_dir / "artifacts" / ticket_key
+        path = self.core_dir / "artifacts" / ticket_key
+        logger.debug(f"Artifacts directory for {ticket_key}: {path}")
+        return path
 
     def artifact_schema_body(self, filename: str) -> str:
-        return (self.core_dir / "artifacts" / filename).read_text()
+        path = self.core_dir / "artifacts" / filename
+        logger.debug(f"Loading artifact schema from: {path}")
+        return path.read_text()
 
     def state_dir(self) -> Path:
-        return self.core_dir / "state"
+        path = self.core_dir / "state"
+        logger.debug(f"State directory: {path}")
+        return path

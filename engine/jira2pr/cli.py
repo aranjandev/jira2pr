@@ -12,6 +12,7 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from assembler.platforms import PLATFORMS
 from assembler.registry import CanonicalRegistry
 from assembler.validator import CanonicalValidationError, validate
 from assembler.writer import FileWriter
+from runtime.logging_config import setup_logging, get_logger
+
+logger = get_logger("cli")
 
 
 def _default_canonical_dir() -> Path:
@@ -89,51 +93,99 @@ def cmd_run(args: argparse.Namespace) -> int:
     from runtime.workflow.executor import WorkflowExecutor
     from runtime.workflow.loader import RuntimeProject
 
-    project = RuntimeProject.load(Path(args.target_dir))
-    executor = WorkflowExecutor(project, _make_backend(args.backend))
-    state = executor.start(args.workflow, args.ticket)
-    _print_state(state)
-    return 0 if state.status == "completed" else 1
+    target_dir = Path(args.target_dir).resolve()
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+
+    logger.info(f"Starting workflow: {args.workflow} for ticket: {args.ticket}")
+    logger.debug(f"Target directory: {target_dir}")
+    logger.debug(f"Backend: {args.backend}")
+
+    try:
+        project = RuntimeProject.load(target_dir)
+        logger.info("Project loaded successfully")
+        executor = WorkflowExecutor(project, _make_backend(args.backend))
+        logger.info(f"Executor initialized with backend: {args.backend}")
+        state = executor.start(args.workflow, args.ticket)
+        logger.info(f"Workflow completed with status: {state.status}")
+        _print_state(state)
+        return 0 if state.status == "completed" else 1
+    except Exception as e:
+        logger.exception(f"Workflow failed with exception: {e}")
+        return 1
 
 
 def cmd_resume(args: argparse.Namespace) -> int:
     from runtime.workflow.executor import WorkflowExecutor
     from runtime.workflow.loader import RuntimeProject
 
-    project = RuntimeProject.load(Path(args.target_dir))
-    executor = WorkflowExecutor(project, _make_backend(args.backend))
-    state = executor.resume(args.ticket)
-    _print_state(state)
-    return 0 if state.status == "completed" else 1
+    target_dir = Path(args.target_dir).resolve()
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+
+    logger.info(f"Resuming workflow for ticket: {args.ticket}")
+    logger.debug(f"Target directory: {target_dir}")
+    logger.debug(f"Backend: {args.backend}")
+
+    try:
+        project = RuntimeProject.load(target_dir)
+        logger.info("Project loaded successfully")
+        executor = WorkflowExecutor(project, _make_backend(args.backend))
+        logger.info(f"Executor initialized with backend: {args.backend}")
+        state = executor.resume(args.ticket)
+        logger.info(f"Workflow resumed and completed with status: {state.status}")
+        _print_state(state)
+        return 0 if state.status == "completed" else 1
+    except Exception as e:
+        logger.exception(f"Workflow resume failed with exception: {e}")
+        return 1
 
 
 def cmd_status(args: argparse.Namespace) -> int:
     from runtime.workflow.loader import RuntimeProject
     from runtime.workflow.state_manager import StateManager
 
-    project = RuntimeProject.load(Path(args.target_dir))
-    state = StateManager(project.core_dir).load(args.ticket)
-    _print_state(state)
-    return 0
+    target_dir = Path(args.target_dir).resolve()
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+
+    logger.info(f"Getting status for ticket: {args.ticket}")
+
+    try:
+        project = RuntimeProject.load(target_dir)
+        state = StateManager(project.core_dir).load(args.ticket)
+        logger.info(f"Status retrieved: {state.status}")
+        _print_state(state)
+        return 0
+    except Exception as e:
+        logger.exception(f"Failed to get status: {e}")
+        return 1
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     from runtime.workflow.loader import RuntimeProject
     from runtime.workflow.state_manager import TICKET_KEY_RE
 
-    project = RuntimeProject.load(Path(args.target_dir))
-    state_dir = project.state_dir()
-    tickets = (
-        sorted(p.stem for p in state_dir.glob("*.yaml") if TICKET_KEY_RE.match(p.stem))
-        if state_dir.is_dir()
-        else []
-    )
-    if not tickets:
-        print("No workflows found.")
+    target_dir = Path(args.target_dir).resolve()
+    setup_logging(log_dir=target_dir / ".jira2pr" / "logs")
+
+    logger.info("Listing all known workflows")
+
+    try:
+        project = RuntimeProject.load(target_dir)
+        state_dir = project.state_dir()
+        tickets = (
+            sorted(p.stem for p in state_dir.glob("*.yaml") if TICKET_KEY_RE.match(p.stem))
+            if state_dir.is_dir()
+            else []
+        )
+        logger.info(f"Found {len(tickets)} workflow(s)")
+        if not tickets:
+            print("No workflows found.")
+            return 0
+        for ticket in tickets:
+            print(ticket)
         return 0
-    for ticket in tickets:
-        print(ticket)
-    return 0
+    except Exception as e:
+        logger.exception(f"Failed to list workflows: {e}")
+        return 1
 
 
 def _print_state(state) -> None:
