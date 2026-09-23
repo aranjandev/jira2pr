@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from assembler.model import ExecutionPolicy
     from assembler.registry import CanonicalRegistry
 
+from assembler.model import CAPABILITY_HANDLER_SCRIPT_MAP, CAPABILITY_ARGS_MAP
+
 
 def substitute_vars(text: str, variables: dict[str, str]) -> str:
     """Replace ``{{KEY}}`` placeholders in *text* with values from *variables*.
@@ -51,27 +53,6 @@ COPILOT_AGENTS_SECTION_LABELS: dict[str, str] = {
     "capability_field": "tools",
 }
 
-CAPABILITY_HANDLER_SCRIPT_MAP = {
-    "jira": ".jira2pr/runtime/integrations/jira.py",
-    "git": ".jira2pr/runtime/integrations/git.py",
-    "github": ".jira2pr/runtime/integrations/github.py",
-}
-
-CAPABILITY_ARGS_MAP = {
-    "jira.read": ["<ticket_key_or_url>"],
-
-    "git.status": ["status"],
-    "git.commit": ["commit", "<message>"],
-    "git.push": ["push"],
-
-    "pr.update": [
-        "update",
-        "--pr-number",
-        "<pr_number>",
-        "--body-file",
-        "<body_file>",
-    ],
-}
 
 def generate_agents_section(
     registry: "CanonicalRegistry",

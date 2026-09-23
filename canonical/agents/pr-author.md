@@ -27,7 +27,31 @@ You may receive:
 
 ## Output
 
-Produce `pr-description.md` conforming to `pr-schema.md`.
+Produce `pr-description.md` conforming to `pr-schema.md`, followed by a
+trailing metadata block with action parameters.
+
+## Action Metadata Block
+
+You MUST end your response with a trailing fenced metadata block that specifies
+how to commit and publish the PR:
+
+```
+```pr-actions
+commit_message: "<conventional commit message>"
+pr_title: "<short PR title>" (omit when updating existing PR)
+```
+```
+
+Example:
+
+```
+```pr-actions
+commit_message: "feat(auth): add login flow"
+pr_title: "Add login flow"
+```
+```
+
+When updating an existing PR (provided via state context), omit `pr_title`.
 
 ## Responsibilities
 
@@ -36,6 +60,8 @@ Produce `pr-description.md` conforming to `pr-schema.md`.
 - Follow repository commit conventions.
 - Preserve traceability to the originating work item.
 - Use review findings when describing risks, limitations, or follow-up work.
+- Provide precise, conventional commit messages.
+- Provide an accurate, concise PR title.
 
 ## Constraints
 

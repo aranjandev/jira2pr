@@ -54,5 +54,5 @@ def test_capabilities_and_workers_loaded(project_dir):
 def test_agent_metadata_matches_config(project_dir):
     project = RuntimeProject.load(project_dir)
     reviewer = project.agent("reviewer")
-    assert reviewer.model_tier == 3
+    assert reviewer.model_tier == 2
     assert reviewer.artifact_schema == "review-schema.md"

@@ -44,6 +44,7 @@ workers:
     actions:
       - git.commit
       - git.push
+      - pr.create
       - pr.update
 
   supervisor:

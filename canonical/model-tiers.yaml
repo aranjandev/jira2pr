@@ -20,22 +20,26 @@ tiers:
     role: "Simple, deterministic tasks"
     models:
       copilot: "GPT-5.6 Luna (copilot)"
-      aider: "github_copilot/gpt-5-mini"
+      aider: "ollama_chat/qwen3-coder:30b"
+      # aider: "github_copilot/gpt-5-mini"
   1:
     description: "Light reasoning — templated output, formulaic writing"
     role: "Formulaic tasks"
     models:
       copilot: "Claude Haiku 4.5 (copilot)"
       aider: "ollama_chat/qwen3-coder:30b"
+      # aider: "ollama_chat/qwen3-coder:30b"
   2:
     description: "Strong reasoning — planning, code generation, implementation"
     role: "Implementation and orchestration"
     models:
       copilot: "GPT-5.6 Terra (copilot)"
-      aider: "github_copilot/claude-haiku-4.5"
+      aider: "ollama_chat/qwen3-coder:30b"
+      # aider: "github_copilot/claude-haiku-4.5"
   3:
     description: "Highest capability — deep analysis, risk assessment, complex review"
     role: "Thorough review and analysis"
     models:
       copilot: "Claude Sonnet 5 (copilot)"
-      aider: "github_copilot/claude-sonnet-5"
+      aider: "ollama_chat/qwen3-coder:30b"
+      # aider: "github_copilot/claude-sonnet-5"

@@ -91,6 +91,8 @@ states:
       - plan.md
       - review.md
       - decisions/*.md
+    produces:
+      - pr-description.md
     updates:
       - workflow-state.md
     validation:

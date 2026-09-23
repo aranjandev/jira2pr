@@ -92,3 +92,27 @@ class ExecutionPolicy:
     terminal_success_state: str
     terminal_escalated_state: str
     max_total_iterations: int
+
+
+# Capability handler resolution maps (single source of truth for both compiler and runtime)
+
+CAPABILITY_HANDLER_SCRIPT_MAP = {
+    "jira": ".jira2pr/runtime/integrations/jira.py",
+    "git": ".jira2pr/runtime/integrations/git.py",
+    "github": ".jira2pr/runtime/integrations/github.py",
+}
+
+CAPABILITY_ARGS_MAP = {
+    "jira.read": ["<ticket_key_or_url>"],
+    "git.status": ["status"],
+    "git.commit": ["commit", "<message>"],
+    "git.push": ["push"],
+    "pr.create": ["create", "--title", "<title>", "--body-file", "<body_file>"],
+    "pr.update": [
+        "update",
+        "--pr-number",
+        "<pr_number>",
+        "--body-file",
+        "<body_file>",
+    ],
+}

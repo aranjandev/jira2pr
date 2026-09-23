@@ -23,7 +23,7 @@ def test_agent_model_tier_and_kind():
     reg = _load()
     orchestrator = reg.agent("orchestrator")
     assert orchestrator.kind == "orchestrator"
-    assert orchestrator.model_tier == 2
+    assert orchestrator.model_tier == 0
     supervisor = reg.agent("supervisor")
     assert supervisor.kind == "supervisor"
     assert supervisor.model_tier == 2
@@ -60,7 +60,7 @@ def test_success_criteria_loaded():
 def test_workers_loaded():
     reg = _load()
     assert reg.workers["planner"].can_delegate == ("researcher",)
-    assert reg.workers["pr-author"].actions == ("git.commit", "git.push", "pr.update")
+    assert reg.workers["pr-author"].actions == ("git.commit", "git.push", "pr.create", "pr.update")
     assert reg.workers["orchestrator"].can_delegate == (
         "jira-reader", "researcher", "planner", "coder", "reviewer", "pr-author", "supervisor",
     )
@@ -78,7 +78,7 @@ def test_capabilities_loaded_with_bindings():
 
 def test_model_for_tier_all_platforms():
     reg = _load()
-    assert "GPT-5 mini" in reg.model_for_tier(0, "copilot")
+    assert "GPT-5.6 Luna (copilot)" in reg.model_for_tier(0, "copilot")
     assert reg.model_for_tier(2, "aider")
     assert "unknown for" in reg.model_for_tier(2, "nonexistent-platform")
 

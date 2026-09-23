@@ -15,6 +15,7 @@ from runtime.workflow.loader import RuntimeProject
 from runtime.workflow.state_manager import StateManager, WorkflowState
 from runtime.workflow.supervisor_invoker import invoke_supervisor
 from runtime.workflow.worker_invoker import invoke_worker
+from runtime.workflow.action_executor import execute_actions, ActionExecutionError
 
 logger = get_logger("workflow.executor")
 
@@ -89,7 +90,7 @@ class WorkflowExecutor:
 
             try:
                 logger.debug(f"Invoking worker for state: {current.name}")
-                produced = invoke_worker(
+                produced, action_metadata = invoke_worker(
                     self._project, workflow, current, ticket_key, self._backend
                 )
                 logger.debug(f"Worker produced artifacts: {list(produced.keys())}")
@@ -117,6 +118,26 @@ class WorkflowExecutor:
                 elif outcome == "escalate":
                     logger.warning(f"Escalating due to supervisor feedback: {result.get('reason', 'N/A')}")
                     state.record_escalation(current.name, result.get("reason", ""))
+
+                # Execute action capabilities if the worker has actions and passed validation
+                worker_binding = self._project.workers.get(current.worker)
+                if worker_binding and worker_binding.actions and outcome == "success":
+                    logger.info(f"Executing actions for state: {current.name}")
+                    try:
+                        action_result = execute_actions(
+                            self._project,
+                            current,
+                            ticket_key,
+                            action_metadata,
+                            self._project.core_dir.parent,
+                            state.metadata.get("pr_number"),
+                        )
+                        # Merge action results into state metadata
+                        state.metadata.update(action_result)
+                        logger.info(f"Actions completed: {action_result}")
+                    except ActionExecutionError as e:
+                        logger.exception(f"Action execution failed: {e}")
+                        raise
 
                 state.current_state = transition.next_state
                 logger.info(f"Transitioning to next state: {transition.next_state}")

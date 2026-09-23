@@ -85,7 +85,7 @@ def test_no_skills_or_model_tiers_json(tmp_path):
 def test_model_baked_into_frontmatter(tmp_path):
     out = _assemble(tmp_path)
     content = (out / ".github/agents/jira-reader.agent.md").read_text()
-    assert "GPT-5 mini" in content
+    assert "GPT-5.6 Luna (copilot)" in content
 
 
 def test_idempotent(tmp_path):

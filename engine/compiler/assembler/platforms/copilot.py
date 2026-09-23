@@ -6,7 +6,7 @@ from pathlib import Path
 
 from assembler.base import PlatformAssembler
 from assembler.core_package import assemble_core
-from assembler.model import AgentSpec, WorkflowSpec
+from assembler.model import AgentSpec, WorkflowSpec, CAPABILITY_HANDLER_SCRIPT_MAP, CAPABILITY_ARGS_MAP
 from assembler.registry import CanonicalRegistry
 from assembler.templates import execution_policy_vars, generate_agents_section
 from assembler.writer import FileWriter
@@ -17,28 +17,6 @@ COPILOT_NATIVE_TOOL_MAP: dict[str, str] = {
     "web.search": "fetch",
     "diff.read": "search",
     "test.results": "search",
-}
-
-CAPABILITY_HANDLER_SCRIPT_MAP = {
-    "jira": ".jira2pr/runtime/integrations/jira.py",
-    "git": ".jira2pr/runtime/integrations/git.py",
-    "github": ".jira2pr/runtime/integrations/github.py",
-}
-
-CAPABILITY_ARGS_MAP = {
-    "jira.read": ["<ticket_key_or_url>"],
-
-    "git.status": ["status"],
-    "git.commit": ["commit", "<message>"],
-    "git.push": ["push"],
-
-    "pr.update": [
-        "update",
-        "--pr-number",
-        "<pr_number>",
-        "--body-file",
-        "<body_file>",
-    ],
 }
 
 class CopilotAssembler(PlatformAssembler):

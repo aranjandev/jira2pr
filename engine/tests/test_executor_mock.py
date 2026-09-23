@@ -3,6 +3,7 @@
 """
 
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -28,13 +29,58 @@ def project(tmp_path):
     return RuntimeProject.load(tmp_path)
 
 
+def _mock_subprocess_run(*args, **kwargs):
+    """Mock subprocess.run for capability resolution (jira.read, git.status)."""
+    result = MagicMock()
+    result.returncode = 0
+    argv = args[0] if args else []
+    
+    # Detect which capability is being called based on argv
+    if any("jira.py" in str(arg) for arg in argv):
+        # Mock jira.read response
+        result.stdout = "key: PROJ-1\nsummary: Test ticket\n"
+    elif any("git.py" in str(arg) for arg in argv):
+        # Mock git.status response
+        result.stdout = "On branch main\nNothing to commit\n"
+    elif any("github.py" in str(arg) for arg in argv):
+        # Mock github operations response
+        result.stdout = "PR_URL=https://github.com/test/test/pull/1\nPR_NUMBER=1\n"
+    else:
+        result.stdout = ""
+    
+    result.stderr = ""
+    return result
+
+
 def _always_succeed(system_prompt, user_prompt, model):
     if "Required success criteria" in user_prompt:
         return SUCCESS_YAML
+    # For pr-author (submit state), include pr-actions block
+    if "State: submit" in user_prompt:
+        return """# Pull Request Description
+
+This is a test PR description.
+
+## Changes
+- Added feature X
+- Fixed bug Y
+
+```pr-actions
+commit_message: "feat: add feature and fix bug"
+pr_title: "Test Feature"
+```
+"""
     return "# Content\n\nGenerated.\n"
 
 
-def test_happy_path_reaches_done(project):
+@pytest.fixture
+def mock_subprocess():
+    """Patch subprocess.run to prevent real subprocess calls."""
+    with patch("runtime.workflow.worker_invoker.subprocess.run", side_effect=_mock_subprocess_run):
+        yield
+
+
+def test_happy_path_reaches_done(project, mock_subprocess):
     backend = MockBackend(responder=_always_succeed)
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-1")
     assert state.status == "completed"
@@ -42,10 +88,10 @@ def test_happy_path_reaches_done(project):
     assert [h["state"] for h in state.history] == [
         "jira-ingest", "plan", "implement", "review", "submit",
     ]
-    assert set(state.artifacts) == {"requirements.md", "plan.md", "review.md"}
+    assert set(state.artifacts) == {"requirements.md", "plan.md", "review.md", "pr-description.md"}
 
 
-def test_retry_then_escalation(project):
+def test_retry_then_escalation(project, mock_subprocess):
     def responder(system_prompt, user_prompt, model):
         if "State: implement" in user_prompt and "Required success criteria" in user_prompt:
             return "outcome: failure\nreason: broken\nfeedback: fix\nviolations: [tests_pass]\n"
@@ -62,7 +108,7 @@ def test_retry_then_escalation(project):
     assert [h["outcome"] for h in state.history] == ["success", "success", "failure", "failure"]
 
 
-def test_global_iteration_cap_forces_escalation_on_unbounded_rework_loop(project):
+def test_global_iteration_cap_forces_escalation_on_unbounded_rework_loop(project, mock_subprocess):
     # implement always succeeds but review always rejects it: implement's own
     # retry_counts never increments (it only fails on its OWN failure), and
     # review's failure routes to implement (not itself), so no per-state cap
@@ -84,7 +130,7 @@ def test_global_iteration_cap_forces_escalation_on_unbounded_rework_loop(project
     assert "iteration cap" in state.escalations[-1]["reason"]
 
 
-def test_malformed_supervisor_output_treated_as_failure(project):
+def test_malformed_supervisor_output_treated_as_failure(project, mock_subprocess):
     backend = MockBackend()  # default response is not valid supervisor YAML
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-3")
     # jira-ingest's default max_attempts is 1 -> immediate escalation on first failure.
@@ -92,7 +138,7 @@ def test_malformed_supervisor_output_treated_as_failure(project):
     assert state.history[0]["outcome"] == "failure"
 
 
-def test_resume_continues_from_saved_state(project):
+def test_resume_continues_from_saved_state(project, mock_subprocess):
     sm = StateManager(project.core_dir)
     sm.create("PROJ-4", "feature", "implement")
     seeded = sm.load("PROJ-4")

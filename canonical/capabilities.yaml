@@ -76,3 +76,10 @@ capabilities:
     binding:
       kind: script
       handler: github
+
+  pr.create:
+    description: Create a new pull request
+    type: action
+    binding:
+      kind: script
+      handler: github
