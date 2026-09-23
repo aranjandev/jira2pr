@@ -35,3 +35,20 @@ class LLMBackend(ABC):
 
         Returns nothing.
         """
+
+    @abstractmethod
+    def produce_structured(
+        self,
+        *,
+        model:str,
+        read_files: list[Path],
+        output_file: Path,
+        repo_root: Path,
+    ) -> None:
+        """Run a structured artifact-producing worker.
+
+        The backend must use *read_files* as read-only context and produce
+        *output_file* as the authoritative result.
+
+        Returns nothing.
+        """

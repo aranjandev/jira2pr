@@ -112,7 +112,6 @@ class AiderBackend(LLMBackend):
     # ------------------------------------------------------------------
     # Artifact-producing invocation
     # ------------------------------------------------------------------
-
     def produce_artifact(
         self,
         *,
@@ -216,10 +215,132 @@ class AiderBackend(LLMBackend):
 
         return None
 
+
+    # ------------------------------------------------------------------
+    # Structured-output invocation
+    # ------------------------------------------------------------------
+    def produce_structured(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        output_file: Path,
+        repo_root: Path,
+    ) -> None:
+        """Run a structured-output Aider invocation.
+
+        All context is supplied through ``--read`` files. The output file is the
+        only editable file.
+
+        The filesystem output, not Aider stdout, is authoritative. The resulting
+        file must contain valid JSON.
+        """
+        import json
+
+        repo_root = repo_root.resolve()
+        output_file = output_file.resolve()
+
+        logger.info(
+            "Invoking Aider structured worker: model=%s, read_files=%d, output=%s",
+            model,
+            len(read_files),
+            output_file,
+        )
+
+        # Validate input context before launching Aider.
+        for path in read_files:
+            if not path.is_file():
+                raise AiderInvocationError(
+                    f"Read-only context file does not exist: {path}"
+                )
+
+        message_file = self._structured_worker_prompt(repo_root)
+
+        output_file.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # Structured output must be produced by this invocation.
+        output_file.unlink(missing_ok=True)
+
+        argv = [
+            "aider",
+            "--model",
+            model,
+        ]
+
+        for path in read_files:
+            argv.extend(
+                [
+                    "--read",
+                    str(path.resolve()),
+                ]
+            )
+
+        argv.extend(self._base_args)
+
+        argv.extend(
+            [
+                "--message-file",
+                str(message_file),
+                str(output_file),
+            ]
+        )
+
+        logger.info(
+            "Running: %s",
+            " ".join(argv),
+        )
+
+        result = self._run(
+            argv,
+            model=model,
+            cwd=repo_root,
+        )
+
+        if not output_file.is_file():
+            self._log_diagnostics(result)
+
+            raise AiderInvocationError(
+                f"Aider did not produce expected structured output: "
+                f"{output_file}"
+            )
+
+        content = output_file.read_text(
+            encoding="utf-8"
+        ).strip()
+
+        if not content:
+            self._log_diagnostics(result)
+
+            raise AiderInvocationError(
+                f"Aider produced empty structured output: "
+                f"{output_file}"
+            )
+
+        # Validate transport-level structure here.
+        #
+        # Semantic validation such as allowed outcomes and required fields
+        # belongs to supervisor_invoker / SupervisorContract.
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as exc:
+            self._log_diagnostics(result)
+
+            raise AiderInvocationError(
+                f"Aider produced invalid JSON in {output_file}: {exc}"
+            ) from exc
+
+        logger.info(
+            "Aider produced structured output %s (%d chars)",
+            output_file,
+            len(content),
+        )
+
     # ------------------------------------------------------------------
     # Runtime prompt lookup
     # ------------------------------------------------------------------
-
     def _artifact_worker_prompt(
         self,
         repo_root: Path,
@@ -240,10 +361,29 @@ class AiderBackend(LLMBackend):
 
         return path
 
+    def _structured_worker_prompt(
+        self,
+        repo_root: Path,
+    ) -> Path:
+        path = (
+            repo_root
+            / ".jira2pr"
+            / "runtime"
+            / "backends"
+            / "prompts"
+            / "aider-supervisor.md"
+        )
+
+        if not path.is_file():
+            raise AiderInvocationError(
+                f"Aider supervisor prompt not found: {path}"
+            )
+
+        return path
+
     # ------------------------------------------------------------------
     # Subprocess handling
     # ------------------------------------------------------------------
-
     def _run(
         self,
         argv: list[str],

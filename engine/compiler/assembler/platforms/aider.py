@@ -155,19 +155,20 @@ class AiderAssembler(PlatformAssembler):
         self,
         writer: FileWriter,
     ) -> None:
-        src = (
+        """Copy all Aider runtime prompts into the generated package."""
+
+        src_dir = (
             self.runtime_root
             / "backends"
             / "prompts"
-            / "aider-artifact-worker.md"
         )
 
-        if not src.is_file():
+        if not src_dir.is_dir():
             raise FileNotFoundError(
-                f"Aider artifact worker prompt not found: {src}"
+                f"Aider runtime prompts directory not found: {src_dir}"
             )
 
-        writer.copy(
-            src,
-            f"{CORE_PREFIX}/runtime/backends/prompts/aider-artifact-worker.md",
+        writer.copy_tree(
+            src_dir,
+            f"{CORE_PREFIX}/runtime/backends/prompts",
         )

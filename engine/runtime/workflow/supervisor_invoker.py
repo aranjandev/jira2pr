@@ -1,23 +1,41 @@
-"""Invokes the supervisor to evaluate a worker's output against success criteria."""
+"""Invoke the supervisor to evaluate a completed workflow state.
+
+The supervisor evaluates worker output against the success criteria assigned
+to the current state and produces a structured JSON decision.
+
+Supervisor output is materialized as a file under
+``.jira2pr/context/<TICKET-KEY>/``. Backend stdout is diagnostic only.
+
+The supervisor determines an outcome:
+
+    success | failure | escalate
+
+The workflow definition, not the supervisor, determines which state that
+outcome transitions to.
+"""
 
 from __future__ import annotations
 
-import re
+import json
+from pathlib import Path
 
-import yaml
-
-from assembler.model import StateSpec, WorkflowSpec
+from compiler.assembler.model import StateSpec, WorkflowSpec
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow.loader import RuntimeProject
 
+
 logger = get_logger("workflow.supervisor_invoker")
 
-VALID_OUTCOMES = {"success", "failure", "escalate"}
+VALID_OUTCOMES = {
+    "success",
+    "failure",
+    "escalate",
+}
 
 
 class SupervisorOutputError(Exception):
-    """Raised internally when the supervisor's response cannot be parsed."""
+    """Raised when supervisor output violates the expected contract."""
 
 
 def invoke_supervisor(
@@ -28,88 +46,322 @@ def invoke_supervisor(
     produced: dict[str, str],
     backend: LLMBackend,
 ) -> dict:
-    """Return ``{"outcome", "reason", "feedback", "violations"}``.
+    """Evaluate a completed workflow state and return its supervisor decision.
 
-    Malformed supervisor output is treated as ``outcome="failure"`` (a broken
-    evaluator response is itself evidence the state didn't succeed) rather
-    than raised, so it can never crash the run outright.
+    The supervisor receives:
+
+    - supervisor agent instructions
+    - supervisor contract
+    - success criteria
+    - artifacts produced by the worker
+
+    The backend writes the supervisor decision to a JSON file. The resulting
+    file is authoritative; backend stdout is not parsed.
+
+    Returns:
+        A dictionary containing:
+
+        {
+            "outcome": "success|failure|escalate",
+            "reason": "...",
+            "feedback": "...",
+            "violations": [...]
+        }
+
+    Malformed supervisor output is converted to ``outcome="failure"`` so a
+    broken evaluator response cannot accidentally advance the workflow.
     """
-    logger.info(f"Invoking supervisor for state: {state.name}, workflow: {workflow.name}")
-    logger.debug(f"Produced artifacts: {list(produced.keys())}")
+    logger.info(
+        "Invoking supervisor for state: %s, workflow: %s",
+        state.name,
+        workflow.name,
+    )
+
+    logger.debug(
+        "Produced artifacts: %s",
+        list(produced),
+    )
+
+    # ------------------------------------------------------------------
+    # Resolve supervisor
+    # ------------------------------------------------------------------
 
     supervisor_agent = project.agent("supervisor")
-    system_prompt = project.agent_body("supervisor")
 
-    required_labels: tuple[str, ...] = ()
-    if state.success_criteria:
-        required_labels = project.success_criteria.criteria.get(state.success_criteria, ())
-        logger.debug(f"Success criteria: {required_labels}")
-
-    produced_text = "\n\n".join(f"### {name}\n\n{content}" for name, content in produced.items())
-    user_prompt = (
-        f"Workflow: {workflow.name}\n"
-        f"State: {state.name}\n"
-        f"Required success criteria labels: {', '.join(required_labels) or '(none)'}\n\n"
-        f"Worker output:\n\n{produced_text}"
-    )
+    if supervisor_agent is None:
+        raise ValueError(
+            "Supervisor agent is not defined in runtime project"
+        )
 
     model = (
-        project.config.get("models", {}).get(str(supervisor_agent.model_tier), "")
-        if supervisor_agent
-        else ""
+        project.config
+        .get("models", {})
+        .get(str(supervisor_agent.model_tier), "")
     )
-    logger.debug(f"Supervisor model: {model}")
-    logger.info("Calling backend to evaluate worker output")
+
+    if not model:
+        raise ValueError(
+            f"No model configured for supervisor tier "
+            f"{supervisor_agent.model_tier}"
+        )
+
+    logger.debug(
+        "Supervisor model: %s",
+        model,
+    )
+
+    # ------------------------------------------------------------------
+    # Resolve success criteria
+    # ------------------------------------------------------------------
+
+    required_labels: tuple[str, ...] = ()
+
+    if state.success_criteria:
+        required_labels = (
+            project.success_criteria.criteria.get(
+                state.success_criteria,
+                (),
+            )
+        )
+
+    logger.debug(
+        "Supervisor success criteria: %s",
+        required_labels,
+    )
+
+    # ------------------------------------------------------------------
+    # Build supervisor read-only context
+    # ------------------------------------------------------------------
+
+    read_files: list[Path] = []
+
+    # Supervisor behavior.
+    read_files.append(
+        project.agent_path("supervisor")
+    )
+
+    # Canonical supervisor contract.
+    supervisor_contract_path = (
+        project.core_dir
+        / "workflows"
+        / "shared"
+        / "supervisor.yaml"
+    )
+
+    if not supervisor_contract_path.is_file():
+        raise FileNotFoundError(
+            f"Supervisor contract not found: "
+            f"{supervisor_contract_path}"
+        )
+
+    read_files.append(
+        supervisor_contract_path
+    )
+
+    # Success-criteria definitions.
+    success_criteria_path = (
+        project.core_dir
+        / "workflows"
+        / "shared"
+        / "success-criteria.yaml"
+    )
+
+    if not success_criteria_path.is_file():
+        raise FileNotFoundError(
+            f"Success criteria not found: "
+            f"{success_criteria_path}"
+        )
+
+    read_files.append(
+        success_criteria_path
+    )
+
+    # The state-specific worker artifacts being evaluated.
+    artifacts_dir = project.artifacts_dir(ticket_key)
+
+    for artifact_name in produced:
+        artifact_path = artifacts_dir / artifact_name
+
+        if not artifact_path.is_file():
+            raise FileNotFoundError(
+                f"Produced artifact not found for supervisor "
+                f"evaluation: {artifact_path}"
+            )
+
+        read_files.append(
+            artifact_path
+        )
+
+    # Remove duplicates while preserving order.
+    read_files = list(
+        dict.fromkeys(read_files)
+    )
+
+    logger.info(
+        "Supervisor context contains %d read-only file(s)",
+        len(read_files),
+    )
+
+    logger.debug(
+        "Supervisor read-only context:\n%s",
+        "\n".join(
+            f"  - {path}"
+            for path in read_files
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Structured output destination
+    # ------------------------------------------------------------------
+
+    context_dir = project.context_dir(ticket_key)
+
+    context_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    decision_path = (
+        context_dir
+        / f"supervisor-{state.name}-decision.json"
+    )
+
+    logger.info(
+        "Supervisor decision output: %s",
+        decision_path,
+    )
+
+    # ------------------------------------------------------------------
+    # Invoke supervisor
+    # ------------------------------------------------------------------
 
     try:
-        raw = backend.complete(system_prompt, user_prompt, model=model)
-        logger.debug(f"Supervisor response length: {len(raw)} characters")
-    except Exception as e:
-        logger.exception(f"Supervisor backend call failed: {e}")
+        backend.produce_structured(
+            model=model,
+            read_files=read_files,
+            output_file=decision_path,
+            repo_root=project.core_dir.parent,
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "Supervisor backend call failed: %s",
+            exc,
+        )
         raise
 
+    # ------------------------------------------------------------------
+    # Parse and validate decision
+    # ------------------------------------------------------------------
+
     try:
-        result = _parse_outcome(raw)
-        logger.info(f"Supervisor evaluation result: outcome={result['outcome']}")
-        logger.debug(f"Supervisor reason: {result.get('reason', 'N/A')}")
-        return result
+        result = _parse_outcome_file(
+            decision_path,
+        )
+
     except SupervisorOutputError as exc:
-        logger.warning(f"Supervisor output parsing failed: {exc}, treating as failure")
+        logger.warning(
+            "Supervisor output validation failed: %s; "
+            "treating state as failure",
+            exc,
+        )
+
         return {
             "outcome": "failure",
-            "reason": f"Supervisor output could not be parsed: {exc}",
-            "feedback": "Return only valid YAML matching the documented output schema.",
+            "reason": (
+                "Supervisor output could not be validated: "
+                f"{exc}"
+            ),
+            "feedback": (
+                "Return valid JSON matching the supervisor "
+                "output contract."
+            ),
             "violations": list(required_labels),
         }
 
+    logger.info(
+        "Supervisor evaluation result: outcome=%s",
+        result["outcome"],
+    )
 
-def _parse_outcome(raw: str) -> dict:
-    text = _extract_yaml_block(raw)
+    logger.debug(
+        "Supervisor reason: %s",
+        result["reason"],
+    )
+
+    return result
+
+
+def _parse_outcome_file(
+    path: Path,
+) -> dict:
+    """Parse and validate a supervisor decision file."""
+
+    if not path.is_file():
+        raise SupervisorOutputError(
+            f"decision file does not exist: {path}"
+        )
+
+    text = path.read_text(
+        encoding="utf-8"
+    ).strip()
+
+    if not text:
+        raise SupervisorOutputError(
+            "decision file is empty"
+        )
+
     try:
-        data = yaml.safe_load(text)
-        logger.debug("Supervisor YAML parsed successfully")
-    except yaml.YAMLError as exc:
-        logger.error(f"YAML parsing error: {exc}")
-        raise SupervisorOutputError(str(exc)) from exc
+        data = json.loads(text)
+
+    except json.JSONDecodeError as exc:
+        raise SupervisorOutputError(
+            f"invalid JSON: {exc}"
+        ) from exc
 
     if not isinstance(data, dict):
-        logger.error(f"Expected YAML dict, got {type(data).__name__}")
-        raise SupervisorOutputError("expected a YAML mapping")
+        raise SupervisorOutputError(
+            "expected a JSON object"
+        )
 
     outcome = data.get("outcome")
-    if outcome not in VALID_OUTCOMES:
-        logger.error(f"Invalid outcome value: {outcome!r}, expected one of {VALID_OUTCOMES}")
-        raise SupervisorOutputError(f"invalid outcome: {outcome!r}")
 
-    logger.debug(f"Parsed outcome: {outcome}")
+    if outcome not in VALID_OUTCOMES:
+        raise SupervisorOutputError(
+            f"invalid outcome {outcome!r}; "
+            f"expected one of {sorted(VALID_OUTCOMES)}"
+        )
+
+    reason = data.get("reason", "")
+    feedback = data.get("feedback", "")
+    violations = data.get("violations", [])
+
+    if not isinstance(reason, str):
+        raise SupervisorOutputError(
+            "'reason' must be a string"
+        )
+
+    if not isinstance(feedback, str):
+        raise SupervisorOutputError(
+            "'feedback' must be a string"
+        )
+
+    if not isinstance(violations, list):
+        raise SupervisorOutputError(
+            "'violations' must be a list"
+        )
+
+    if not all(
+        isinstance(item, str)
+        for item in violations
+    ):
+        raise SupervisorOutputError(
+            "'violations' entries must be strings"
+        )
+
     return {
         "outcome": outcome,
-        "reason": data.get("reason", ""),
-        "feedback": data.get("feedback", ""),
-        "violations": list(data.get("violations") or []),
+        "reason": reason,
+        "feedback": feedback,
+        "violations": violations,
     }
-
-
-def _extract_yaml_block(raw: str) -> str:
-    match = re.search(r"```(?:ya?ml)?\s*\n(.*?)```", raw, re.DOTALL)
-    return match.group(1) if match else raw
