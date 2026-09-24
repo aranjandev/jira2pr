@@ -1,9 +1,11 @@
-Execute the task defined by the provided agent instructions.
+Perform only the role defined by the provided agent instructions.
 
-Use the provided read-only files as context and follow the provided artifact schema.
+The only allowed deliverable for this invocation is the designated editable artifact file.
 
-Write the complete final result to the designated editable artifact file.
+Use the read-only files as input context.
 
-Do not modify read-only files.
-Do not create unrelated files.
-Do not include conversational commentary outside the artifact.
+Write the requested artifact to the editable file, then stop.
+
+Do not perform any work described by the artifact.
+DO NOT IMPLEMENT THE PLAN.
+DO NOT MODIFY SOURCE CODE, TEST, OR CONFIGURATION.
