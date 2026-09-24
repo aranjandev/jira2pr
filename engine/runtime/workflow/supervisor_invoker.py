@@ -1,17 +1,30 @@
-"""Invoke the supervisor to evaluate a completed workflow state.
+"""Evaluate completed workflow states using the supervisor agent.
 
-The supervisor evaluates worker output against the success criteria assigned
-to the current state and produces a structured JSON decision.
+The supervisor receives only the evidence relevant to the current state:
 
-Supervisor output is materialized as a file under
-``.jira2pr/context/<TICKET-KEY>/``. Backend stdout is diagnostic only.
+- supervisor behavior
+- supervisor output contract
+- state-specific evaluation context
+- artifacts consumed by the state
+- artifacts produced by the state
 
-The supervisor determines an outcome:
+The runtime resolves the state's success criteria before invocation and
+materializes them into a small JSON context file. The full
+``success-criteria.yaml`` is intentionally not provided to the supervisor,
+which prevents criteria belonging to other workflow states from influencing
+the evaluation.
+
+Supervisor output is materialized as JSON under::
+
+    .jira2pr/context/<TICKET-KEY>/
+
+Backend stdout is diagnostic only.
+
+The supervisor determines only the outcome:
 
     success | failure | escalate
 
-The workflow definition, not the supervisor, determines which state that
-outcome transitions to.
+The workflow definition determines how that outcome maps to the next state.
 """
 
 from __future__ import annotations
@@ -46,21 +59,21 @@ def invoke_supervisor(
     produced: dict[str, str],
     backend: LLMBackend,
 ) -> dict:
-    """Evaluate a completed workflow state and return its supervisor decision.
+    """Evaluate a completed workflow state.
 
-    The supervisor receives:
+    Supervisor context consists of:
 
     - supervisor agent instructions
-    - supervisor contract
-    - success criteria
-    - artifacts produced by the worker
+    - supervisor output contract
+    - current workflow/state/worker information
+    - success criteria for this state only
+    - artifacts consumed by this state
+    - artifacts produced by this state
 
-    The backend writes the supervisor decision to a JSON file. The resulting
-    file is authoritative; backend stdout is not parsed.
+    The backend writes the decision to a JSON file. The filesystem result is
+    authoritative; backend stdout is never parsed as supervisor output.
 
     Returns:
-        A dictionary containing:
-
         {
             "outcome": "success|failure|escalate",
             "reason": "...",
@@ -68,9 +81,10 @@ def invoke_supervisor(
             "violations": [...]
         }
 
-    Malformed supervisor output is converted to ``outcome="failure"`` so a
-    broken evaluator response cannot accidentally advance the workflow.
+    Invalid supervisor output is converted to ``failure`` so malformed
+    evaluator output can never advance the workflow.
     """
+
     logger.info(
         "Invoking supervisor for state: %s, workflow: %s",
         state.name,
@@ -83,7 +97,7 @@ def invoke_supervisor(
     )
 
     # ------------------------------------------------------------------
-    # Resolve supervisor
+    # Resolve supervisor and model
     # ------------------------------------------------------------------
 
     supervisor_agent = project.agent("supervisor")
@@ -95,19 +109,13 @@ def invoke_supervisor(
 
     model = project.model_for_agent("supervisor")
 
-    if not model:
-        raise ValueError(
-            f"No model configured for supervisor tier "
-            f"{model}"
-        )
-
     logger.debug(
         "Supervisor model: %s",
         model,
     )
 
     # ------------------------------------------------------------------
-    # Resolve success criteria
+    # Resolve success criteria for this state only
     # ------------------------------------------------------------------
 
     required_labels: tuple[str, ...] = ()
@@ -121,28 +129,77 @@ def invoke_supervisor(
         )
 
     logger.debug(
-        "Supervisor success criteria: %s",
+        "Supervisor success criteria '%s': %s",
+        state.success_criteria,
         required_labels,
+    )
+
+    # ------------------------------------------------------------------
+    # Runtime directories
+    # ------------------------------------------------------------------
+
+    artifacts_dir = project.artifacts_dir(ticket_key)
+
+    context_dir = project.context_dir(ticket_key)
+    context_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Materialize state-specific supervisor context
+    # ------------------------------------------------------------------
+
+    evaluation_context_path = (
+        context_dir
+        / f"supervisor-{state.name}-context.json"
+    )
+
+    evaluation_context = {
+        "workflow": workflow.name,
+        "state": state.name,
+        "worker": state.worker,
+        "success_criteria_key": state.success_criteria,
+        "success_criteria": list(required_labels),
+    }
+
+    evaluation_context_path.write_text(
+        json.dumps(
+            evaluation_context,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    logger.debug(
+        "Supervisor evaluation context written to: %s",
+        evaluation_context_path,
     )
 
     # ------------------------------------------------------------------
     # Build supervisor read-only context
     # ------------------------------------------------------------------
 
-    read_files: list[Path] = []
+    read_files: list[Path] = [
+        # How the supervisor behaves.
+        project.agent_path("supervisor"),
 
-    # Supervisor behavior.
-    read_files.append(
-        project.agent_path("supervisor")
-    )
+        # Supervisor I/O contract.
+        (
+            project.core_dir
+            / "workflows"
+            / "shared"
+            / "supervisor.yaml"
+        ),
 
-    # Canonical supervisor contract.
-    supervisor_contract_path = (
-        project.core_dir
-        / "workflows"
-        / "shared"
-        / "supervisor.yaml"
-    )
+        # Current state and only its resolved success criteria.
+        evaluation_context_path,
+    ]
+
+    # Validate the supervisor contract explicitly so a packaging error is
+    # reported clearly before invoking the backend.
+    supervisor_contract_path = read_files[1]
 
     if not supervisor_contract_path.is_file():
         raise FileNotFoundError(
@@ -150,47 +207,67 @@ def invoke_supervisor(
             f"{supervisor_contract_path}"
         )
 
-    read_files.append(
-        supervisor_contract_path
+    # ------------------------------------------------------------------
+    # Add artifacts consumed by this state
+    # ------------------------------------------------------------------
+    #
+    # The supervisor needs the inputs used by the worker in order to assess
+    # criteria such as "requirements_covered".
+    #
+    # Example for the plan state:
+    #
+    #   requirements.md
+    #   decisions/*.md
+    #   plan.md
+    #
+    # Without requirements.md, the supervisor cannot determine whether the
+    # plan actually covers the requirements.
+    # ------------------------------------------------------------------
+
+    consumed_files = _resolve_artifact_files(
+        artifacts_dir,
+        state.consumes,
     )
 
-    # Success-criteria definitions.
-    success_criteria_path = (
-        project.core_dir
-        / "workflows"
-        / "shared"
-        / "success-criteria.yaml"
+    read_files.extend(consumed_files)
+
+    logger.debug(
+        "Supervisor received %d consumed artifact(s)",
+        len(consumed_files),
     )
 
-    if not success_criteria_path.is_file():
-        raise FileNotFoundError(
-            f"Success criteria not found: "
-            f"{success_criteria_path}"
-        )
+    # ------------------------------------------------------------------
+    # Add artifacts produced by this state
+    # ------------------------------------------------------------------
 
-    read_files.append(
-        success_criteria_path
-    )
-
-    # The state-specific worker artifacts being evaluated.
-    artifacts_dir = project.artifacts_dir(ticket_key)
+    produced_files: list[Path] = []
 
     for artifact_name in produced:
-        artifact_path = artifacts_dir / artifact_name
+        artifact_path = (
+            artifacts_dir
+            / artifact_name
+        )
 
         if not artifact_path.is_file():
             raise FileNotFoundError(
-                f"Produced artifact not found for supervisor "
+                "Produced artifact not found for supervisor "
                 f"evaluation: {artifact_path}"
             )
 
-        read_files.append(
+        produced_files.append(
             artifact_path
         )
 
-    # Remove duplicates while preserving order.
-    read_files = list(
-        dict.fromkeys(read_files)
+    read_files.extend(produced_files)
+
+    logger.debug(
+        "Supervisor received %d produced artifact(s)",
+        len(produced_files),
+    )
+
+    # Remove duplicate paths while preserving order.
+    read_files = _deduplicate_paths(
+        read_files
     )
 
     logger.info(
@@ -209,13 +286,6 @@ def invoke_supervisor(
     # ------------------------------------------------------------------
     # Structured output destination
     # ------------------------------------------------------------------
-
-    context_dir = project.context_dir(ticket_key)
-
-    context_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     decision_path = (
         context_dir
@@ -288,6 +358,55 @@ def invoke_supervisor(
     return result
 
 
+def _resolve_artifact_files(
+    artifacts_dir: Path,
+    patterns: tuple[str, ...],
+) -> list[Path]:
+    """Resolve workflow artifact names/globs into concrete files."""
+
+    paths: list[Path] = []
+
+    for pattern in patterns:
+        if "*" in pattern:
+            if artifacts_dir.is_dir():
+                paths.extend(
+                    path
+                    for path in sorted(
+                        artifacts_dir.glob(pattern)
+                    )
+                    if path.is_file()
+                )
+
+            continue
+
+        path = artifacts_dir / pattern
+
+        if path.is_file():
+            paths.append(path)
+
+    return paths
+
+
+def _deduplicate_paths(
+    paths: list[Path],
+) -> list[Path]:
+    """Remove duplicate paths while preserving order."""
+
+    seen: set[Path] = set()
+    result: list[Path] = []
+
+    for path in paths:
+        resolved = path.resolve()
+
+        if resolved in seen:
+            continue
+
+        seen.add(resolved)
+        result.append(path)
+
+    return result
+
+
 def _parse_outcome_file(
     path: Path,
 ) -> dict:
@@ -328,9 +447,20 @@ def _parse_outcome_file(
             f"expected one of {sorted(VALID_OUTCOMES)}"
         )
 
-    reason = data.get("reason", "")
-    feedback = data.get("feedback", "")
-    violations = data.get("violations", [])
+    reason = data.get(
+        "reason",
+        "",
+    )
+
+    feedback = data.get(
+        "feedback",
+        "",
+    )
+
+    violations = data.get(
+        "violations",
+        [],
+    )
 
     if not isinstance(reason, str):
         raise SupervisorOutputError(
