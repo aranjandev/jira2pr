@@ -2,9 +2,9 @@
 
 models:
   jira-reader: github_copilot/gpt-5-mini
-  researcher: ollama_chat/gemma3:12b
-  planner: github_copilot/gpt-5-mini
+  researcher: github_copilot/gpt-5-mini
+  planner: ollama_chat/deepseek-r1:32b
   coder: ollama_chat/qwen3-coder:30b
-  reviewer: github_copilot/gpt-5-mini
+  reviewer: ollama_chat/deepseek-r1:32b
   pr-author: github_copilot/gpt-5-mini
-  supervisor: github_copilot/gpt-5-mini
+  supervisor: ollama_chat/deepseek-r1:32b
