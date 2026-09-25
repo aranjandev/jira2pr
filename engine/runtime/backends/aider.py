@@ -339,6 +339,119 @@ class AiderBackend(LLMBackend):
         )
 
     # ------------------------------------------------------------------
+    # Repository-editing invocation
+    # ------------------------------------------------------------------
+
+    def edit_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+    ) -> None:
+        """Run a repository-editing worker through Aider.
+
+        ``read_files`` provide immutable workflow context such as the coder
+        instructions, requirements, implementation plan, and project instructions.
+
+        ``edit_files`` are the repository source or test files that Aider is
+        explicitly allowed to modify.
+
+        Repository state is the authoritative output of this invocation.
+        Aider stdout is diagnostic only.
+        """
+        repo_root = repo_root.resolve()
+
+        logger.info(
+            "Invoking Aider repository worker: model=%s, read_files=%d, edit_files=%d",
+            model,
+            len(read_files),
+            len(edit_files),
+        )
+
+        # Validate read-only context before launching Aider.
+        for path in read_files:
+            if not path.is_file():
+                raise AiderInvocationError(
+                    f"Read-only context file does not exist: {path}"
+                )
+
+        if not edit_files:
+            raise AiderInvocationError(
+                "Repository worker has no editable files"
+            )
+
+        # Existing files must exist. New files are allowed as long as their
+        # parent directory exists or can be created.
+        for path in edit_files:
+            resolved = path.resolve()
+
+            try:
+                resolved.relative_to(repo_root)
+            except ValueError as exc:
+                raise AiderInvocationError(
+                    f"Editable file is outside repository root: {path}"
+                ) from exc
+
+            resolved.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+        message_file = self._coder_worker_prompt(repo_root)
+
+        argv = [
+            "aider",
+            "--model",
+            model,
+        ]
+
+        # Workflow artifacts and instructions are context only.
+        for path in read_files:
+            argv.extend(
+                [
+                    "--read",
+                    str(path.resolve()),
+                ]
+            )
+
+        argv.extend(self._base_args)
+
+        argv.extend(
+            [
+                "--message-file",
+                str(message_file),
+            ]
+        )
+
+        # Positional files are editable by Aider.
+        argv.extend(
+            str(path.resolve())
+            for path in edit_files
+        )
+
+        logger.info(
+            "Running Aider repository worker with %d editable file(s)",
+            len(edit_files),
+        )
+
+        logger.debug(
+            "Running: %s",
+            " ".join(argv),
+        )
+
+        self._run(
+            argv,
+            model=model,
+            cwd=repo_root,
+        )
+
+        logger.info(
+            "Aider repository worker completed successfully"
+        )
+
+    # ------------------------------------------------------------------
     # Runtime prompt lookup
     # ------------------------------------------------------------------
     def _artifact_worker_prompt(
@@ -377,6 +490,28 @@ class AiderBackend(LLMBackend):
         if not path.is_file():
             raise AiderInvocationError(
                 f"Aider supervisor prompt not found: {path}"
+            )
+
+        return path
+
+    def _coder_worker_prompt(
+        self,
+        repo_root: Path,
+    ) -> Path:
+        """Return the Aider execution prompt for repository-editing workers."""
+
+        path = (
+            repo_root
+            / ".jira2pr"
+            / "runtime"
+            / "backends"
+            / "prompts"
+            / "aider-coder-worker.md"
+        )
+
+        if not path.is_file():
+            raise AiderInvocationError(
+                f"Aider coder worker prompt not found: {path}"
             )
 
         return path

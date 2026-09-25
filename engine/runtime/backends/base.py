@@ -52,3 +52,19 @@ class LLMBackend(ABC):
 
         Returns nothing.
         """
+
+    @abstractmethod
+    def edit_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+    ) -> None:
+        """Perform repository edits using supplied workflow context.
+
+        ``read_files`` are immutable context.
+
+        ``edit_files`` are the source/test files the backend may modify.
+        """

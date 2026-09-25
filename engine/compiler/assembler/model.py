@@ -91,7 +91,25 @@ class ExecutionPolicy:
     terminal_success_state: str
     terminal_escalated_state: str
     max_total_iterations: int
+    
 
+@dataclass(frozen=True)
+class PlanTask:
+    id: str
+    file_path: str
+    edit_mode: str
+    instructions: str
+    dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlanSpec:
+    version: int
+    summary: str
+    tasks: tuple[PlanTask, ...]
+    tests: tuple[str, ...]
+    constraints: tuple[str, ...]
+    out_of_scope: tuple[str, ...]
 
 # Capability handler resolution maps (single source of truth for both compiler and runtime)
 
