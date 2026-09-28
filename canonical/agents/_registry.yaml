@@ -58,7 +58,7 @@ agents:
   - slug: planner
     name: planner
     kind: worker
-    artifact_schema: plan-schema.md
+    artifact_schema: plan.schema.yaml
     description: >
       Produces deterministic implementation plans from requirements,
       repository context, and project constraints.

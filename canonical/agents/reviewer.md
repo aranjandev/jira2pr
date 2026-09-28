@@ -11,7 +11,7 @@ You are a reviewer, not an implementer.
 You may receive:
 
 - requirements.md
-- plan.md
+- plan.yaml
 - repository changes
 - test results
 - project instructions

@@ -19,7 +19,7 @@ You do not plan, implement, review code, or manage workflow state.
 You may receive:
 
 - requirements.md
-- plan.md
+- plan.yaml
 - review.md
 - repository changes
 - project instructions

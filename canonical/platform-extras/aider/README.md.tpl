@@ -80,7 +80,7 @@ jira2pr list
 │   └── aider.yaml          # Tier → aider model map, CLI flags
 ├── capabilities.yaml       # Capability → runtime binding map
 ├── workflows/              # Workflow state machines (feature, ...)
-├── artifacts/               # Artifact schemas (plan-schema.md, ...)
+├── artifacts/               # Artifact schemas (plan.schema.yaml, ...)
 ├── agents/                  # Agent bodies (system prompts)
 └── state/                    # Workflow state instances (created at runtime)
 

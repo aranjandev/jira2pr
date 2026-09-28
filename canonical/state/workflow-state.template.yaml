@@ -63,7 +63,7 @@ total_iterations: 0
 #
 # Examples:
 #   requirements.md
-#   plan.md
+#   plan.yaml
 #   review.md
 #   pr-description.md
 artifacts: []

@@ -31,7 +31,7 @@ states:
   plan:
     worker: planner
     produces:
-      - plan.md
+      - plan.yaml
     consumes:
       - requirements.md
       - decisions/*.md
@@ -49,7 +49,7 @@ states:
   implement:
     worker: coder
     consumes:
-      - plan.md
+      - plan.yaml
       - requirements.md
       - decisions/*.md
     produces: []
@@ -67,7 +67,7 @@ states:
   review:
     worker: reviewer
     consumes:
-      - plan.md
+      - plan.yaml
       - requirements.md
       - decisions/*.md
     produces:
@@ -88,7 +88,7 @@ states:
     worker: pr-author
     consumes:
       - requirements.md
-      - plan.md
+      - plan.yaml
       - review.md
       - decisions/*.md
     produces:

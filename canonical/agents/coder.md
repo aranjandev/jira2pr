@@ -12,7 +12,7 @@ You do not create plans, review code, or make workflow decisions.
 
 You may receive:
 
-- plan.md
+- plan.yaml
 - requirements.md
 - repository context
 - project instructions

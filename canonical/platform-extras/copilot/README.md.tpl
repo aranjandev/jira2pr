@@ -163,7 +163,7 @@ model assignments per agent.
 ├── config.yaml                      # Resolved platform + model config
 ├── capabilities.yaml                # Capability → runtime binding map
 ├── workflows/                       # Workflow state machines (feature, ...)
-├── artifacts/                       # Artifact schemas (plan-schema.md, ...)
+├── artifacts/                       # Artifact schemas (plan.schema.yaml, ...)
 └── state/                           # Workflow state instances (created at runtime)
 
 {{AGENTS_DIR}}/                      # Copilot-specific UX shell

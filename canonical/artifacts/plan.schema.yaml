@@ -1,50 +1,72 @@
-# plan-schema.yaml
+# Jira2PR Plan Schema
+#
+# The planner must produce plan.yaml using this structure.
+#
+# Rules:
+# - Output must be valid YAML.
+# - Include only files required to satisfy the requirements.
+# - Every task operates on exactly one repository file.
+# - Tasks must be ordered by dependency.
+# - Task IDs must be unique.
+# - file_path values must be relative to the repository root.
+# - edit_mode must be one of: create, modify, delete.
+# - dependencies contains task IDs that must complete before this task.
+# - Use [] when a list has no entries.
+# - Do not add fields that are not defined by this schema.
 
 version: 1
 
-summary: >
-  Extend deck-board-analysis to process multiple CSV files and produce
-  one combined parquet output.
+# Concise description of the implementation approach.
+summary: ""
 
+# Ordered implementation units.
 tasks:
 
   - id: T1
-    file_path: tools/deck_board_analysis/main.py
+
+    # Path relative to the repository root.
+    file_path: ""
+
+    # One of: create | modify | delete
     edit_mode: modify
-    instructions: >
-      Normalize cfg.input.dataset_csv so both a single string and a list
-      of paths are accepted. Iterate over the normalized paths, load each
-      CSV, and combine the resulting rows before downstream processing.
+
+    # Concrete instructions for the coder.
+    # Describe WHAT must change and relevant constraints.
+    # Do not include unrelated refactoring or optional improvements.
+    instructions: ""
+
+    # IDs of tasks that must complete before this task.
+    # Use [] when there are no dependencies.
     dependencies: []
 
   - id: T2
-    file_path: tools/deck_board_analysis/processor.py
-    edit_mode: modify
-    instructions: >
-      Update processing as required to operate on the combined dataset
-      while preserving existing single-CSV behavior.
-    dependencies:
-      - T1
 
-  - id: T3
-    file_path: tests/tools/test_deck_board_analysis.py
-    edit_mode: modify
-    instructions: >
-      Add coverage for multiple CSV inputs, single CSV backward
-      compatibility, and invalid input handling.
-    dependencies:
-      - T1
-      - T2
+    # Path relative to the repository root.
+    file_path: ""
 
+    # One of: create | modify | delete
+    edit_mode: create
+
+    # Concrete instructions for the coder.
+    # Describe WHAT must change and relevant constraints.
+    # Do not include unrelated refactoring or optional improvements.
+    instructions: ""
+
+    # IDs of tasks that must complete before this task.
+    # Use [] when there are no dependencies.
+    dependencies: []
+  
+# Behavior that must be verified after implementation.
+#
+# These describe required test scenarios, not necessarily shell commands.
+# Test execution commands come from project instructions.
 tests:
-  - description: Single CSV configuration remains supported.
-  - description: Multiple CSV files are combined correctly.
-  - description: Invalid or missing CSV input fails according to existing error-handling conventions.
 
-constraints:
-  - Preserve backward compatibility.
-  - Do not introduce new dependencies.
-  - Do not perform unrelated refactoring.
+  - description: ""
 
-out_of_scope:
-  - Changes to unrelated analysis tools.
+# Implementation constraints that apply across tasks.
+constraints: []
+
+# Explicitly excluded work.
+# Use [] when there is nothing to declare.
+out_of_scope: []

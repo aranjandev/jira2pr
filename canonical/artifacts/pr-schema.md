@@ -37,7 +37,7 @@ Summarize the requirements implemented.
 Reference:
 
 - requirements.md
-- plan.md
+- plan.yaml
 
 Group related requirements where appropriate.
 

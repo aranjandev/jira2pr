@@ -218,7 +218,7 @@ def invoke_supervisor(
     #
     #   requirements.md
     #   decisions/*.md
-    #   plan.md
+    #   plan.yaml
     #
     # Without requirements.md, the supervisor cannot determine whether the
     # plan actually covers the requirements.

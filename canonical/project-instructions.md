@@ -67,7 +67,7 @@ Workflow execution depends on the platform:
 
 The **supervisor** has the same role in both models: evaluate completed worker output against the state's success criteria and return `success`, `failure`, or `escalate`. It does not define the next state; transitions come from the workflow YAML.
 
-Workflow state is the single source of truth and lives at `{{CORE_DIR}}/state/<TICKET-KEY>.yaml`, independent of the execution platform. Artifacts produced during execution (`requirements.md`, `plan.md`, `review.md`, etc.) are stored under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
+Workflow state is the single source of truth and lives at `{{CORE_DIR}}/state/<TICKET-KEY>.yaml`, independent of the execution platform. Artifacts produced during execution (`requirements.md`, `plan.yaml`, `review.md`, etc.) are stored under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
 
 **Example feature lifecycle:** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). The selected workflow YAML is authoritative. Retries are bounded per state; exhausting retries escalates rather than looping indefinitely.
 
