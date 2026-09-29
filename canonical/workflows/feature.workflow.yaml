@@ -50,7 +50,6 @@ states:
     worker: coder
     consumes:
       - plan.yaml
-      - requirements.md
       - decisions/*.md
     produces: []
     updates:

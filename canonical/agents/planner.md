@@ -143,5 +143,5 @@ out_of_scope: []
 
 Before returning the plan:
 
-- Ensure the output is valid YAML conforming to `plan.schema.yaml`.
-- Do not include Markdown fences or commentary outside the YAML document.
+- ENSURE THE OUTPUT IS VALID YAML conforming to `plan.schema.yaml`.
+- DO NOT INCLUDE MARKDOWN FENCES or commentary outside the YAML document.

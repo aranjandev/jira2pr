@@ -91,7 +91,11 @@ class WorkflowExecutor:
             try:
                 logger.debug(f"Invoking worker for state: {current.name}")
                 produced, action_metadata = invoke_worker(
-                    self._project, workflow, current, ticket_key, self._backend
+                    project=self._project, 
+                    workflow=workflow,
+                    state=current,
+                    ticket_key=ticket_key,
+                    backend=self._backend
                 )
                 logger.debug(f"Worker produced artifacts: {list(produced.keys())}")
 

@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+import json
 from compiler.assembler.model import (
     AgentSpec,
     StateSpec,
@@ -51,7 +52,18 @@ from runtime.workflow.loader import (
 
 logger = get_logger("workflow.worker_invoker")
 
+from dataclasses import dataclass
 
+
+@dataclass(frozen=True)
+class RepositoryTask:
+    id: str
+    file_path: str
+    edit_mode: str
+    instructions: str
+    dependencies: tuple[str, ...]
+
+   
 def _fetch_runtime_context(
     project: RuntimeProject,
     worker_slug: str,
@@ -490,71 +502,464 @@ def _resolve_repository_edit_files(
 
     return edit_files
 
+# def _invoke_repository_worker(
+#     project: RuntimeProject,
+#     state: StateSpec,
+#     ticket_key: str,
+#     worker_slug: str,
+#     model: str,
+#     read_files: list[Path],
+#     repo_root: Path,
+#     backend: LLMBackend,
+# ) -> tuple[dict[str, str], dict[str, str]]:
+#     """Execute a worker whose output is repository state.
+
+#     Repository-editing workers do not produce workflow artifacts. Editable
+#     repository files are derived from the validated implementation plan and
+#     passed explicitly to the backend.
+
+#     The coder is currently the primary repository-editing worker.
+#     """
+
+#     logger.info(
+#         "Worker '%s' produces no artifact; using repository editing mode",
+#         worker_slug,
+#     )
+
+#     edit_files = _resolve_repository_edit_files(
+#         project=project,
+#         ticket_key=ticket_key,
+#         repo_root=repo_root,
+#     )
+
+#     logger.info(
+#         "Worker '%s' may edit %d repository file(s)",
+#         worker_slug,
+#         len(edit_files),
+#     )
+
+#     logger.debug(
+#         "Editable repository files for '%s':\n%s",
+#         worker_slug,
+#         "\n".join(
+#             f"  - {path}"
+#             for path in edit_files
+#         ),
+#     )
+
+#     try:
+#         backend.edit_repository(
+#             model=model,
+#             read_files=read_files,
+#             edit_files=edit_files,
+#             repo_root=repo_root,
+#         )
+
+#     except Exception as exc:
+#         logger.exception(
+#             "Repository worker '%s' failed: %s",
+#             worker_slug,
+#             exc,
+#         )
+#         raise
+
+#     # Repository-editing workers currently produce no workflow artifact.
+#     produced: dict[str, str] = {}
+
+#     # Runtime action metadata can be added later when repository workers
+#     # require post-execution actions.
+#     action_metadata: dict[str, str] = {}
+
+#     return produced, action_metadata
+
+def _load_repository_tasks(
+    project: RuntimeProject,
+    ticket_key: str,
+) -> list[RepositoryTask]:
+    """Load repository-editing tasks from the validated plan.yaml."""
+
+    plan_path = (
+        project.artifacts_dir(ticket_key)
+        / "plan.yaml"
+    )
+
+    if not plan_path.is_file():
+        raise FileNotFoundError(
+            f"Repository worker requires plan.yaml: {plan_path}"
+        )
+
+    try:
+        data = yaml.safe_load(
+            plan_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            f"Unable to parse plan.yaml: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            "plan.yaml must contain a YAML mapping"
+        )
+
+    raw_tasks = data.get("tasks")
+
+    if not isinstance(raw_tasks, list) or not raw_tasks:
+        raise ValueError(
+            "plan.yaml must contain a non-empty tasks list"
+        )
+
+    tasks: list[RepositoryTask] = []
+
+    for index, raw_task in enumerate(raw_tasks):
+        if not isinstance(raw_task, dict):
+            raise ValueError(
+                f"plan.yaml tasks[{index}] must be a mapping"
+            )
+
+        task_id = raw_task.get("id")
+        file_path = raw_task.get("file_path")
+        edit_mode = raw_task.get("edit_mode")
+        instructions = raw_task.get("instructions")
+        dependencies = raw_task.get("dependencies", [])
+
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError(
+                f"plan.yaml tasks[{index}].id must be a non-empty string"
+            )
+
+        if not isinstance(file_path, str) or not file_path:
+            raise ValueError(
+                f"plan.yaml tasks[{index}].file_path must be a non-empty string"
+            )
+
+        if edit_mode not in {
+            "create",
+            "modify",
+            "delete",
+        }:
+            raise ValueError(
+                f"plan.yaml tasks[{index}].edit_mode has unsupported value: "
+                f"{edit_mode!r}"
+            )
+
+        if not isinstance(instructions, str) or not instructions.strip():
+            raise ValueError(
+                f"plan.yaml tasks[{index}].instructions must be non-empty"
+            )
+
+        if not isinstance(dependencies, list):
+            raise ValueError(
+                f"plan.yaml tasks[{index}].dependencies must be a list"
+            )
+
+        if not all(
+            isinstance(dependency, str)
+            for dependency in dependencies
+        ):
+            raise ValueError(
+                f"plan.yaml tasks[{index}].dependencies must contain task IDs"
+            )
+
+        tasks.append(
+            RepositoryTask(
+                id=task_id,
+                file_path=file_path,
+                edit_mode=edit_mode,
+                instructions=instructions.strip(),
+                dependencies=tuple(dependencies),
+            )
+        )
+
+    return tasks
+
+def _check_task_dependencies(
+    *,
+    task: RepositoryTask,
+    completed_tasks: set[str],
+) -> None:
+    """Ensure all dependencies for a repository task have completed."""
+
+    missing = [
+        dependency
+        for dependency in task.dependencies
+        if dependency not in completed_tasks
+    ]
+
+    if missing:
+        raise RuntimeError(
+            f"Task '{task.id}' cannot execute because dependencies "
+            f"have not completed: {', '.join(missing)}"
+        )
+
+
+def _resolve_task_target(
+    task: RepositoryTask,
+    repo_root: Path,
+) -> Path:
+    """Resolve and validate the repository path targeted by a task."""
+
+    repo_root = repo_root.resolve()
+    target = (repo_root / task.file_path).resolve()
+
+    # Prevent plans from referencing files outside the repository.
+    try:
+        target.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"Task '{task.id}' target escapes repository root: "
+            f"{task.file_path}"
+        ) from exc
+
+    if task.edit_mode == "modify":
+        if not target.is_file():
+            raise FileNotFoundError(
+                f"Task '{task.id}' modify target does not exist: "
+                f"{task.file_path}"
+            )
+
+    elif task.edit_mode == "create":
+        if target.exists():
+            raise FileExistsError(
+                f"Task '{task.id}' create target already exists: "
+                f"{task.file_path}"
+            )
+
+        target.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    elif task.edit_mode == "delete":
+        raise NotImplementedError(
+            f"Task '{task.id}' uses edit_mode=delete; "
+            "delete tasks are not supported yet"
+        )
+
+    else:
+        raise ValueError(
+            f"Task '{task.id}' has unsupported edit_mode: "
+            f"{task.edit_mode!r}"
+        )
+
+    return target
+
+
+def _write_task_context(
+    project: RuntimeProject,
+    workflow: WorkflowSpec,
+    state: StateSpec,
+    ticket_key: str,
+    task: RepositoryTask,
+) -> Path:
+    """Write focused read-only context for one repository-editing task."""
+
+    context_dir = project.context_dir(ticket_key)
+    context_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = context_dir / f"coder-task-{task.id}.yaml"
+
+    data = {
+        "workflow": workflow.name,
+        "state": state.name,
+        "task": {
+            "id": task.id,
+            "file_path": task.file_path,
+            "edit_mode": task.edit_mode,
+            "instructions": task.instructions,
+            "dependencies": list(task.dependencies),
+        },
+    }
+
+    path.write_text(
+        yaml.safe_dump(
+            data,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    logger.debug(
+        "Coder task context written to: %s",
+        path,
+    )
+
+    return path
+
+
+def _build_task_read_files(
+    *,
+    read_files: list[Path],
+    task_context_path: Path,
+) -> list[Path]:
+    """Build focused read-only context for one repository-editing task.
+
+    The full ``plan.yaml`` is removed because the runtime has already selected
+    the task being executed. The small task-specific context file replaces it,
+    reducing model context and discouraging the coder from implementing later
+    tasks prematurely.
+    """
+
+    task_read_files: list[Path] = []
+
+    for path in read_files:
+        if path.name == "plan.yaml":
+            continue
+
+        task_read_files.append(path)
+
+    task_read_files.append(task_context_path)
+
+    # Remove duplicates while preserving order.
+    seen: set[Path] = set()
+    result: list[Path] = []
+
+    for path in task_read_files:
+        resolved = path.resolve()
+
+        if resolved in seen:
+            continue
+
+        seen.add(resolved)
+        result.append(path)
+
+    return result
+
+
 def _invoke_repository_worker(
     project: RuntimeProject,
+    workflow: WorkflowSpec,
     state: StateSpec,
     ticket_key: str,
     worker_slug: str,
+    worker,
     model: str,
     read_files: list[Path],
     repo_root: Path,
     backend: LLMBackend,
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Execute a worker whose output is repository state.
+    """Execute a repository-editing worker one plan task at a time.
 
-    Repository-editing workers do not produce workflow artifacts. Editable
-    repository files are derived from the validated implementation plan and
-    passed explicitly to the backend.
+    Repository workers do not produce workflow artifacts. Instead, the
+    validated ``plan.yaml`` is loaded and each implementation task is executed
+    sequentially.
 
-    The coder is currently the primary repository-editing worker.
+    Each task operates on exactly one editable repository file. The worker
+    receives:
+
+    - its normal read-only execution context
+    - a small task-specific context file
+    - exactly one editable repository file
+
+    Task dependencies are checked before execution.
+
+    The implementation remains a single workflow state; task-by-task execution
+    is a backend/runtime strategy within that state.
     """
-
     logger.info(
-        "Worker '%s' produces no artifact; using repository editing mode",
+        "Worker '%s' produces no artifact; using task-based repository editing mode",
         worker_slug,
     )
 
-    edit_files = _resolve_repository_edit_files(
+    tasks = _load_repository_tasks(
         project=project,
         ticket_key=ticket_key,
-        repo_root=repo_root,
     )
 
     logger.info(
-        "Worker '%s' may edit %d repository file(s)",
+        "Worker '%s' will execute %d repository task(s)",
         worker_slug,
-        len(edit_files),
+        len(tasks),
     )
 
-    logger.debug(
-        "Editable repository files for '%s':\n%s",
-        worker_slug,
-        "\n".join(
-            f"  - {path}"
-            for path in edit_files
-        ),
-    )
+    completed_tasks: set[str] = set()
 
-    try:
-        backend.edit_repository(
-            model=model,
-            read_files=read_files,
-            edit_files=edit_files,
+    for task in tasks:
+        _check_task_dependencies(
+            task=task,
+            completed_tasks=completed_tasks,
+        )
+
+        target_path = _resolve_task_target(
+            task=task,
             repo_root=repo_root,
         )
 
-    except Exception as exc:
-        logger.exception(
-            "Repository worker '%s' failed: %s",
-            worker_slug,
-            exc,
+        task_context_path = _write_task_context(
+            project=project,
+            workflow=workflow,
+            state=state,
+            ticket_key=ticket_key,
+            task=task,
         )
-        raise
 
-    # Repository-editing workers currently produce no workflow artifact.
+        task_read_files = _build_task_read_files(
+            read_files=read_files,
+            task_context_path=task_context_path,
+        )
+
+        logger.info(
+            "Executing repository task %s: %s %s",
+            task.id,
+            task.edit_mode,
+            task.file_path,
+        )
+
+        logger.debug(
+            "Task %s read-only context:\n%s",
+            task.id,
+            "\n".join(
+                f"  - {path}"
+                for path in task_read_files
+            ),
+        )
+
+        logger.debug(
+            "Task %s editable file: %s",
+            task.id,
+            target_path,
+        )
+
+        try:
+            backend.edit_repository(
+                model=model,
+                read_files=task_read_files,
+                edit_files=[target_path],
+                repo_root=repo_root,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "Repository task %s failed for worker '%s': %s",
+                task.id,
+                worker_slug,
+                exc,
+            )
+            raise
+
+        completed_tasks.add(task.id)
+
+        logger.info(
+            "Repository task %s completed successfully",
+            task.id,
+        )
+
+    logger.info(
+        "Worker '%s' completed all %d repository task(s)",
+        worker_slug,
+        len(tasks),
+    )
+
+    # Repository-editing workers currently produce no workflow artifacts.
     produced: dict[str, str] = {}
 
-    # Runtime action metadata can be added later when repository workers
+    # Action metadata can be introduced later if repository-editing workers
     # require post-execution actions.
     action_metadata: dict[str, str] = {}
 
@@ -653,9 +1058,11 @@ def invoke_worker(
 
     return _invoke_repository_worker(
         project=project,
+        workflow=workflow,
         state=state,
         ticket_key=ticket_key,
         worker_slug=worker_slug,
+        worker=worker,
         model=model,
         read_files=read_files,
         repo_root=repo_root,
