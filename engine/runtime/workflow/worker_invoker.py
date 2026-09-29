@@ -58,11 +58,12 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class RepositoryTask:
     id: str
+    kind: str # "implementation" or "test"
     file_path: str
     edit_mode: str
     instructions: str
     dependencies: tuple[str, ...]
-
+    verifies: tuple[str, ...] = ()
    
 def _fetch_runtime_context(
     project: RuntimeProject,
@@ -390,187 +391,35 @@ def _invoke_artifact_worker(
     }, action_metadata
 
 
-def _resolve_repository_edit_files(
-    project: RuntimeProject,
-    ticket_key: str,
-    repo_root: Path,
-) -> list:
-    """Resolve repository files that a repository worker may modify.
+def _parse_tasks(
+    raw_tasks: list[dict],
+    kind: str,
+) -> list[RepositoryTask]:
+    """Convert validated plan entries into RepositoryTask objects."""
 
-    Editable files are derived from the validated ``plan.yaml`` artifact.
+    tasks: list[RepositoryTask] = []
 
-    Tasks with edit_mode ``create`` or ``modify`` are passed to Aider as
-    editable files. Delete operations are intentionally excluded from this
-    initial happy-path implementation.
-    """
-
-    artifacts_dir = project.artifacts_dir(
-        ticket_key
-    )
-
-    plan_path = (
-        artifacts_dir
-        / "plan.yaml"
-    )
-
-    if not plan_path.is_file():
-        raise FileNotFoundError(
-            f"Repository worker requires plan.yaml: {plan_path}"
+    for raw_task in raw_tasks:
+        verifies = (
+            tuple(raw_task["verifies"])
+            if kind == "test"
+            else ()
         )
 
-    try:
-        plan = yaml.safe_load(
-            plan_path.read_text(
-                encoding="utf-8"
+        tasks.append(
+            RepositoryTask(
+                id=raw_task["id"].strip(),
+                kind=kind,
+                file_path=raw_task["file_path"].strip(),
+                edit_mode=raw_task["edit_mode"],
+                instructions=raw_task["instructions"].strip(),
+                dependencies=tuple(raw_task["dependencies"]),
+                verifies=verifies,
             )
         )
 
-    except yaml.YAMLError as exc:
-        raise ValueError(
-            f"Unable to parse plan.yaml: {exc}"
-        ) from exc
+    return tasks
 
-    if not isinstance(plan, dict):
-        raise ValueError(
-            "plan.yaml must contain a YAML mapping"
-        )
-
-    tasks = plan.get("tasks")
-
-    if not isinstance(tasks, list):
-        raise ValueError(
-            "plan.yaml must contain a tasks list"
-        )
-
-    edit_files: list[Path] = []
-
-    for index, task in enumerate(tasks):
-        if not isinstance(task, dict):
-            raise ValueError(
-                f"plan.yaml tasks[{index}] must be a mapping"
-            )
-
-        edit_mode = task.get(
-            "edit_mode"
-        )
-
-        file_path = task.get(
-            "file_path"
-        )
-
-        if edit_mode not in {
-            "create",
-            "modify",
-        }:
-            continue
-
-        if not isinstance(file_path, str) or not file_path:
-            raise ValueError(
-                f"plan.yaml tasks[{index}].file_path "
-                "must be a non-empty string"
-            )
-
-        target = (
-            repo_root
-            / file_path
-        ).resolve()
-
-        try:
-            target.relative_to(
-                repo_root.resolve()
-            )
-
-        except ValueError as exc:
-            raise ValueError(
-                f"Plan task '{file_path}' escapes repository root"
-            ) from exc
-
-        edit_files.append(
-            target
-        )
-
-    # Deduplicate while preserving task order.
-    edit_files = list(
-        dict.fromkeys(edit_files)
-    )
-
-    if not edit_files:
-        raise ValueError(
-            "plan.yaml contains no create/modify tasks "
-            "for repository execution"
-        )
-
-    return edit_files
-
-# def _invoke_repository_worker(
-#     project: RuntimeProject,
-#     state: StateSpec,
-#     ticket_key: str,
-#     worker_slug: str,
-#     model: str,
-#     read_files: list[Path],
-#     repo_root: Path,
-#     backend: LLMBackend,
-# ) -> tuple[dict[str, str], dict[str, str]]:
-#     """Execute a worker whose output is repository state.
-
-#     Repository-editing workers do not produce workflow artifacts. Editable
-#     repository files are derived from the validated implementation plan and
-#     passed explicitly to the backend.
-
-#     The coder is currently the primary repository-editing worker.
-#     """
-
-#     logger.info(
-#         "Worker '%s' produces no artifact; using repository editing mode",
-#         worker_slug,
-#     )
-
-#     edit_files = _resolve_repository_edit_files(
-#         project=project,
-#         ticket_key=ticket_key,
-#         repo_root=repo_root,
-#     )
-
-#     logger.info(
-#         "Worker '%s' may edit %d repository file(s)",
-#         worker_slug,
-#         len(edit_files),
-#     )
-
-#     logger.debug(
-#         "Editable repository files for '%s':\n%s",
-#         worker_slug,
-#         "\n".join(
-#             f"  - {path}"
-#             for path in edit_files
-#         ),
-#     )
-
-#     try:
-#         backend.edit_repository(
-#             model=model,
-#             read_files=read_files,
-#             edit_files=edit_files,
-#             repo_root=repo_root,
-#         )
-
-#     except Exception as exc:
-#         logger.exception(
-#             "Repository worker '%s' failed: %s",
-#             worker_slug,
-#             exc,
-#         )
-#         raise
-
-#     # Repository-editing workers currently produce no workflow artifact.
-#     produced: dict[str, str] = {}
-
-#     # Runtime action metadata can be added later when repository workers
-#     # require post-execution actions.
-#     action_metadata: dict[str, str] = {}
-
-#     return produced, action_metadata
 
 def _load_repository_tasks(
     project: RuntimeProject,
@@ -594,7 +443,6 @@ def _load_repository_tasks(
                 encoding="utf-8"
             )
         )
-
     except yaml.YAMLError as exc:
         raise ValueError(
             f"Unable to parse plan.yaml: {exc}"
@@ -605,76 +453,18 @@ def _load_repository_tasks(
             "plan.yaml must contain a YAML mapping"
         )
 
-    raw_tasks = data.get("tasks")
+    implementation_tasks = _parse_tasks(
+        data.get("tasks"),
+        kind="implementation",
+    )
 
-    if not isinstance(raw_tasks, list) or not raw_tasks:
-        raise ValueError(
-            "plan.yaml must contain a non-empty tasks list"
-        )
+    test_tasks = _parse_tasks(
+        data.get("tests"),
+        kind="test",
+    )
 
-    tasks: list[RepositoryTask] = []
+    return implementation_tasks + test_tasks
 
-    for index, raw_task in enumerate(raw_tasks):
-        if not isinstance(raw_task, dict):
-            raise ValueError(
-                f"plan.yaml tasks[{index}] must be a mapping"
-            )
-
-        task_id = raw_task.get("id")
-        file_path = raw_task.get("file_path")
-        edit_mode = raw_task.get("edit_mode")
-        instructions = raw_task.get("instructions")
-        dependencies = raw_task.get("dependencies", [])
-
-        if not isinstance(task_id, str) or not task_id:
-            raise ValueError(
-                f"plan.yaml tasks[{index}].id must be a non-empty string"
-            )
-
-        if not isinstance(file_path, str) or not file_path:
-            raise ValueError(
-                f"plan.yaml tasks[{index}].file_path must be a non-empty string"
-            )
-
-        if edit_mode not in {
-            "create",
-            "modify",
-            "delete",
-        }:
-            raise ValueError(
-                f"plan.yaml tasks[{index}].edit_mode has unsupported value: "
-                f"{edit_mode!r}"
-            )
-
-        if not isinstance(instructions, str) or not instructions.strip():
-            raise ValueError(
-                f"plan.yaml tasks[{index}].instructions must be non-empty"
-            )
-
-        if not isinstance(dependencies, list):
-            raise ValueError(
-                f"plan.yaml tasks[{index}].dependencies must be a list"
-            )
-
-        if not all(
-            isinstance(dependency, str)
-            for dependency in dependencies
-        ):
-            raise ValueError(
-                f"plan.yaml tasks[{index}].dependencies must contain task IDs"
-            )
-
-        tasks.append(
-            RepositoryTask(
-                id=task_id,
-                file_path=file_path,
-                edit_mode=edit_mode,
-                instructions=instructions.strip(),
-                dependencies=tuple(dependencies),
-            )
-        )
-
-    return tasks
 
 def _check_task_dependencies(
     *,
@@ -697,52 +487,27 @@ def _check_task_dependencies(
 
 
 def _resolve_task_target(
+    *,
     task: RepositoryTask,
     repo_root: Path,
 ) -> Path:
-    """Resolve and validate the repository path targeted by a task."""
+    """Resolve the validated repository target for a task."""
 
-    repo_root = repo_root.resolve()
-    target = (repo_root / task.file_path).resolve()
+    target = (
+        repo_root.resolve()
+        / task.file_path
+    ).resolve()
 
-    # Prevent plans from referencing files outside the repository.
-    try:
-        target.relative_to(repo_root)
-    except ValueError as exc:
-        raise ValueError(
-            f"Task '{task.id}' target escapes repository root: "
-            f"{task.file_path}"
-        ) from exc
-
-    if task.edit_mode == "modify":
-        if not target.is_file():
-            raise FileNotFoundError(
-                f"Task '{task.id}' modify target does not exist: "
-                f"{task.file_path}"
-            )
-
-    elif task.edit_mode == "create":
-        if target.exists():
-            raise FileExistsError(
-                f"Task '{task.id}' create target already exists: "
-                f"{task.file_path}"
-            )
-
+    if task.edit_mode == "create":
         target.parent.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-    elif task.edit_mode == "delete":
+    if task.edit_mode == "delete":
         raise NotImplementedError(
             f"Task '{task.id}' uses edit_mode=delete; "
             "delete tasks are not supported yet"
-        )
-
-    else:
-        raise ValueError(
-            f"Task '{task.id}' has unsupported edit_mode: "
-            f"{task.edit_mode!r}"
         )
 
     return target
@@ -770,10 +535,12 @@ def _write_task_context(
         "state": state.name,
         "task": {
             "id": task.id,
+            "kind": task.kind,
             "file_path": task.file_path,
             "edit_mode": task.edit_mode,
             "instructions": task.instructions,
             "dependencies": list(task.dependencies),
+            "verifies": list(task.verifies),
         },
     }
 

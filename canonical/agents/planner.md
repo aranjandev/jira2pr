@@ -88,20 +88,46 @@ instructions: >
 
 ### Tests
 
-Specify the behavior that must be verified after implementation in the top-level `tests` section.
+Tests are executable implementation work and must be specified in the
+top-level `tests` section.
 
-Include:
+Each test entry must:
 
-- expected successful behavior
-- relevant edge cases
-- relevant failure behavior
-- regression coverage where appropriate
+- Have a unique sequential ID such as `TEST1`, `TEST2`.
+- Operate on exactly one repository test file.
+- Specify the repository-relative `file_path`.
+- Specify `edit_mode` as `create` or `modify`.
+- Provide concrete instructions describing what tests the coder must add.
+- Identify the behavior being verified through `verifies`.
+- Declare dependencies on implementation tasks where appropriate.
 
-Describe test scenarios, not implementation tasks or shell commands.
+Do not describe tests only as abstract scenarios. Every planned test must
+identify the repository file in which it will be implemented.
 
-A test-related repository file that must be created or modified should still appear as a task under `tasks`.
+Before using `edit_mode: modify`, verify from available repository context
+that the test file exists.
 
-Do not invent test commands. Build, test, and lint commands are defined by the project's instructions.
+Prefer adding tests to an appropriate existing test file. Create a new test
+file only when no suitable existing test file exists.
+
+Do not invent test commands. Build, test, and lint commands are defined by
+the project's instructions.
+
+Example:
+
+```yaml
+- id: TEST1
+  file_path: tests/tools/test_example.py
+  edit_mode: modify
+  instructions: |
+    Add coverage for multiple input files and verify that rows from all
+    inputs are present in the combined output.
+  verifies:
+    - Multiple input files are processed and combined correctly.
+  dependencies:
+    - T1
+    - T2
+```
 
 ### Dependencies
 

@@ -55,14 +55,49 @@ tasks:
     # IDs of tasks that must complete before this task.
     # Use [] when there are no dependencies.
     dependencies: []
-  
-# Behavior that must be verified after implementation.
+
+
+# Tests that must be created or modified as part of the implementation.
 #
-# These describe required test scenarios, not necessarily shell commands.
-# Test execution commands come from project instructions.
+# Every test entry operates on exactly one repository file.
 tests:
 
-  - description: ""
+  - id: TEST1
+
+    # Repository-relative test file path.
+    file_path: ""
+
+    # One of: create | modify
+    edit_mode: modify
+
+    # Concrete instructions describing the tests the coder must add.
+    instructions: ""
+
+    # Behaviors or requirements this test verifies.
+    verifies:
+      - ""
+
+    # Implementation task IDs that must be completed before adding this test.
+    dependencies: []
+
+  - id: TEST2
+
+    # Repository-relative test file path.
+    file_path: ""
+
+    # One of: create | modify
+    edit_mode: create
+
+    # Concrete instructions describing the tests the coder must add.
+    instructions: ""
+
+    # Behaviors or requirements this test verifies.
+    verifies:
+      - ""
+
+    # Implementation task IDs that must be completed before adding this test.
+    dependencies: []
+
 
 # Implementation constraints that apply across tasks.
 constraints: []
