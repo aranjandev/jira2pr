@@ -23,12 +23,31 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from compiler.assembler.model import StateSpec, WorkflowSpec
+import yaml
+from compiler.assembler.model import (
+    AgentSpec,
+    StateSpec,
+    WorkflowSpec,
+)
+
+from runtime.artifacts.normalizer import (
+    normalize_artifact,
+)
+from runtime.artifacts.validator import (
+    validate_artifact,
+)
 from runtime.backends.base import LLMBackend
-from runtime.capabilities import resolve, CapabilityError
+from runtime.capabilities import (
+    CapabilityError,
+    resolve,
+)
 from runtime.logging_config import get_logger
-from runtime.workflow.loader import RuntimeProject
-from runtime.workflow.context_strategy import ContextStrategy
+from runtime.workflow.context_strategy import (
+    ContextStrategy,
+)
+from runtime.workflow.loader import (
+    RuntimeProject,
+)
 
 logger = get_logger("workflow.worker_invoker")
 
@@ -178,121 +197,63 @@ def _context_filename(cap_id: str) -> str:
     )
 
 
-def invoke_worker(
-    project: RuntimeProject,
-    workflow: WorkflowSpec,
+def _require_worker_slug(
     state: StateSpec,
-    ticket_key: str,
-    backend: LLMBackend,
-    context_strategy: ContextStrategy | None = None,
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Execute the worker assigned to a workflow state.
-
-    The workflow defines mandatory artifact dependencies through ``consumes``
-    and expected outputs through ``produces``. Required runtime capabilities
-    are resolved before invocation, while ``ContextStrategy`` selects optional
-    execution context such as repository-level project instructions.
-
-    Artifact-producing workers use a file-oriented contract:
-
-      read-only context:
-        - worker agent definition
-        - output artifact schema
-        - consumed workflow artifacts
-        - materialized runtime context
-        - optional context selected by ContextStrategy
-
-      editable output:
-        - exactly one artifact declared by ``state.produces``
-
-    The backend is responsible for producing the requested output file.
-    The resulting filesystem artifact is authoritative; backend stdout is not
-    treated as artifact content.
-
-    Workers with no produced artifact, currently primarily ``coder``, use the
-    repository execution path instead. Their output is repository state rather
-    than a workflow artifact.
-
-    Returns:
-        A tuple containing:
-
-        produced_artifacts:
-            Mapping of produced artifact filename to final file contents.
-            Empty for repository-editing workers.
-
-        action_metadata:
-            Structured metadata required by runtime actions. Empty when the
-            worker declares no actions.
-    """
-    logger.info(
-        "Invoking worker agent: %s for state: %s",
-        state.worker,
-        state.name,
-    )
+) -> str:
+    """Return the state's worker slug or raise for an invalid state."""
 
     if state.worker is None:
         raise ValueError(
             f"State '{state.name}' has no worker to invoke"
         )
 
-    context_strategy = context_strategy or ContextStrategy()
+    return state.worker
 
-    agent = project.agent(state.worker)
+
+def _require_agent(
+    project: RuntimeProject,
+    worker_slug: str,
+) -> AgentSpec:
+    """Return the worker's agent definition or raise if it is unknown."""
+
+    agent = project.agent(worker_slug)
+
     if agent is None:
         raise ValueError(
-            f"Unknown worker agent '{state.worker}'"
+            f"Unknown worker agent '{worker_slug}'"
         )
 
-    worker = project.workers.get(state.worker)
+    return agent
 
-    model = project.model_for_agent(state.worker)
-    
-    if not model:
-        raise ValueError(
-            f"No model configured for worker '{state.worker}'"
-        )
 
-    logger.debug(
-        "Worker '%s' uses model: %s",
-        state.worker,
-        model,
-    )
+def _build_worker_context(
+    *,
+    project: RuntimeProject,
+    state: StateSpec,
+    agent: AgentSpec,
+    worker_slug: str,
+    ticket_key: str,
+    artifacts_dir: Path,
+    context_strategy: ContextStrategy,
+) -> list:
+    """Build the read-only context supplied to a worker.
+    Required runtime capabilities are materialized first. ContextStrategy then
+    combines agent instructions, artifact schemas, consumed artifacts, runtime
+    context files, and optional execution context.
+    """
 
-    repo_root = project.core_dir.parent
-
-    artifacts_dir = project.artifacts_dir(ticket_key)
-    artifacts_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    # ------------------------------------------------------------------
-    # Resolve worker context
-    # ------------------------------------------------------------------
-
-    # Mandatory runtime capabilities such as jira.read or git.status
-    # are resolved first and materialized as files.
     runtime_context_files = _fetch_runtime_context(
         project,
-        state.worker,
+        worker_slug,
         ticket_key,
     )
 
     logger.debug(
-        "Resolved %d runtime context file(s)",
+        "Resolved %d runtime context file(s) for '%s'",
         len(runtime_context_files),
+        worker_slug,
     )
 
-    # ContextStrategy assembles:
-    #
-    #   mandatory:
-    #     agent definition
-    #     artifact schema
-    #     consumed workflow artifacts
-    #     runtime capability context
-    #
-    #   optional:
-    #     repository/project instructions and other execution context
     read_files = context_strategy.build_read_files(
         project=project,
         state=state,
@@ -303,184 +264,400 @@ def invoke_worker(
 
     logger.info(
         "Worker '%s' context contains %d read-only file(s)",
-        state.worker,
+        worker_slug,
         len(read_files),
     )
 
     logger.debug(
-        "Read-only context files:\n%s",
+        "Read-only context files for '%s':\n%s",
+        worker_slug,
         "\n".join(
-            f"  - {path}" for path in read_files
+            f"  - {path}"
+            for path in read_files
         ),
     )
 
-    # ------------------------------------------------------------------
-    # Artifact-producing worker
-    # ------------------------------------------------------------------
+    return read_files
 
-    if state.produces:
-        if len(state.produces) != 1:
-            raise ValueError(
-                f"State '{state.name}' produces "
-                f"{len(state.produces)} artifacts. "
-                "Artifact workers currently support exactly one "
-                "primary artifact per invocation."
-            )
 
-        output_name = state.produces[0]
-        output_path = artifacts_dir / output_name
+def _require_single_output(
+    state: StateSpec,
+) -> str:
+    """Return the single artifact declared by an artifact-producing state."""
 
-        output_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
+    if len(state.produces) != 1:
+        raise ValueError(
+            f"State '{state.name}' produces "
+            f"{len(state.produces)} artifacts. "
+            "Artifact workers currently require exactly one "
+            "primary artifact per invocation."
         )
 
-        logger.info(
-            "Worker '%s' will produce artifact: %s",
-            state.worker,
-            output_path,
-        )
+    return state.produces[0]
 
-        try:
-            # The backend owns physical artifact creation.
-            #
-            # For Aider this translates to:
-            #
-            #   --read agent.md
-            #   --read schema.md
-            #   --read consumed/context files
-            #   <output-file>
-            #
-            # The backend validates that the output file was actually
-            # produced and is non-empty.
-            backend.produce_artifact(
-                model=model,
-                read_files=read_files,
-                output_file=output_path,
-                repo_root=repo_root,
-            )
+def _invoke_artifact_worker(
+    state: StateSpec,
+    worker_slug: str,
+    worker,
+    model: str,
+    read_files: list[Path],
+    artifacts_dir: Path,
+    repo_root: Path,
+    backend: LLMBackend,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Execute an artifact-producing worker."""
 
-        except Exception as exc:
-            logger.exception(
-                "Artifact worker '%s' failed: %s",
-                state.worker,
-                exc,
-            )
-            raise
-
-        # The backend guarantees that the artifact exists.
-        # The workflow layer now reads the authoritative result.
-        artifact_content = output_path.read_text(
-            encoding="utf-8"
-        )
-
-        logger.info(
-            "Produced artifact '%s' (%d characters)",
-            output_name,
-            len(artifact_content),
-        )
-
-        produced = {
-            output_name: artifact_content,
-        }
-
-        # Artifact content and runtime action metadata are intentionally
-        # separate concerns. Do not embed control metadata inside artifacts.
-        action_metadata: dict[str, str] = {}
-
-        if worker and worker.actions:
-            logger.warning(
-                "Worker '%s' declares runtime actions while also producing "
-                "an artifact. Action metadata should be handled separately "
-                "from artifact content.",
-                state.worker,
-            )
-
-        return produced, action_metadata
-
-    # ------------------------------------------------------------------
-    # Repository-editing worker
-    # ------------------------------------------------------------------
-    #
-    # Coder is currently the primary worker whose output is repository
-    # state rather than a workflow artifact.
-    #
-    # TODO:
-    # Replace complete() with an explicit backend.edit_repository()
-    # operation. Context files should remain read-only, while only source
-    # and test files selected for the current implementation task should
-    # be editable.
-    # ------------------------------------------------------------------
-
-    logger.info(
-        "Worker '%s' produces no artifact; using repository execution mode",
-        state.worker,
+    output_name = _require_single_output(
+        state
     )
 
-    system_prompt = project.agent_body(state.worker)
+    output_path = (
+        artifacts_dir
+        / output_name
+    )
 
-    invocation_context = [
-        f"Ticket: {ticket_key}",
-        f"Workflow: {workflow.name}",
-        f"State: {state.name}",
-    ]
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    if read_files:
-        invocation_context.append(
-            "Read-only context files:\n"
-            + "\n".join(str(path) for path in read_files)
-        )
-
-    user_prompt = "\n\n".join(invocation_context)
+    logger.info(
+        "Worker '%s' will produce artifact: %s",
+        worker_slug,
+        output_path,
+    )
 
     try:
-        response = backend.complete(
-            system_prompt,
-            user_prompt,
+        backend.produce_artifact(
             model=model,
-            files=read_files,
+            read_files=read_files,
+            output_file=output_path,
+            repo_root=repo_root,
+        )
+
+        logger.info("Normalizing artifact at: %s", output_path)
+        normalize_artifact(
+            output_path
+        )
+        logger.info("Validating artifact at: %s", output_path)
+        validate_artifact(
+            output_path,
+            repo_root=repo_root,
         )
 
     except Exception as exc:
         logger.exception(
-            "Worker '%s' invocation failed: %s",
-            state.worker,
+            "Artifact worker '%s' failed: %s",
+            worker_slug,
             exc,
         )
         raise
 
-    # ------------------------------------------------------------------
-    # Runtime action metadata
-    # ------------------------------------------------------------------
+    artifact_content = output_path.read_text(
+        encoding="utf-8"
+    )
+
+    logger.info(
+        "Produced artifact '%s' (%d characters)",
+        output_name,
+        len(artifact_content),
+    )
 
     action_metadata: dict[str, str] = {}
 
     if worker and worker.actions:
-        logger.debug(
-            "Worker '%s' declares %d runtime action(s)",
-            state.worker,
-            len(worker.actions),
+        logger.warning(
+            "Worker '%s' declares runtime actions while also producing "
+            "an artifact. Action metadata should be handled separately "
+            "from artifact content.",
+            worker_slug,
         )
 
+    return {
+        output_name: artifact_content,
+    }, action_metadata
+
+
+def _resolve_repository_edit_files(
+    project: RuntimeProject,
+    ticket_key: str,
+    repo_root: Path,
+) -> list:
+    """Resolve repository files that a repository worker may modify.
+
+    Editable files are derived from the validated ``plan.yaml`` artifact.
+
+    Tasks with edit_mode ``create`` or ``modify`` are passed to Aider as
+    editable files. Delete operations are intentionally excluded from this
+    initial happy-path implementation.
+    """
+
+    artifacts_dir = project.artifacts_dir(
+        ticket_key
+    )
+
+    plan_path = (
+        artifacts_dir
+        / "plan.yaml"
+    )
+
+    if not plan_path.is_file():
+        raise FileNotFoundError(
+            f"Repository worker requires plan.yaml: {plan_path}"
+        )
+
+    try:
+        plan = yaml.safe_load(
+            plan_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            f"Unable to parse plan.yaml: {exc}"
+        ) from exc
+
+    if not isinstance(plan, dict):
+        raise ValueError(
+            "plan.yaml must contain a YAML mapping"
+        )
+
+    tasks = plan.get("tasks")
+
+    if not isinstance(tasks, list):
+        raise ValueError(
+            "plan.yaml must contain a tasks list"
+        )
+
+    edit_files: list[Path] = []
+
+    for index, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            raise ValueError(
+                f"plan.yaml tasks[{index}] must be a mapping"
+            )
+
+        edit_mode = task.get(
+            "edit_mode"
+        )
+
+        file_path = task.get(
+            "file_path"
+        )
+
+        if edit_mode not in {
+            "create",
+            "modify",
+        }:
+            continue
+
+        if not isinstance(file_path, str) or not file_path:
+            raise ValueError(
+                f"plan.yaml tasks[{index}].file_path "
+                "must be a non-empty string"
+            )
+
+        target = (
+            repo_root
+            / file_path
+        ).resolve()
+
         try:
-            from runtime.workflow.action_executor import (
-                parse_pr_actions,
+            target.relative_to(
+                repo_root.resolve()
             )
 
-            action_metadata = parse_pr_actions(response)
+        except ValueError as exc:
+            raise ValueError(
+                f"Plan task '{file_path}' escapes repository root"
+            ) from exc
 
-            logger.info(
-                "Parsed action metadata from '%s': %s",
-                state.worker,
-                list(action_metadata),
-            )
+        edit_files.append(
+            target
+        )
 
-        except Exception as exc:
-            logger.exception(
-                "Failed to parse action metadata from '%s': %s",
-                state.worker,
-                exc,
-            )
-            raise
+    # Deduplicate while preserving task order.
+    edit_files = list(
+        dict.fromkeys(edit_files)
+    )
 
-    return {}, action_metadata
+    if not edit_files:
+        raise ValueError(
+            "plan.yaml contains no create/modify tasks "
+            "for repository execution"
+        )
+
+    return edit_files
+
+def _invoke_repository_worker(
+    project: RuntimeProject,
+    state: StateSpec,
+    ticket_key: str,
+    worker_slug: str,
+    model: str,
+    read_files: list[Path],
+    repo_root: Path,
+    backend: LLMBackend,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Execute a worker whose output is repository state.
+
+    Repository-editing workers do not produce workflow artifacts. Editable
+    repository files are derived from the validated implementation plan and
+    passed explicitly to the backend.
+
+    The coder is currently the primary repository-editing worker.
+    """
+
+    logger.info(
+        "Worker '%s' produces no artifact; using repository editing mode",
+        worker_slug,
+    )
+
+    edit_files = _resolve_repository_edit_files(
+        project=project,
+        ticket_key=ticket_key,
+        repo_root=repo_root,
+    )
+
+    logger.info(
+        "Worker '%s' may edit %d repository file(s)",
+        worker_slug,
+        len(edit_files),
+    )
+
+    logger.debug(
+        "Editable repository files for '%s':\n%s",
+        worker_slug,
+        "\n".join(
+            f"  - {path}"
+            for path in edit_files
+        ),
+    )
+
+    try:
+        backend.edit_repository(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "Repository worker '%s' failed: %s",
+            worker_slug,
+            exc,
+        )
+        raise
+
+    # Repository-editing workers currently produce no workflow artifact.
+    produced: dict[str, str] = {}
+
+    # Runtime action metadata can be added later when repository workers
+    # require post-execution actions.
+    action_metadata: dict[str, str] = {}
+
+    return produced, action_metadata
+
+def invoke_worker(
+    project: RuntimeProject,
+    workflow: WorkflowSpec,
+    state: StateSpec,
+    ticket_key: str,
+    backend: LLMBackend,
+    context_strategy: ContextStrategy | None = None,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Execute the worker assigned to one workflow state.
+
+    The workflow determines required artifact inputs and outputs. Runtime
+    capabilities are materialized before invocation, and ContextStrategy
+    assembles the worker's read-only execution context.
+
+    Artifact-producing workers write their declared workflow artifact.
+    Repository-editing workers modify repository files instead.
+
+    Artifact normalization and deterministic validation happen before an
+    artifact is returned to the workflow executor.
+
+    Returns:
+        produced_artifacts:
+            Mapping of produced artifact name to final contents. Empty for
+            repository-editing workers.
+
+        action_metadata:
+            Structured metadata required by runtime actions. Empty when no
+            runtime actions are declared.
+    """
+    worker_slug = _require_worker_slug(state)
+
+    logger.info(
+        "Invoking worker agent: %s for state: %s",
+        worker_slug,
+        state.name,
+    )
+
+    agent = _require_agent(
+        project,
+        worker_slug,
+    )
+
+    worker = project.workers.get(worker_slug)
+
+    model = project.model_for_agent(
+        worker_slug
+    )
+
+    logger.debug(
+        "Worker '%s' uses model: %s",
+        worker_slug,
+        model,
+    )
+
+    repo_root = project.core_dir.parent
+
+    artifacts_dir = project.artifacts_dir(
+        ticket_key
+    )
+    artifacts_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    context_strategy = (
+        context_strategy
+        or ContextStrategy()
+    )
+
+    read_files = _build_worker_context(
+        project=project,
+        state=state,
+        agent=agent,
+        worker_slug=worker_slug,
+        ticket_key=ticket_key,
+        artifacts_dir=artifacts_dir,
+        context_strategy=context_strategy,
+    )
+
+    if state.produces:
+        return _invoke_artifact_worker(
+            state=state,
+            worker_slug=worker_slug,
+            worker=worker,
+            model=model,
+            read_files=read_files,
+            artifacts_dir=artifacts_dir,
+            repo_root=repo_root,
+            backend=backend,
+        )
+
+    return _invoke_repository_worker(
+        project=project,
+        state=state,
+        ticket_key=ticket_key,
+        worker_slug=worker_slug,
+        model=model,
+        read_files=read_files,
+        repo_root=repo_root,
+        backend=backend,
+    )
