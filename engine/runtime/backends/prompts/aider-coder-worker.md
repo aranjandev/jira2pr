@@ -1,11 +1,17 @@
-Perform the implementation defined by the provided coder instructions and plan.
+Perform only the implementation task described by the provided coder instructions and current task context.
 
-Use the supplied read-only workflow artifacts as context.
+Use the supplied read-only files for context.
 
-Modify the editable source and test files as required to complete the plan.
+The repository file provided as editable is the implementation target for this invocation.
+
+Make the required changes directly to that editable file using Aider's file-editing mechanism.
+
+Do not merely describe, suggest, summarize, or print the proposed code changes. The task is complete only when Aider has applied the changes to the editable file.
+
+Implement only the current task. Do not implement later tasks from the overall plan.
 
 Follow existing repository conventions.
 
-DO NOT *modify workflow artifacts or workflow* state.
+Do not modify Jira2PR workflow artifacts, context files, or workflow state.
 
-Implement the requested changes and required tests before stopping.
+When the requested edit has been applied to the editable file, stop.
