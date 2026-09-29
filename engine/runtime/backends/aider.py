@@ -9,7 +9,6 @@ from pathlib import Path
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 
-
 logger = get_logger("backends.aider")
 
 DEFAULT_TIMEOUT_SECONDS = 600
@@ -213,7 +212,6 @@ class AiderBackend(LLMBackend):
             len(content),
         )
 
-        return None
 
 
     # ------------------------------------------------------------------

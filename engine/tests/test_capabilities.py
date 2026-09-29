@@ -1,9 +1,8 @@
 """Tests for capability resolution (resolve function)."""
 
 import pytest
-
-from assembler.model import CapabilitySpec, CapabilityBinding
-from runtime.capabilities import resolve, CapabilityError
+from assembler.model import CapabilityBinding, CapabilitySpec
+from runtime.capabilities import CapabilityError, resolve
 
 
 def test_resolve_jira_read_with_ticket_key():

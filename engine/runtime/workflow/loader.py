@@ -30,6 +30,7 @@ from assembler.model import (
     WorkerBinding,
     WorkflowSpec,
 )
+
 from runtime.logging_config import get_logger
 
 logger = get_logger("workflow.loader")
@@ -60,7 +61,7 @@ class RuntimeProject:
     warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def load(cls, repo_root: Path) -> "RuntimeProject":
+    def load(cls, repo_root: Path) -> RuntimeProject:
         logger.info(f"Loading RuntimeProject from {repo_root}")
         core_dir = Path(repo_root).resolve() / CORE_DIRNAME
         if not core_dir.is_dir():

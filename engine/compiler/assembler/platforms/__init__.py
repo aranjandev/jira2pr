@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 UNSUPPORTED_PLATFORMS = {"opencode"}
 
 
-def _get_platforms() -> dict[str, type["PlatformAssembler"]]:
+def _get_platforms() -> dict[str, type[PlatformAssembler]]:
     from assembler.platforms.aider import AiderAssembler
     from assembler.platforms.copilot import CopilotAssembler
     return {
@@ -33,14 +33,14 @@ class _PlatformRegistry:
     """Lazy platform registry that imports assemblers on first access."""
 
     def __init__(self) -> None:
-        self._loaded: dict[str, type["PlatformAssembler"]] | None = None
+        self._loaded: dict[str, type[PlatformAssembler]] | None = None
 
-    def _ensure(self) -> dict[str, type["PlatformAssembler"]]:
+    def _ensure(self) -> dict[str, type[PlatformAssembler]]:
         if self._loaded is None:
             self._loaded = _get_platforms()
         return self._loaded
 
-    def __getitem__(self, key: str) -> type["PlatformAssembler"]:
+    def __getitem__(self, key: str) -> type[PlatformAssembler]:
         if key in UNSUPPORTED_PLATFORMS:
             raise KeyError(
                 f"Platform '{key}' is not supported. It predates the current "
@@ -54,13 +54,13 @@ class _PlatformRegistry:
             return False
         return key in self._ensure()
 
-    def keys(self):  # noqa: ANN201
+    def keys(self):
         return self._ensure().keys()
 
-    def values(self):  # noqa: ANN201
+    def values(self):
         return self._ensure().values()
 
-    def items(self):  # noqa: ANN201
+    def items(self):
         return self._ensure().items()
 
 

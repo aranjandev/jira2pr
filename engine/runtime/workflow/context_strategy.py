@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from compiler.assembler.model import AgentSpec, StateSpec
+
     from runtime.workflow.loader import RuntimeProject
 
 
@@ -57,9 +58,9 @@ class ContextStrategy:
     def build_read_files(
         self,
         *,
-        project: "RuntimeProject",
-        state: "StateSpec",
-        agent: "AgentSpec",
+        project: RuntimeProject,
+        state: StateSpec,
+        agent: AgentSpec,
         artifacts_dir: Path,
         runtime_context_files: list[Path],
     ) -> list[Path]:

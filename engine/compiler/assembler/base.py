@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import runtime 
 from pathlib import Path
+
+import runtime
 
 from assembler.registry import CanonicalRegistry
 from assembler.templates import substitute_vars

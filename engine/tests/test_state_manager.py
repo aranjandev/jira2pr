@@ -3,7 +3,6 @@ validation (path-traversal boundary), and archiving.
 """
 
 import pytest
-
 from runtime.workflow.state_manager import (
     InvalidTicketKeyError,
     StateManager,

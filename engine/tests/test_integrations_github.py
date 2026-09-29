@@ -5,10 +5,9 @@ import json
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import urllib.error
 
 SCRIPT = Path(__file__).parent.parent / "runtime/integrations/github.py"
 

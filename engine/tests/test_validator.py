@@ -9,7 +9,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from assembler.model import StateSpec, TransitionSpec
 from assembler.registry import CanonicalRegistry
 from assembler.validator import CanonicalValidationError, validate

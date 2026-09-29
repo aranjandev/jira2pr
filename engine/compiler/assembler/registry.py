@@ -10,6 +10,7 @@ generated `.jira2pr/` tree).
 
 from __future__ import annotations
 
+import itertools
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,7 +57,7 @@ class CanonicalRegistry:
     # ------------------------------------------------------------------
 
     @classmethod
-    def load(cls, canonical_dir: Path) -> "CanonicalRegistry":
+    def load(cls, canonical_dir: Path) -> CanonicalRegistry:
         """Load and normalize all canonical content from *canonical_dir*."""
         canonical_dir = canonical_dir.resolve()
         if not canonical_dir.is_dir():
@@ -115,11 +116,11 @@ class CanonicalRegistry:
         return path.read_text()
 
     def artifact_schema_files(self) -> list[Path]:
-        """List all artifact schema markdown files (excludes REGISTRY.md)."""
+        """List all artifact schema markdown/yaml files (excludes REGISTRY.md)."""
         d = self.canonical_dir / "artifacts"
         if not d.is_dir():
             return []
-        return sorted(p for p in d.glob("*.md") if p.name != "REGISTRY.md")
+        return sorted(p for p in itertools.chain(d.glob("*.md"), d.glob("*.yaml")) if p.name != "REGISTRY.md")
 
     def artifact_schema_body(self, filename: str) -> str:
         path = self.canonical_dir / "artifacts" / filename

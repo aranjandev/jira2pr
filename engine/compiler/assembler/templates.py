@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from assembler.model import ExecutionPolicy
     from assembler.registry import CanonicalRegistry
 
-from assembler.model import CAPABILITY_HANDLER_SCRIPT_MAP, CAPABILITY_ARGS_MAP
+from assembler.model import CAPABILITY_ARGS_MAP, CAPABILITY_HANDLER_SCRIPT_MAP
 
 
 def substitute_vars(text: str, variables: dict[str, str]) -> str:
@@ -25,7 +25,7 @@ def substitute_vars(text: str, variables: dict[str, str]) -> str:
     return text
 
 
-def execution_policy_vars(policy: "ExecutionPolicy") -> dict[str, str]:
+def execution_policy_vars(policy: ExecutionPolicy) -> dict[str, str]:
     """``{{...}}`` vars every platform injects into agent bodies that reference
     execution-policy defaults (currently only the orchestrator agent).
     """
@@ -50,7 +50,7 @@ COPILOT_AGENTS_SECTION_LABELS: dict[str, str] = {
 
 
 def generate_agents_section(
-    registry: "CanonicalRegistry",
+    registry: CanonicalRegistry,
     platform: str,
     models: dict[str, str],
     labels: dict[str, str] | None = None,

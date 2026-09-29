@@ -5,7 +5,6 @@
 from pathlib import Path
 
 import pytest
-
 from assembler.dsl_parser import parse_execution_policy, parse_workflow_file
 from runtime.workflow import transitions
 

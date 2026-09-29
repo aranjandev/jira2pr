@@ -33,10 +33,10 @@ import json
 from pathlib import Path
 
 from compiler.assembler.model import StateSpec, WorkflowSpec
+
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow.loader import RuntimeProject
-
 
 logger = get_logger("workflow.supervisor_invoker")
 

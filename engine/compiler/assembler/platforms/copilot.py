@@ -6,7 +6,12 @@ from pathlib import Path
 
 from assembler.base import PlatformAssembler
 from assembler.core_package import assemble_core
-from assembler.model import AgentSpec, WorkflowSpec, CAPABILITY_HANDLER_SCRIPT_MAP, CAPABILITY_ARGS_MAP
+from assembler.model import (
+    CAPABILITY_ARGS_MAP,
+    CAPABILITY_HANDLER_SCRIPT_MAP,
+    AgentSpec,
+    WorkflowSpec,
+)
 from assembler.registry import CanonicalRegistry
 from assembler.templates import execution_policy_vars, generate_agents_section
 from assembler.writer import FileWriter

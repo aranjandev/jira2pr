@@ -15,7 +15,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 # ─── .env loader ─────────────────────────────────────────────────────────────
 
 def load_env():
@@ -151,9 +150,9 @@ def _make_askpass_script(token: str, username: str) -> str:
         "import sys\n"
         "prompt = sys.argv[1] if len(sys.argv) > 1 else ''\n"
         "if 'username' in prompt.lower():\n"
-        f"    print({repr(username)})\n"
+        f"    print({username!r})\n"
         "else:\n"
-        f"    print({repr(token)})\n"
+        f"    print({token!r})\n"
     )
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", delete=False, prefix="git_askpass_"

@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from assembler.platforms.aider import AiderAssembler
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter

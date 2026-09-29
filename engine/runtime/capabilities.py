@@ -7,9 +7,9 @@ from __future__ import annotations
 import re
 
 from assembler.model import (
-    CapabilitySpec,
-    CAPABILITY_HANDLER_SCRIPT_MAP,
     CAPABILITY_ARGS_MAP,
+    CAPABILITY_HANDLER_SCRIPT_MAP,
+    CapabilitySpec,
 )
 
 _PLACEHOLDER_RE = re.compile(r"^<(.+)>$")

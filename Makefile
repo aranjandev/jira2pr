@@ -1,6 +1,6 @@
 .PHONY: help install init check run resume status list test lint
 
-PYTHON ?= python3
+PYTHON ?= uv run python3
 ENGINE := $(CURDIR)/engine
 CLI := PYTHONPATH=$(ENGINE)/compiler:$(ENGINE) $(PYTHON) $(ENGINE)/jira2pr/cli.py
 TARGET_DIR ?= .

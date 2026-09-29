@@ -19,7 +19,7 @@ from assembler.platforms import PLATFORMS
 from assembler.registry import CanonicalRegistry
 from assembler.validator import CanonicalValidationError, validate
 from assembler.writer import FileWriter
-from runtime.logging_config import setup_logging, get_logger
+from runtime.logging_config import get_logger, setup_logging
 
 logger = get_logger("cli")
 

@@ -9,10 +9,9 @@ import os
 import re
 import subprocess
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
-
 
 # ─── .env loader ─────────────────────────────────────────────────────────────
 
@@ -141,9 +140,7 @@ def extract_acceptance_criteria(fields: dict) -> str:
         texts = [_extract_text(c) for c in content]
         flat = " ".join(t for t in texts if isinstance(t, str))
 
-        if node_type == "heading" and ac_pattern.search(flat):
-            results.append(flat)
-        elif node_type == "paragraph" and ac_inline.search(flat):
+        if node_type == "heading" and ac_pattern.search(flat) or node_type == "paragraph" and ac_inline.search(flat):
             results.append(flat)
 
     return "\n".join(results)

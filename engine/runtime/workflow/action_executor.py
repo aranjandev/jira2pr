@@ -19,7 +19,8 @@ import subprocess
 from pathlib import Path
 
 from assembler.model import StateSpec
-from runtime.capabilities import resolve, CapabilityError
+
+from runtime.capabilities import CapabilityError, resolve
 from runtime.logging_config import get_logger
 from runtime.workflow.loader import RuntimeProject
 

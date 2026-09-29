@@ -12,7 +12,7 @@ import os
 import re
 import tempfile
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -43,7 +43,7 @@ def validate_ticket_key(ticket_key: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @dataclass
@@ -64,7 +64,7 @@ class WorkflowState:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "WorkflowState":
+    def from_dict(cls, data: dict) -> WorkflowState:
         return cls(
             workflow=data.get("workflow", ""),
             work_item=data.get("work_item", ""),

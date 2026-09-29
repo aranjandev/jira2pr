@@ -4,15 +4,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from assembler.platforms.aider import AiderAssembler
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
 from runtime.workflow.action_executor import (
+    ActionExecutionError,
+    execute_actions,
     parse_pr_actions,
     strip_pr_actions_block,
-    execute_actions,
-    ActionExecutionError,
 )
 from runtime.workflow.loader import RuntimeProject
 

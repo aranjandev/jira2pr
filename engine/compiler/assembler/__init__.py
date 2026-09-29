@@ -2,9 +2,9 @@
 
 __version__ = "2.0.0"
 
-from assembler.registry import CanonicalRegistry
-from assembler.writer import FileWriter
 from assembler.base import PlatformAssembler
 from assembler.platforms import PLATFORMS
+from assembler.registry import CanonicalRegistry
+from assembler.writer import FileWriter
 
-__all__ = ["CanonicalRegistry", "FileWriter", "PlatformAssembler", "PLATFORMS", "__version__"]
+__all__ = ["PLATFORMS", "CanonicalRegistry", "FileWriter", "PlatformAssembler", "__version__"]
