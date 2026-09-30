@@ -35,8 +35,12 @@ from runtime.artifacts.normalizer import (
     normalize_artifact,
 )
 from runtime.artifacts.validator import (
+    ArtifactValidationError,
     validate_artifact,
 )
+
+from runtime.workflow.feedback import WorkerOutputError
+
 from runtime.backends.base import LLMBackend
 from runtime.capabilities import (
     CapabilityError,
@@ -271,6 +275,7 @@ def _build_worker_context(
         project=project,
         state=state,
         agent=agent,
+        ticket_key=ticket_key,
         artifacts_dir=artifacts_dir,
         runtime_context_files=runtime_context_files,
     )
@@ -347,7 +352,6 @@ def _invoke_artifact_worker(
             output_file=output_path,
             repo_root=repo_root,
         )
-
         logger.info("Normalizing artifact at: %s", output_path)
         normalize_artifact(
             output_path
@@ -357,6 +361,18 @@ def _invoke_artifact_worker(
             output_path,
             repo_root=repo_root,
         )
+
+    except ArtifactValidationError as exc:
+        logger.warning(
+            "Artifact validation failed for worker '%s': %s",
+            worker_slug,
+            exc,
+        )
+
+        raise WorkerOutputError(
+            source="artifact-validation",
+            reason=str(exc),
+        ) from exc
 
     except Exception as exc:
         logger.exception(

@@ -17,116 +17,414 @@ from runtime.workflow.state_manager import StateManager, WorkflowState
 from runtime.workflow.supervisor_invoker import invoke_supervisor
 from runtime.workflow.worker_invoker import invoke_worker
 
+from runtime.workflow.feedback import (
+    WorkerFeedback,
+    WorkerOutputError,
+    clear_feedback,
+    write_feedback,
+)
+
 logger = get_logger("workflow.executor")
 
-
 class WorkflowExecutor:
-    def __init__(self, project: RuntimeProject, backend: LLMBackend) -> None:
+    def __init__(
+        self,
+        project: RuntimeProject,
+        backend: LLMBackend,
+    ) -> None:
         self._project = project
         self._backend = backend
         self._state_manager = StateManager(project.core_dir)
-        logger.debug(f"WorkflowExecutor initialized with backend: {backend.__class__.__name__}")
 
-    def start(self, workflow_name: str, ticket_key: str) -> WorkflowState:
-        """Create fresh state for *ticket_key* and run to completion/escalation."""
-        logger.info(f"Starting new workflow: {workflow_name} for ticket: {ticket_key}")
+        logger.debug(
+            "WorkflowExecutor initialized with backend: %s",
+            backend.__class__.__name__,
+        )
+
+    def start(
+        self,
+        workflow_name: str,
+        ticket_key: str,
+    ) -> WorkflowState:
+        """Create fresh state for a ticket and run the workflow."""
+
+        logger.info(
+            "Starting new workflow: %s for ticket: %s",
+            workflow_name,
+            ticket_key,
+        )
+
         workflow = self._project.workflow(workflow_name)
-        self._state_manager.create(ticket_key, workflow_name, workflow.initial_state)
-        logger.debug(f"Created initial state for {ticket_key} at state: {workflow.initial_state}")
+
+        self._state_manager.create(
+            ticket_key,
+            workflow_name,
+            workflow.initial_state,
+        )
+
+        logger.debug(
+            "Created initial state for %s at state: %s",
+            ticket_key,
+            workflow.initial_state,
+        )
+
         return self.run(ticket_key)
 
-    def resume(self, ticket_key: str) -> WorkflowState:
-        """Continue a previously started workflow from its saved state."""
-        logger.info(f"Resuming workflow for ticket: {ticket_key}")
+    def resume(
+        self,
+        ticket_key: str,
+    ) -> WorkflowState:
+        """Continue a previously started workflow from saved state."""
+
+        logger.info(
+            "Resuming workflow for ticket: %s",
+            ticket_key,
+        )
+
         return self.run(ticket_key)
 
-    def run(self, ticket_key: str) -> WorkflowState:
-        logger.info(f"Running workflow for ticket: {ticket_key}")
+    def run(
+        self,
+        ticket_key: str,
+    ) -> WorkflowState:
+        """Run or resume a workflow until it reaches a terminal state."""
+
+        logger.info(
+            "Running workflow for ticket: %s",
+            ticket_key,
+        )
+
         state = self._state_manager.load(ticket_key)
-        logger.info(f"Loaded state for {ticket_key}: workflow={state.workflow}, current_state={state.current_state}")
-        workflow = self._project.workflow(state.workflow)
+
+        logger.info(
+            "Loaded state for %s: workflow=%s, current_state=%s",
+            ticket_key,
+            state.workflow,
+            state.current_state,
+        )
+
+        workflow = self._project.workflow(
+            state.workflow
+        )
+
         policy = self._project.execution_policy
 
         iteration = 0
+
         while True:
             iteration += 1
-            current = workflow.states[state.current_state]
-            logger.debug(f"[Iteration {iteration}] Current state: {current.name}, Terminal: {current.terminal}")
+
+            current = workflow.states[
+                state.current_state
+            ]
+
+            logger.debug(
+                "[Iteration %d] Current state: %s, Terminal: %s",
+                iteration,
+                current.name,
+                current.terminal,
+            )
+
+            # ----------------------------------------------------------
+            # Terminal state
+            # ----------------------------------------------------------
 
             if current.terminal:
-                state.status = "completed" if current.outcome == "success" else "escalated"
-                self._state_manager.save(ticket_key, state)
-                logger.info(f"Workflow reached terminal state: {current.name} (outcome={current.outcome})")
-                logger.info(f"Final status: {state.status}")
+                state.status = (
+                    "completed"
+                    if current.outcome == "success"
+                    else "escalated"
+                )
+
+                self._state_manager.save(
+                    ticket_key,
+                    state,
+                )
+
+                logger.info(
+                    "Workflow reached terminal state: %s "
+                    "(outcome=%s)",
+                    current.name,
+                    current.outcome,
+                )
+
+                logger.info(
+                    "Final status: %s",
+                    state.status,
+                )
+
                 return state
+
+            # ----------------------------------------------------------
+            # Global iteration safety limit
+            # ----------------------------------------------------------
 
             max_total_iterations = (
                 workflow.max_total_iterations
                 if workflow.max_total_iterations is not None
                 else policy.max_total_iterations
             )
-            if state.total_iterations >= max_total_iterations:
-                # Global safety net: bounds oscillation between ANY states (not just
-                # self-looping ones), independent of every state's own max_attempts.
+
+            if (
+                state.total_iterations
+                >= max_total_iterations
+            ):
                 logger.warning(
-                    f"Global iteration cap ({max_total_iterations}) exceeded at state {current.name}. "
-                    "Escalating due to possible transition cycle."
+                    "Global iteration cap (%d) exceeded at "
+                    "state %s. Escalating due to possible "
+                    "transition cycle.",
+                    max_total_iterations,
+                    current.name,
                 )
+
                 state.record_escalation(
                     current.name,
-                    f"global iteration cap ({max_total_iterations}) exceeded; "
+                    f"global iteration cap "
+                    f"({max_total_iterations}) exceeded; "
                     "possible transition cycle",
                 )
-                state.current_state = policy.terminal_escalated_state
-                self._state_manager.save(ticket_key, state)
+
+                state.current_state = (
+                    policy.terminal_escalated_state
+                )
+
+                self._state_manager.save(
+                    ticket_key,
+                    state,
+                )
+
                 continue
 
+            # ----------------------------------------------------------
+            # Begin state attempt
+            # ----------------------------------------------------------
+
             state.total_iterations += 1
-            attempt = state.retry_counts.get(current.name, 0) + 1
+
+            attempt = (
+                state.retry_counts.get(
+                    current.name,
+                    0,
+                )
+                + 1
+            )
+
             logger.info(
-                f"[Iteration {iteration}] Processing state: {current.name} (attempt {attempt}, "
-                f"total iterations: {state.total_iterations})"
+                "[Iteration %d] Processing state: %s "
+                "(attempt %d, total iterations: %d)",
+                iteration,
+                current.name,
+                attempt,
+                state.total_iterations,
             )
 
             try:
-                logger.debug(f"Invoking worker for state: {current.name}")
-                produced, action_metadata = invoke_worker(
-                    project=self._project, 
-                    workflow=workflow,
-                    state=current,
-                    ticket_key=ticket_key,
-                    backend=self._backend
-                )
-                logger.debug(f"Worker produced artifacts: {list(produced.keys())}")
+                # ------------------------------------------------------
+                # Worker execution
+                # ------------------------------------------------------
 
-                logger.debug(f"Invoking supervisor for state: {current.name}")
-                result = invoke_supervisor(
-                    self._project, workflow, current, ticket_key, produced, self._backend
+                produced: dict[str, str] = {}
+                action_metadata: dict[str, str] = {}
+                feedback: WorkerFeedback | None = None
+
+                try:
+                    logger.debug(
+                        "Invoking worker for state: %s",
+                        current.name,
+                    )
+
+                    produced, action_metadata = invoke_worker(
+                        project=self._project,
+                        workflow=workflow,
+                        state=current,
+                        ticket_key=ticket_key,
+                        backend=self._backend,
+                    )
+
+                    logger.debug(
+                        "Worker produced artifacts: %s",
+                        list(produced.keys()),
+                    )
+
+                except WorkerOutputError as exc:
+                    # This is an expected workflow failure, not a
+                    # catastrophic runtime exception.
+                    logger.warning(
+                        "Worker output failed validation "
+                        "for state '%s': %s",
+                        current.name,
+                        exc,
+                    )
+
+                    outcome = "failure"
+                    feedback = exc.feedback
+
+                    result = {
+                        "outcome": outcome,
+                        "reason": feedback.reason,
+                        "feedback": (
+                            "\n".join(feedback.details)
+                            if feedback.details
+                            else ""
+                        ),
+                        "violations": [],
+                    }
+
+                else:
+                    # --------------------------------------------------
+                    # Supervisor evaluation
+                    # --------------------------------------------------
+
+                    logger.debug(
+                        "Invoking supervisor for state: %s",
+                        current.name,
+                    )
+
+                    result = invoke_supervisor(
+                        self._project,
+                        workflow,
+                        current,
+                        ticket_key,
+                        produced,
+                        self._backend,
+                    )
+
+                    outcome = result["outcome"]
+
+                    logger.info(
+                        "Supervisor outcome: %s, Reason: %s",
+                        outcome,
+                        result.get("reason", "N/A"),
+                    )
+
+                    if outcome != "success":
+                        feedback = _feedback_from_supervisor(
+                            result
+                        )
+
+                # ------------------------------------------------------
+                # Persist or clear retry feedback
+                # ------------------------------------------------------
+
+                context_dir = self._project.context_dir(
+                    ticket_key
                 )
-                outcome = result["outcome"]
-                logger.info(f"Supervisor outcome: {outcome}, Reason: {result.get('reason', 'N/A')}")
+
+                if outcome == "success":
+                    clear_feedback(
+                        context_dir=context_dir,
+                        state_name=current.name,
+                    )
+
+                elif (
+                    outcome == "failure"
+                    and feedback is not None
+                ):
+                    feedback_file = write_feedback(
+                        context_dir=context_dir,
+                        state_name=current.name,
+                        attempt=attempt,
+                        feedback=feedback,
+                    )
+
+                    logger.info(
+                        "Saved retry feedback for state '%s': %s",
+                        current.name,
+                        feedback_file,
+                    )
+
+                # ------------------------------------------------------
+                # Register produced artifacts
+                # ------------------------------------------------------
 
                 for name in produced:
                     if name not in state.artifacts:
-                        state.artifacts.append(name)
+                        state.artifacts.append(
+                            name
+                        )
+
+                # ------------------------------------------------------
+                # Resolve state transition
+                # ------------------------------------------------------
 
                 transition = transitions.next_state(
-                    workflow, current.name, outcome, state.retry_counts, policy
+                    workflow,
+                    current.name,
+                    outcome,
+                    state.retry_counts,
+                    policy,
                 )
-                state.retry_counts = transition.retry_counts
-                state.record_history(current.name, attempt, outcome, notes=result.get("reason", ""))
 
-                if transition.escalated_due_to_retry_exhaustion:
-                    logger.warning(f"Escalating due to retry attempts exhausted for state: {current.name}")
-                    state.record_escalation(current.name, "retry attempts exhausted")
+                state.retry_counts = (
+                    transition.retry_counts
+                )
+
+                state.record_history(
+                    current.name,
+                    attempt,
+                    outcome,
+                    notes=result.get(
+                        "reason",
+                        "",
+                    ),
+                )
+
+                # ------------------------------------------------------
+                # Escalation tracking
+                # ------------------------------------------------------
+
+                if (
+                    transition
+                    .escalated_due_to_retry_exhaustion
+                ):
+                    logger.warning(
+                        "Escalating due to retry attempts "
+                        "exhausted for state: %s",
+                        current.name,
+                    )
+
+                    state.record_escalation(
+                        current.name,
+                        "retry attempts exhausted",
+                    )
+
                 elif outcome == "escalate":
-                    logger.warning(f"Escalating due to supervisor feedback: {result.get('reason', 'N/A')}")
-                    state.record_escalation(current.name, result.get("reason", ""))
+                    reason = result.get(
+                        "reason",
+                        "",
+                    )
 
-                # Execute action capabilities if the worker has actions and passed validation
-                worker_binding = self._project.workers.get(current.worker)
-                if worker_binding and worker_binding.actions and outcome == "success":
-                    logger.info(f"Executing actions for state: {current.name}")
+                    logger.warning(
+                        "Escalating due to supervisor "
+                        "feedback: %s",
+                        reason,
+                    )
+
+                    state.record_escalation(
+                        current.name,
+                        reason,
+                    )
+
+                # ------------------------------------------------------
+                # Runtime action capabilities
+                # ------------------------------------------------------
+
+                worker_binding = (
+                    self._project.workers.get(
+                        current.worker
+                    )
+                )
+
+                if (
+                    worker_binding
+                    and worker_binding.actions
+                    and outcome == "success"
+                ):
+                    logger.info(
+                        "Executing actions for state: %s",
+                        current.name,
+                    )
+
                     try:
                         action_result = execute_actions(
                             self._project,
@@ -134,20 +432,97 @@ class WorkflowExecutor:
                             ticket_key,
                             action_metadata,
                             self._project.core_dir.parent,
-                            state.metadata.get("pr_number"),
+                            state.metadata.get(
+                                "pr_number"
+                            ),
                         )
-                        # Merge action results into state metadata
-                        state.metadata.update(action_result)
-                        logger.info(f"Actions completed: {action_result}")
-                    except ActionExecutionError as e:
-                        logger.exception(f"Action execution failed: {e}")
+
+                        state.metadata.update(
+                            action_result
+                        )
+
+                        logger.info(
+                            "Actions completed: %s",
+                            action_result,
+                        )
+
+                    except ActionExecutionError as exc:
+                        logger.exception(
+                            "Action execution failed: %s",
+                            exc,
+                        )
                         raise
 
-                state.current_state = transition.next_state
-                logger.info(f"Transitioning to next state: {transition.next_state}")
-                self._state_manager.save(ticket_key, state)
-                logger.debug(f"State saved for ticket: {ticket_key}")
+                # ------------------------------------------------------
+                # Advance workflow
+                # ------------------------------------------------------
 
-            except Exception as e:
-                logger.exception(f"Error during workflow execution at state {current.name}: {e}")
+                state.current_state = (
+                    transition.next_state
+                )
+
+                logger.info(
+                    "Transitioning to next state: %s",
+                    transition.next_state,
+                )
+
+                self._state_manager.save(
+                    ticket_key,
+                    state,
+                )
+
+                logger.debug(
+                    "State saved for ticket: %s",
+                    ticket_key,
+                )
+
+            except Exception as exc:
+                # Unexpected infrastructure/runtime/programming failures
+                # are still catastrophic for now.
+                logger.exception(
+                    "Error during workflow execution "
+                    "at state %s: %s",
+                    current.name,
+                    exc,
+                )
                 raise
+
+def _feedback_from_supervisor(
+    result: dict,
+) -> WorkerFeedback:
+    """Convert a supervisor rejection into retry feedback."""
+
+    details: list[str] = []
+
+    supervisor_feedback = result.get(
+        "feedback",
+        "",
+    )
+
+    if supervisor_feedback:
+        details.append(
+            str(supervisor_feedback)
+        )
+
+    violations = result.get(
+        "violations",
+        [],
+    )
+
+    if isinstance(violations, list):
+        details.extend(
+            str(violation)
+            for violation in violations
+            if violation
+        )
+
+    return WorkerFeedback(
+        source="supervisor",
+        reason=str(
+            result.get(
+                "reason",
+                "Supervisor rejected worker output",
+            )
+        ),
+        details=tuple(details),
+    )

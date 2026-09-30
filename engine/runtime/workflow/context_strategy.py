@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from runtime.workflow.loader import RuntimeProject
 
+from runtime.workflow.feedback import feedback_path
 
 @dataclass(frozen=True)
 class ContextStrategy:
@@ -61,6 +62,7 @@ class ContextStrategy:
         project: RuntimeProject,
         state: StateSpec,
         agent: AgentSpec,
+        ticket_key: str,
         artifacts_dir: Path,
         runtime_context_files: list[Path],
     ) -> list[Path]:
@@ -112,6 +114,18 @@ class ContextStrategy:
 
             if instructions is not None and instructions.is_file():
                 read_files.append(instructions)
+
+
+        # 6. Feedback from previous worker executions.
+        feedback_file = feedback_path(
+            project.context_dir(ticket_key=ticket_key),
+            state.name,
+        )
+
+        if feedback_file.is_file():
+            read_files.append(
+                feedback_file
+            )
 
         return _deduplicate_paths(read_files)
 
