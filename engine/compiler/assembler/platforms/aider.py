@@ -167,7 +167,7 @@ class AiderAssembler(PlatformAssembler):
                     "map_tokens": 0,
                 },
                 "repository": {
-                    "map_tokens": 4096,
+                    "map_tokens": 5120,
                 },
             },
         }

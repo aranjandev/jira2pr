@@ -14,19 +14,25 @@ _FENCED_DOCUMENT = re.compile(
 def normalize_yaml_file(path: Path) -> None:
     """Remove harmless Markdown wrapping from a generated YAML artifact.
 
-    Only strips a single fence when it wraps the entire document.
-    Embedded fenced blocks are left untouched.
+    Removes outer fenced blocks when they wrap the entire document,
+    and removes any remaining ``` markers from anywhere in the content.
     """
     text = path.read_text(encoding="utf-8")
 
     match = _FENCED_DOCUMENT.match(text)
 
     if match:
-        normalized = match.group(1).rstrip() + "\n"
-        path.write_text(
-            normalized,
-            encoding="utf-8",
-        )
+        normalized = match.group(1)
+    else:
+        normalized = text
+    
+    # Remove all ``` occurrences from anywhere in the content
+    normalized = normalized.replace("```", "").rstrip() + "\n"
+    
+    path.write_text(
+        normalized,
+        encoding="utf-8",
+    )
 
 def normalize_artifact(path: Path) -> None:
     if path.suffix in {".yaml", ".yml"}:

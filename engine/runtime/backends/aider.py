@@ -154,11 +154,13 @@ class AiderBackend(LLMBackend):
         # The artifact must be produced by this invocation, not inherited
         # from a previous attempt.
         output_file.unlink(missing_ok=True)
-        
+                
         argv = [
             "aider",
             "--model",
             model,
+            "--edit-format",
+            "whole",
         ]
 
         for path in read_files:
@@ -266,8 +268,10 @@ class AiderBackend(LLMBackend):
             "aider",
             "--model",
             model,
+            "--edit-format",
+            "whole",
         ]
-
+        
         for path in read_files:
             argv.extend(
                 [
