@@ -12,23 +12,21 @@ from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow import transitions
 from runtime.workflow.action_executor import ActionExecutionError, execute_actions
-from runtime.workflow.loader import RuntimeProject
-from runtime.workflow.state_manager import StateManager, WorkflowState
-from runtime.workflow.supervisor_invoker import invoke_supervisor
-from runtime.workflow.worker_invoker import invoke_worker
-
+from runtime.workflow.evidence import (
+    ImplementationEvidence,
+    collect_implementation_evidence,
+    planned_changed_files,
+)
 from runtime.workflow.feedback import (
     WorkerFeedback,
     WorkerOutputError,
     clear_feedback,
     write_feedback,
 )
-
-from runtime.workflow.evidence import (
-    ImplementationEvidence,
-    collect_implementation_evidence,
-    planned_changed_files,
-)
+from runtime.workflow.loader import RuntimeProject
+from runtime.workflow.state_manager import StateManager, WorkflowState
+from runtime.workflow.supervisor_invoker import invoke_supervisor
+from runtime.workflow.worker_invoker import invoke_worker
 
 logger = get_logger("workflow.executor")
 
@@ -518,10 +516,9 @@ class WorkflowExecutor:
                             action_result,
                         )
 
-                    except ActionExecutionError as exc:
+                    except ActionExecutionError:
                         logger.exception(
-                            "Action execution failed: %s",
-                            exc,
+                            "Action execution failed"
                         )
                         raise
 
@@ -548,16 +545,14 @@ class WorkflowExecutor:
                     ticket_key,
                 )
 
-            except Exception as exc:
+            except Exception:
                 # Unexpected infrastructure/runtime/programming failures
                 # remain catastrophic.
 
                 logger.exception(
-                    "Error during workflow execution at state %s: %s",
+                    "Error during workflow execution at state %s",
                     current.name,
-                    exc,
                 )
-
                 raise
 
 def _feedback_from_supervisor(

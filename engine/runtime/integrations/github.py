@@ -48,7 +48,7 @@ def load_env():
 
 def git_output(*args) -> str:
     """Run a git command and return stdout. Exits on failure."""
-    result = subprocess.run(["git"] + list(args), capture_output=True, text=True)
+    result = subprocess.run(["git"] + list(args), capture_output=True, text=True, check=False)
     if result.returncode != 0:
         print(f"ERROR: git {' '.join(args)} failed: {result.stderr.strip()}", file=sys.stderr)
         sys.exit(1)
@@ -111,7 +111,7 @@ def get_bitbucket_username() -> str:
 
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-def http_request(method: str, url: str, headers: dict, payload: dict = None) -> tuple[int, dict]:
+def http_request(method: str, url: str, headers: dict, payload: dict | None = None) -> tuple[int, dict]:
     """
     Perform an HTTP request. Returns (status_code, parsed_json_body).
     payload is serialised to JSON automatically.

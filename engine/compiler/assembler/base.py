@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -19,7 +20,7 @@ class PlatformAssembler(ABC):
 
     # Template variables for {{VAR}} substitution in workflows / instructions.
     # Subclasses must define this.
-    TEMPLATE_VARS: dict[str, str] = {}
+    TEMPLATE_VARS: typing.ClassVar[dict[str, str]] = {}
 
     @property 
     def engine_root(self) -> Path:

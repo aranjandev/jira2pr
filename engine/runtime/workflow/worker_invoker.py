@@ -24,7 +24,6 @@ import subprocess
 from pathlib import Path
 
 import yaml
-import json
 from compiler.assembler.model import (
     AgentSpec,
     StateSpec,
@@ -38,9 +37,6 @@ from runtime.artifacts.validator import (
     ArtifactValidationError,
     validate_artifact,
 )
-
-from runtime.workflow.feedback import WorkerOutputError
-
 from runtime.backends.base import LLMBackend
 from runtime.capabilities import (
     CapabilityError,
@@ -50,6 +46,7 @@ from runtime.logging_config import get_logger
 from runtime.workflow.context_strategy import (
     ContextStrategy,
 )
+from runtime.workflow.feedback import WorkerOutputError
 from runtime.workflow.loader import (
     RuntimeProject,
 )
@@ -374,11 +371,10 @@ def _invoke_artifact_worker(
             reason=str(exc),
         ) from exc
 
-    except Exception as exc:
+    except Exception:
         logger.exception(
-            "Artifact worker '%s' failed: %s",
+            "Artifact worker '%s' failed",
             worker_slug,
-            exc,
         )
         raise
 
@@ -465,7 +461,7 @@ def _load_repository_tasks(
         ) from exc
 
     if not isinstance(data, dict):
-        raise ValueError(
+        raise TypeError(
             "plan.yaml must contain a YAML mapping"
         )
 
@@ -717,12 +713,11 @@ def _invoke_repository_worker(
                 repo_root=repo_root,
             )
 
-        except Exception as exc:
+        except Exception:
             logger.exception(
-                "Repository task %s failed for worker '%s': %s",
+                "Repository task %s failed for worker '%s'",
                 task.id,
                 worker_slug,
-                exc,
             )
             raise
 

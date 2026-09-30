@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 from pathlib import Path
 
 from assembler.base import PlatformAssembler
@@ -27,7 +28,7 @@ COPILOT_NATIVE_TOOL_MAP: dict[str, str] = {
 class CopilotAssembler(PlatformAssembler):
     name = "copilot"
 
-    TEMPLATE_VARS: dict[str, str] = {
+    TEMPLATE_VARS: typing.ClassVar[dict[str, str]] = {
         "AGENTS_DIR": ".github",
         "CORE_DIR": ".jira2pr",
     }
@@ -167,8 +168,8 @@ class CopilotAssembler(PlatformAssembler):
             "",
             "# /resume",
             "",
-            f"Load `{core_dir}/state/<TICKET-KEY>.yaml`, determine `workflow` and `current_state`, "
-            f"and continue executing from there. Supported workflows: {workflow_names}.",
+            (f"Load `{core_dir}/state/<TICKET-KEY>.yaml`, determine `workflow` and `current_state`, "
+            f"and continue executing from there. Supported workflows: {workflow_names}."),
         ]
         return "\n".join(lines) + "\n"
 
@@ -183,9 +184,9 @@ class CopilotAssembler(PlatformAssembler):
             "",
             "# /status",
             "",
-            f"Read `{core_dir}/state/<TICKET-KEY>.yaml` (read-only) and report `workflow`, "
+            (f"Read `{core_dir}/state/<TICKET-KEY>.yaml` (read-only) and report `workflow`, "
             "`current_state`, `status`, `retry_counts`, and `history`. Do not invoke any "
-            "worker or modify state.",
+            "worker or modify state."),
         ]
         return "\n".join(lines) + "\n"
 
@@ -216,12 +217,12 @@ class CopilotAssembler(PlatformAssembler):
             "",
             "# Workflow Protocol",
             "",
-            f"Every state has bounded retries (default max attempts: {policy.default_max_attempts}). "
-            f"Exhausting retries **{policy.on_exhaustion}s** the workflow rather than looping forever.",
+            (f"Every state has bounded retries (default max attempts: {policy.default_max_attempts}). "
+            f"Exhausting retries **{policy.on_exhaustion}s** the workflow rather than looping forever."),
             "",
-            f"A global safety net additionally caps total state visits per run at "
+            (f"A global safety net additionally caps total state visits per run at "
             f"**{policy.max_total_iterations}** (a workflow may override this), guarding against "
-            "oscillation between any two or more states independent of their individual retry budgets.",
+            "oscillation between any two or more states independent of their individual retry budgets."),
             "",
             "## Success Criteria",
             "",

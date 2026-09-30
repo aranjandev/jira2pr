@@ -109,8 +109,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         logger.info(f"Workflow completed with status: {state.status}")
         _print_state(state)
         return 0 if state.status == "completed" else 1
-    except Exception as e:
-        logger.exception(f"Workflow failed with exception: {e}")
+    except Exception:
+        logger.exception("Workflow failed with exception")
         return 1
 
 
@@ -135,8 +135,8 @@ def cmd_resume(args: argparse.Namespace) -> int:
         logger.info(f"Workflow resumed and completed with status: {state.status}")
         _print_state(state)
         return 0 if state.status == "completed" else 1
-    except Exception as e:
-        logger.exception(f"Workflow resume failed with exception: {e}")
+    except Exception:
+        logger.exception("Workflow resume failed with exception")
         return 1
 
 
@@ -156,8 +156,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         logger.info(f"Status retrieved: {state.status}")
         _print_state(state)
         return 0
-    except Exception as e:
-        logger.exception(f"Failed to get status: {e}")
+    except Exception:
+        logger.exception("Failed to get status")
         return 1
 
 
@@ -186,8 +186,8 @@ def cmd_list(args: argparse.Namespace) -> int:
         for ticket in tickets:
             print(ticket)
         return 0
-    except Exception as e:
-        logger.exception(f"Failed to list workflows: {e}")
+    except Exception:
+        logger.exception("Failed to list workflows")
         return 1
 
 

@@ -51,13 +51,13 @@ def git(*args, check=True, capture=False):
     """Run a git command. Returns stdout string if capture=True."""
     cmd = ["git"] + list(args)
     if capture:
-        result = subprocess.run(cmd, text=True, capture_output=True)
+        result = subprocess.run(cmd, text=True, capture_output=True, check=False)
         if check and result.returncode != 0:
             print(f"ERROR: git {' '.join(args)} failed:\n{result.stderr.strip()}", file=sys.stderr)
             sys.exit(1)
         return result.stdout.strip()
     else:
-        result = subprocess.run(cmd)
+        result = subprocess.run(cmd, check=False)
         if check and result.returncode != 0:
             sys.exit(result.returncode)
         return None
@@ -82,7 +82,8 @@ def cmd_create_branch(ticket_key: str, branch_type: str):
     # Check if branch already exists
     result = subprocess.run(
         ["git", "rev-parse", "--verify", branch_name],
-        capture_output=True
+        capture_output=True,
+        check=False
     )
     if result.returncode == 0:
         print(f"Branch '{branch_name}' already exists. Checking out.")
@@ -100,7 +101,7 @@ def cmd_create_branch(ticket_key: str, branch_type: str):
         # Checkout default branch, try fallbacks
         checked_out = False
         for base in [default, "main", "master"]:
-            r = subprocess.run(["git", "checkout", base], capture_output=True)
+            r = subprocess.run(["git", "checkout", base], capture_output=True, check=False)
             if r.returncode == 0:
                 checked_out = True
                 break
@@ -108,7 +109,7 @@ def cmd_create_branch(ticket_key: str, branch_type: str):
             print("ERROR: Could not checkout default branch", file=sys.stderr)
             sys.exit(1)
 
-        subprocess.run(["git", "pull", "--ff-only", "origin", default], capture_output=True)
+        subprocess.run(["git", "pull", "--ff-only", "origin", default], capture_output=True, check=False)
         git("checkout", "-b", branch_name)
 
     print(f"On branch: {branch_name}")
@@ -116,8 +117,8 @@ def cmd_create_branch(ticket_key: str, branch_type: str):
 
 def cmd_commit(message: str):
     # Check if there are any changes
-    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
-    unstaged = subprocess.run(["git", "diff", "--quiet"], capture_output=True)
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True, check=False)
+    unstaged = subprocess.run(["git", "diff", "--quiet"], capture_output=True, check=False)
     if staged.returncode == 0 and unstaged.returncode == 0:
         print("No changes to commit.")
         sys.exit(0)
@@ -176,7 +177,7 @@ def cmd_push():
 
     remote_result = subprocess.run(
         ["git", "remote", "get-url", "origin"],
-        capture_output=True, text=True
+        capture_output=True, text=True, check=False
     )
     remote_url = remote_result.stdout.strip() if remote_result.returncode == 0 else ""
 
@@ -200,7 +201,7 @@ def cmd_push():
 
     try:
         if run_env:
-            result = subprocess.run(["git", "push", "-u", "origin", branch], env=run_env)
+            result = subprocess.run(["git", "push", "-u", "origin", branch], env=run_env, check=False)
             if result.returncode != 0:
                 sys.exit(result.returncode)
         else:
@@ -222,7 +223,7 @@ def cmd_status():
 
     upstream = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
-        capture_output=True, text=True
+        capture_output=True, text=True, check=False
     )
     if upstream.returncode == 0:
         u = upstream.stdout.strip()
@@ -234,7 +235,7 @@ def cmd_status():
 
     print()
     print("Changes:")
-    subprocess.run(["git", "status", "--short"])
+    subprocess.run(["git", "status", "--short"], check=False)
 
 
 # ─── Usage ───────────────────────────────────────────────────────────────────

@@ -202,22 +202,22 @@ class TestLoadEnv(unittest.TestCase):
         try:
             os.environ.pop("GITHELPER_TEST_VAR_PLAIN", None)
             with patch("subprocess.check_output", return_value=str(Path(tmpfile).parent) + "\n"), \
-                 patch("pathlib.Path.__truediv__", side_effect=lambda self, other: Path(tmpfile) if other == ".env" else Path.__truediv__(self, other)):
+                 patch("pathlib.Path.__truediv__", side_effect=lambda self, other: Path(tmpfile) if other == ".env" else Path.__truediv__(self, other)), \
+                 open(tmpfile) as fh:
                 # Call load_env with the temp file path simulated
                 # We test the logic directly instead of the function call to avoid git dependency
-                with open(tmpfile) as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        if "=" not in line:
-                            continue
-                        key, _, value = line.partition("=")
-                        key = key.strip()
-                        value = value.strip().strip("\"'")
-                        import re
-                        if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
-                            os.environ.setdefault(key, value)
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip("\"'")
+                    import re
+                    if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
+                        os.environ.setdefault(key, value)
 
             self.assertEqual(os.environ.get("GITHELPER_TEST_VAR_PLAIN"), "testvalue123")
         finally:

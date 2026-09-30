@@ -316,10 +316,9 @@ def invoke_supervisor(
             repo_root=project.core_dir.parent,
         )
 
-    except Exception as exc:
+    except Exception:
         logger.exception(
-            "Supervisor backend call failed: %s",
-            exc,
+            "Supervisor backend call failed"
         )
         raise
 

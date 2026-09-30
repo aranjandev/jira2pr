@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import typing
 from pathlib import Path
 
 from assembler.base import PlatformAssembler
@@ -37,7 +38,7 @@ OPENCODE_AGENTS_SECTION_LABELS: dict[str, str] = {
 class OpenCodeAssembler(PlatformAssembler):
     name = "opencode"
 
-    TEMPLATE_VARS: dict[str, str] = {
+    TEMPLATE_VARS: typing.ClassVar[dict[str, str]] = {
         "PROJECT_INSTRUCTIONS_FILE": "AGENTS.md",
         "AGENTS_DIR": ".opencode",
         "TASK_TRACKING_INSTRUCTION": "use the `todowrite` tool to plan the tasks",

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+
 class ArtifactValidationError(ValueError):
     """Raised when a generated artifact is invalid."""
 
@@ -206,19 +207,17 @@ def _validate_plan_section(
                 f"{file_path}"
             ) from exc
 
-        if edit_mode in {"modify", "delete"}:
-            if not target.is_file():
-                raise ArtifactValidationError(
-                    f"{prefix}: {edit_mode} target does not exist: "
-                    f"{file_path}"
-                )
+        if edit_mode in {"modify", "delete"} and not target.is_file():
+            raise ArtifactValidationError(
+                f"{prefix}: {edit_mode} target does not exist: "
+                f"{file_path}"
+            )
 
-        if edit_mode == "create":
-            if target.exists():
-                raise ArtifactValidationError(
-                    f"{prefix}: create target already exists: "
-                    f"{file_path}"
-                )
+        if edit_mode == "create" and target.exists():
+            raise ArtifactValidationError(
+                f"{prefix}: create target already exists: "
+                f"{file_path}"
+            )
 
         # Only add this ID after validation so later entries may depend on it.
         seen_ids.add(task_id)

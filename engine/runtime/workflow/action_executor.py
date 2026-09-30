@@ -121,6 +121,7 @@ def execute_actions(
         result = subprocess.run(
             commit_argv,
             cwd=repo_root,
+            check=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -145,6 +146,7 @@ def execute_actions(
         result = subprocess.run(
             push_argv,
             cwd=repo_root,
+            check=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -186,6 +188,7 @@ def execute_actions(
             result = subprocess.run(
                 create_argv,
                 cwd=repo_root,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -236,6 +239,7 @@ def execute_actions(
             result = subprocess.run(
                 update_argv,
                 cwd=repo_root,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=30,

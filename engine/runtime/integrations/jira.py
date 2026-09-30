@@ -196,7 +196,7 @@ def main():
 
     # Parse ticket key from argument (may be a URL)
     raw = sys.argv[1]
-    if raw.startswith("http://") or raw.startswith("https://"):
+    if raw.startswith(("http://", "https://")):
         match = re.search(r"[A-Z][A-Z0-9]+-[0-9]+", raw)
         if not match:
             print(f"ERROR: Could not extract ticket key from URL: {raw}", file=sys.stderr)

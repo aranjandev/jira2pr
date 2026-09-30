@@ -162,7 +162,7 @@ class CanonicalRegistry:
         models = raw.get("models", {})
 
         if not isinstance(models, dict):
-            raise ValueError(
+            raise TypeError(
                 f"Expected 'models' mapping in {path}"
             )
 

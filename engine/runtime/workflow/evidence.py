@@ -22,10 +22,11 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
 import yaml
+
 from runtime.logging_config import get_logger
 from runtime.workflow.loader import RuntimeProject
-
 
 logger = get_logger("workflow.evidence")
 

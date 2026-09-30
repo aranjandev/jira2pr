@@ -285,7 +285,7 @@ class TestHttpsGet(unittest.TestCase):
             fp=io.BytesIO(b'{"errorMessages":["Issue does not exist"]}'),
         )
         with patch("urllib.request.urlopen", side_effect=err):
-            status, body = mod.https_get("https://jira.example.com/rest/api/3/issue/NOPE-1", {})
+            status, _body = mod.https_get("https://jira.example.com/rest/api/3/issue/NOPE-1", {})
         self.assertEqual(status, 404)
 
 

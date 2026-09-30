@@ -11,6 +11,8 @@ engine that runs it.
 
 from __future__ import annotations
 
+import typing
+
 import yaml
 
 from assembler.base import PlatformAssembler
@@ -37,7 +39,7 @@ AIDER_AGENTS_SECTION_LABELS: dict[str, str] = {
 class AiderAssembler(PlatformAssembler):
     name = "aider"
 
-    TEMPLATE_VARS: dict[str, str] = {
+    TEMPLATE_VARS: typing.ClassVar[dict[str, str]] = {
         "CORE_DIR": CORE_PREFIX,
     }
 

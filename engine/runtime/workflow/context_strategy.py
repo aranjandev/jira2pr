@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 from runtime.workflow.feedback import feedback_path
 
+
 @dataclass(frozen=True)
 class ContextStrategy:
     """Select optional context for a worker invocation."""
