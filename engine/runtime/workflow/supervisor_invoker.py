@@ -58,6 +58,7 @@ def invoke_supervisor(
     ticket_key: str,
     produced: dict[str, str],
     backend: LLMBackend,
+    evidence_files: list[Path] | None = None,
 ) -> dict:
     """Evaluate a completed workflow state.
 
@@ -259,6 +260,12 @@ def invoke_supervisor(
         )
 
     read_files.extend(produced_files)
+
+    evidence_files = evidence_files or []
+
+    read_files.extend(
+        evidence_files
+    )    
 
     logger.debug(
         "Supervisor received %d produced artifact(s)",

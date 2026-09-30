@@ -24,6 +24,12 @@ from runtime.workflow.feedback import (
     write_feedback,
 )
 
+from runtime.workflow.evidence import (
+    ImplementationEvidence,
+    collect_implementation_evidence,
+    planned_changed_files,
+)
+
 logger = get_logger("workflow.executor")
 
 class WorkflowExecutor:
@@ -142,8 +148,7 @@ class WorkflowExecutor:
                 )
 
                 logger.info(
-                    "Workflow reached terminal state: %s "
-                    "(outcome=%s)",
+                    "Workflow reached terminal state: %s (outcome=%s)",
                     current.name,
                     current.outcome,
                 )
@@ -165,14 +170,10 @@ class WorkflowExecutor:
                 else policy.max_total_iterations
             )
 
-            if (
-                state.total_iterations
-                >= max_total_iterations
-            ):
+            if state.total_iterations >= max_total_iterations:
                 logger.warning(
-                    "Global iteration cap (%d) exceeded at "
-                    "state %s. Escalating due to possible "
-                    "transition cycle.",
+                    "Global iteration cap (%d) exceeded at state %s. "
+                    "Escalating due to possible transition cycle.",
                     max_total_iterations,
                     current.name,
                 )
@@ -226,6 +227,7 @@ class WorkflowExecutor:
                 produced: dict[str, str] = {}
                 action_metadata: dict[str, str] = {}
                 feedback: WorkerFeedback | None = None
+                evidence: ImplementationEvidence | None = None
 
                 try:
                     logger.debug(
@@ -247,11 +249,11 @@ class WorkflowExecutor:
                     )
 
                 except WorkerOutputError as exc:
-                    # This is an expected workflow failure, not a
-                    # catastrophic runtime exception.
+                    # Expected worker-output failure. This becomes a normal
+                    # workflow failure and can participate in the retry loop.
+
                     logger.warning(
-                        "Worker output failed validation "
-                        "for state '%s': %s",
+                        "Worker output failed validation for state '%s': %s",
                         current.name,
                         exc,
                     )
@@ -272,12 +274,82 @@ class WorkflowExecutor:
 
                 else:
                     # --------------------------------------------------
+                    # Collect implementation evidence
+                    # --------------------------------------------------
+
+                    if current.name == "implement":
+                        logger.info(
+                            "Collecting implementation evidence for state: %s",
+                            current.name,
+                        )
+
+                        verification = (
+                            self._project.backend_config
+                            .get("verification", {})
+                        )
+
+                        test_command = verification.get(
+                            "test_command",
+                            "",
+                        )
+
+                        lint_command = verification.get(
+                            "lint_command",
+                            "",
+                        )
+
+                        repo_root = self._project.core_dir.parent
+                        plan_path = (
+                            self._project.artifacts_dir(ticket_key)
+                            / "plan.yaml"
+                        )
+                        changed_files = planned_changed_files(
+                            plan_path=plan_path,
+                            repo_root=repo_root,
+                        )
+                        logger.debug(
+                            "Collecting implementation evidence for planned files:\n%s",
+                            "\n".join(
+                                f"  - {path}"
+                                for path in changed_files
+                            ),
+                        )
+                        
+                        evidence = collect_implementation_evidence(
+                            project=self._project,
+                            ticket_key=ticket_key,
+                            changed_files=changed_files,
+                            test_command=test_command,
+                            lint_command=lint_command,
+                        )
+
+                        logger.info(
+                            "Implementation evidence collected for "
+                            "ticket %s",
+                            ticket_key,
+                        )
+
+                        logger.debug(
+                            "Implementation evidence files:\n%s",
+                            "\n".join(
+                                f"  - {path}"
+                                for path in evidence.files()
+                            ),
+                        )
+
+                    # --------------------------------------------------
                     # Supervisor evaluation
                     # --------------------------------------------------
 
                     logger.debug(
                         "Invoking supervisor for state: %s",
                         current.name,
+                    )
+
+                    evidence_files = (
+                        evidence.files()
+                        if evidence is not None
+                        else []
                     )
 
                     result = invoke_supervisor(
@@ -287,6 +359,7 @@ class WorkflowExecutor:
                         ticket_key,
                         produced,
                         self._backend,
+                        evidence_files=evidence_files,
                     )
 
                     outcome = result["outcome"]
@@ -344,7 +417,7 @@ class WorkflowExecutor:
                         )
 
                 # ------------------------------------------------------
-                # Resolve state transition
+                # Resolve workflow transition
                 # ------------------------------------------------------
 
                 transition = transitions.next_state(
@@ -395,8 +468,7 @@ class WorkflowExecutor:
                     )
 
                     logger.warning(
-                        "Escalating due to supervisor "
-                        "feedback: %s",
+                        "Escalating due to supervisor feedback: %s",
                         reason,
                     )
 
@@ -478,13 +550,14 @@ class WorkflowExecutor:
 
             except Exception as exc:
                 # Unexpected infrastructure/runtime/programming failures
-                # are still catastrophic for now.
+                # remain catastrophic.
+
                 logger.exception(
-                    "Error during workflow execution "
-                    "at state %s: %s",
+                    "Error during workflow execution at state %s: %s",
                     current.name,
                     exc,
                 )
+
                 raise
 
 def _feedback_from_supervisor(

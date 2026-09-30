@@ -170,6 +170,10 @@ class AiderAssembler(PlatformAssembler):
                     "map_tokens": 5120,
                 },
             },
+            "verification": {
+                "test_command": "make test",
+                "lint_command": "make lint",
+            }
         }
 
         content = (

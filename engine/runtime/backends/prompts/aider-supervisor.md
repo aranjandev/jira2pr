@@ -1,13 +1,25 @@
-Evaluate the completed worker artifact against the success criteria in the supervisor context.
+Perform only the supervisor evaluation defined by the provided supervisor instructions.
 
-The read-only artifact is the worker output to evaluate.
+This is an evaluation-only invocation.
 
-The editable JSON file is OUTPUT ONLY.
-Its current contents, including an empty file, are not input and must not be evaluated.
+The read-only files are evidence. Do not modify them, fix them, request additional files, or propose repository edits.
 
-Evaluate only the success criteria listed in the supervisor context.
+Evaluate only the success criteria listed in the current supervisor context.
 
-Replace the editable JSON file with the final supervisor decision.
+The editable JSON file is the only output of this invocation.
 
-Do not explain your work.
-Make the file edit now.
+Write the supervisor decision to that JSON file using Aider's file-editing mechanism.
+
+The JSON decision must contain only:
+- outcome
+- reason
+- feedback
+- violations
+
+If tests or lint failed, report that failure in the JSON decision. Do not attempt to fix the failures.
+
+If implementation evidence is incomplete, report failure or escalation according to the supervisor contract. Do not request additional repository files.
+
+After writing the JSON decision file, stop immediately.
+
+Do not inspect, modify, or request any other repository file.
