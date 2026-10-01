@@ -24,6 +24,7 @@ never remove workflow-declared artifacts or required runtime capabilities.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,12 +34,16 @@ if TYPE_CHECKING:
 
     from runtime.workflow.loader import RuntimeProject
 
-import logging
-
 from runtime.workflow.evidence import (
     load_implementation_evidence,
 )
 from runtime.workflow.feedback import feedback_path
+from runtime.workflow.repository_context import (
+    RepositoryContextRequest,
+    TreeSitterRepositoryContextProvider,
+    materialize_repository_context,
+    repository_context_path,
+)
 
 logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
@@ -113,6 +118,14 @@ class ContextStrategy:
 
         # 4. Runtime capabilities that have been materialized as files.
         read_files.extend(runtime_context_files)
+
+        repository_context_files = _repository_context_files(
+            project=project,
+            state=state,
+            ticket_key=ticket_key,
+        )
+
+        read_files.extend(repository_context_files)
 
         # 7. Runtime evidence files for the current worker.
         evidence_files = _runtime_evidence_files(
@@ -214,3 +227,46 @@ def _runtime_evidence_files(
     )
 
     return evidence.files()
+
+def _repository_context_files(
+    *,
+    project: RuntimeProject,
+    state: StateSpec,
+    ticket_key: str,
+) -> list[Path]:
+    """Generate repository context for workers that need repository awareness."""
+
+    if state.worker != "planner":
+        return []
+
+    repo_root = project.core_dir.parent.resolve()
+    context_dir = project.context_dir(ticket_key)
+
+    output_path = repository_context_path(
+        context_dir=context_dir,
+    )
+
+    provider = TreeSitterRepositoryContextProvider()
+
+    request = RepositoryContextRequest(
+        repo_root=repo_root,
+    )
+
+    logger.info(
+        "Generating repository context for worker '%s'",
+        state.worker,
+    )
+
+    map_path = materialize_repository_context(
+        provider=provider,
+        request=request,
+        output_path=output_path,
+    )
+
+    logger.debug(
+        "Repository context for worker '%s': %s",
+        state.worker,
+        map_path,
+    )
+
+    return [map_path]

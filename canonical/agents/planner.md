@@ -18,6 +18,16 @@ Use the provided:
 
 Use repository context to identify the actual files that must change.
 
+### Repository Paths
+
+When `repository-map.txt` is provided, treat its `Repository Files` section as the authoritative inventory of existing tracked repository paths.
+
+For `edit_mode: modify` or `edit_mode: delete`, use only paths listed in `Repository Files`.
+
+Use `edit_mode: create` only when a new file is required and the path is not listed in `Repository Files`.
+
+Do not invent existing repository paths.
+
 ## Output
 
 Write exactly one implementation plan to the designated `plan.yaml` artifact.

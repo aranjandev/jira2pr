@@ -11,6 +11,8 @@ license = { text = "MIT" }
 dependencies = [
     "PyYAML>=6.0",
     "litellm>=1.103.2",
+    "tree-sitter>=0.26.0",
+    "tree-sitter-python>=0.25.0",
 ]
 
 [project.scripts]
