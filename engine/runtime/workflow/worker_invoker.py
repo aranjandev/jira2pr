@@ -311,6 +311,8 @@ def _require_single_output(
     return state.produces[0]
 
 def _invoke_artifact_worker(
+    project: RuntimeProject,
+    workflow: WorkflowSpec,
     state: StateSpec,
     worker_slug: str,
     worker,
@@ -342,12 +344,21 @@ def _invoke_artifact_worker(
         output_path,
     )
 
+    execution_mode = (
+        "planning" 
+        if worker_slug == "planner" else "artifact"
+    )
+    map_tokens = project.map_tokens_for(execution_mode)
+    logger.debug("Worker '%s' execution mode: %s, map_tokens: %s", 
+                 worker_slug, execution_mode, map_tokens)
+
     try:
         backend.produce_artifact(
             model=model,
             read_files=read_files,
             output_file=output_path,
             repo_root=repo_root,
+            map_tokens=map_tokens,
         )
         logger.info("Normalizing artifact at: %s", output_path)
         normalize_artifact(
@@ -657,6 +668,13 @@ def _invoke_repository_worker(
         len(tasks),
     )
 
+    map_tokens = project.map_tokens_for("repository")
+    logger.debug(
+        "Worker '%s' map_tokens for repository editing: %s",
+        worker_slug,
+        map_tokens,
+    )
+
     completed_tasks: set[str] = set()
 
     for task in tasks:
@@ -711,6 +729,7 @@ def _invoke_repository_worker(
                 read_files=task_read_files,
                 edit_files=[target_path],
                 repo_root=repo_root,
+                map_tokens=map_tokens,
             )
 
         except Exception:
@@ -824,6 +843,8 @@ def invoke_worker(
 
     if state.produces:
         return _invoke_artifact_worker(
+            project=project,
+            workflow=workflow,
             state=state,
             worker_slug=worker_slug,
             worker=worker,

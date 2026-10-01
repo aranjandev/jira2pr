@@ -165,6 +165,9 @@ class AiderAssembler(PlatformAssembler):
                 "artifact": {
                     "map_tokens": 0,
                 },
+                "planning": {
+                    "map_tokens": 4096,
+                },
                 "structured": {
                     "map_tokens": 0,
                 },

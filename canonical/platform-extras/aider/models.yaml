@@ -3,7 +3,7 @@
 models:
   coder: ollama_chat/qwen3-coder:30b
   jira-reader: github_copilot/gpt-5-mini
-  planner: ollama_chat/deepseek-r1:32b
+  planner: ollama_chat/qwen3.8:27b
   pr-author: github_copilot/gpt-5-mini
   researcher: github_copilot/gpt-5-mini
   reviewer: ollama_chat/qwen3.8:27b

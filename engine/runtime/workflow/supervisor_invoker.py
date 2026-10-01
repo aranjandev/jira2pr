@@ -307,6 +307,11 @@ def invoke_supervisor(
     # ------------------------------------------------------------------
     # Invoke supervisor
     # ------------------------------------------------------------------
+    map_tokens = project.map_tokens_for("structured")
+    logger.debug(
+        "Supervisor map_tokens for structured output: %s",
+        map_tokens,
+    )
 
     try:
         backend.produce_structured(
@@ -314,6 +319,7 @@ def invoke_supervisor(
             read_files=read_files,
             output_file=decision_path,
             repo_root=project.core_dir.parent,
+            map_tokens=map_tokens,
         )
 
     except Exception:

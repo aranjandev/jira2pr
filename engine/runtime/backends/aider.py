@@ -118,6 +118,7 @@ class AiderBackend(LLMBackend):
         read_files: list[Path],
         output_file: Path,
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None:
         """Run an artifact-producing worker.
 
@@ -159,9 +160,11 @@ class AiderBackend(LLMBackend):
             "aider",
             "--model",
             model,
-            "--edit-format",
-            "whole",
+            # "--edit-format",
+            # "whole",
         ]
+
+        self._append_map_tokens(argv, map_tokens)
 
         for path in read_files:
             argv.extend(
@@ -226,6 +229,7 @@ class AiderBackend(LLMBackend):
         read_files: list[Path],
         output_file: Path,
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None:
         """Run a structured-output Aider invocation.
 
@@ -268,10 +272,10 @@ class AiderBackend(LLMBackend):
             "aider",
             "--model",
             model,
-            "--edit-format",
-            "whole",
+            # "--edit-format",
+            # "whole",
         ]
-        
+        self._append_map_tokens(argv, map_tokens)
         for path in read_files:
             argv.extend(
                 [
@@ -351,6 +355,7 @@ class AiderBackend(LLMBackend):
         read_files: list[Path],
         edit_files: list[Path],
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None:
         """Run a repository-editing worker through Aider.
 
@@ -408,6 +413,8 @@ class AiderBackend(LLMBackend):
             "--model",
             model,
         ]
+
+        self._append_map_tokens(argv, map_tokens)
 
         # Workflow artifacts and instructions are context only.
         for path in read_files:
@@ -590,3 +597,19 @@ class AiderBackend(LLMBackend):
                 "Aider stderr:\n%s",
                 result.stderr,
             )
+
+    @staticmethod
+    def _append_map_tokens(
+        argv: list[str],
+        map_tokens: int | None,
+    ) -> None:
+        """Append an explicit repo-map token budget to an Aider command."""
+        if map_tokens is None:
+            return
+
+        argv.extend(
+            [
+                "--map-tokens",
+                str(map_tokens),
+            ]
+        )

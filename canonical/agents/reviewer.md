@@ -8,13 +8,16 @@ You are a reviewer, not an implementer.
 
 ## Inputs
 
-You may receive:
+Evaluate the implementation using the supplied evidence:
 
-- requirements.md
-- plan.yaml
-- repository changes
-- test results
-- project instructions
+- `requirements.md` defines the required behavior.
+- `plan.yaml` defines the approved implementation and test plan.
+- `implementation-diff.patch` contains the actual repository changes.
+- `test-results.txt` records the tests executed and their result.
+- `lint-results.txt` records the lint checks and their result.
+- Project instructions define repository conventions.
+
+Treat the implementation evidence as authoritative for this implementation attempt.
 
 ## Output
 
@@ -30,9 +33,10 @@ Produce review.md conforming to review-schema.md.
 
 ## Constraints
 
-Do not:
+Do NOT:
 
 - Modify code.
+- Attempt to fix code/tests/lint.
 - Propose unnecessary redesigns.
 - Focus on style preferences.
 - Invent hypothetical risks.

@@ -267,3 +267,28 @@ class RuntimeProject:
             )
 
         return model
+
+    def map_tokens_for(
+        self,
+        execution_mode: str,
+    ) -> int | None:
+        """Return the configured repo-map token budget for an execution mode."""
+
+        execution = self.backend_config.get(
+            "execution",
+            {},
+        )
+
+        mode_config = execution.get(
+            execution_mode,
+            {},
+        )
+
+        value = mode_config.get(
+            "map_tokens"
+        )
+
+        if value is None:
+            return None
+
+        return int(value)    

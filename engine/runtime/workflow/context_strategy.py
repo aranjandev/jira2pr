@@ -33,9 +33,14 @@ if TYPE_CHECKING:
 
     from runtime.workflow.loader import RuntimeProject
 
+import logging
+
+from runtime.workflow.evidence import (
+    load_implementation_evidence,
+)
 from runtime.workflow.feedback import feedback_path
 
-
+logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class ContextStrategy:
     """Select optional context for a worker invocation."""
@@ -109,6 +114,20 @@ class ContextStrategy:
         # 4. Runtime capabilities that have been materialized as files.
         read_files.extend(runtime_context_files)
 
+        # 7. Runtime evidence files for the current worker.
+        evidence_files = _runtime_evidence_files(
+            project=project,
+            state=state,
+            ticket_key=ticket_key,
+        )
+        if evidence_files:
+            read_files.extend(evidence_files)
+            logger.debug(
+                "Added %d runtime evidence file(s) for worker '%s'",
+                len(evidence_files),
+                state.worker,
+            )
+
         # 5. Repository-wide instructions only when useful to this worker.
         if self.include_project_instructions(state.worker):
             instructions = project.project_instructions_path()
@@ -173,3 +192,25 @@ def _deduplicate_paths(
         result.append(path)
 
     return result
+
+def _runtime_evidence_files(
+    *,
+    project: RuntimeProject,
+    state: StateSpec,
+    ticket_key: str,
+) -> list[Path]:
+    """Return runtime evidence required by the current worker.
+
+    Implementation evidence is produced during the implement state and reused
+    by downstream review workers. It is not regenerated during review.
+    """
+
+    if state.worker != "reviewer":
+        return []
+
+    evidence = load_implementation_evidence(
+        project=project,
+        ticket_key=ticket_key,
+    )
+
+    return evidence.files()

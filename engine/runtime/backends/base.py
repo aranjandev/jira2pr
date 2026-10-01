@@ -27,6 +27,7 @@ class LLMBackend(ABC):
         read_files: list[Path],
         output_file: Path,
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None :
         """Run an artifact-producing worker.
 
@@ -44,6 +45,7 @@ class LLMBackend(ABC):
         read_files: list[Path],
         output_file: Path,
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None:
         """Run a structured artifact-producing worker.
 
@@ -61,6 +63,7 @@ class LLMBackend(ABC):
         read_files: list[Path],
         edit_files: list[Path],
         repo_root: Path,
+        map_tokens: int | None = None,
     ) -> None:
         """Perform repository edits using supplied workflow context.
 
