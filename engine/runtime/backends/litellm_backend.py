@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import yaml
 
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
-
 
 logger = get_logger("backends.litellm")
 
@@ -290,7 +290,7 @@ def _extract_response_content(
         ) from exc
 
     if not isinstance(content, str):
-        raise RuntimeError(
+        raise TypeError(
             "LiteLLM returned non-text message content"
         )
 

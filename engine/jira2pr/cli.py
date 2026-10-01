@@ -31,7 +31,6 @@ from assembler.validator import CanonicalValidationError, validate
 from assembler.writer import FileWriter
 from runtime.logging_config import get_logger, setup_logging
 
-
 logger = get_logger("cli")
 
 DEFAULT_PLATFORM = "runtime"

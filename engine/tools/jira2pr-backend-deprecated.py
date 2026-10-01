@@ -6,11 +6,11 @@ import argparse
 import logging
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import yaml
-
 
 LOGGER = logging.getLogger("jira2pr-backend")
 
@@ -189,7 +189,7 @@ def _load_model_settings(
         return []
 
     if not isinstance(raw, list):
-        raise ValueError(
+        raise TypeError(
             f"Model settings file must contain a YAML list: "
             f"{settings_path}"
         )
@@ -198,7 +198,7 @@ def _load_model_settings(
 
     for index, entry in enumerate(raw):
         if not isinstance(entry, dict):
-            raise ValueError(
+            raise TypeError(
                 f"Model settings entry {index} in {settings_path} "
                 "must be a mapping."
             )
@@ -248,7 +248,7 @@ def _get_extra_params(
             continue
 
         if not isinstance(entry_extra_params, dict):
-            raise ValueError(
+            raise TypeError(
                 "'extra_params' for aider/extra_params must be a mapping."
             )
 
@@ -264,7 +264,7 @@ def _get_extra_params(
             continue
 
         if not isinstance(entry_extra_params, dict):
-            raise ValueError(
+            raise TypeError(
                 f"'extra_params' for model '{model}' must be a mapping."
             )
 
@@ -345,7 +345,7 @@ def _extract_response_content(response: Any) -> str:
         )
 
     if not isinstance(content, str):
-        raise RuntimeError(
+        raise TypeError(
             "LiteLLM returned non-text message content."
         )
 

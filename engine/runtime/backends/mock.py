@@ -8,7 +8,6 @@ network calls.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from runtime.backends.base import LLMBackend
 
@@ -33,26 +32,6 @@ class MockBackend(LLMBackend):
         self._responses = responses or {}
         self._responder = responder
         self.calls: list[dict] = []
-
-    def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        model: str,
-        files: list[Path] | None = None,
-    ) -> str:
-        self.calls.append(
-            {"system_prompt": system_prompt, "user_prompt": user_prompt, "model": model}
-        )
-        if self._responder is not None:
-            result = self._responder(system_prompt, user_prompt, model)
-            if result is not None:
-                return result
-        key = _agent_title(system_prompt)
-        if key in self._responses:
-            return self._responses[key]
-        return "# Mock Output\n\nGenerated deterministically for testing.\n"
-
 
 def _agent_title(system_prompt: str) -> str:
     for line in system_prompt.splitlines():

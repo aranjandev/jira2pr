@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import tempfile
 from pathlib import Path
 
 from runtime.backends.base import LLMBackend
@@ -45,70 +44,6 @@ class AiderBackend(LLMBackend):
             self._base_args,
         )
 
-    # ------------------------------------------------------------------
-    # Text-producing invocation
-    # ------------------------------------------------------------------
-    # TODO:
-    # Replace complete() with an explicit repository-editing backend operation.
-    # Context files must remain read-only; only source/test files selected for the
-    # current implementation task should be editable.
-    def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        model: str,
-        files: list[Path] | None = None,
-    ) -> str:
-        """Run one text-producing Aider turn."""
-
-        files = files or []
-
-        logger.info(
-            "Invoking Aider text worker: model=%s, files=%d",
-            model,
-            len(files),
-        )
-
-        with tempfile.NamedTemporaryFile(
-            "w",
-            suffix=".md",
-            delete=False,
-            encoding="utf-8",
-        ) as f:
-            f.write(system_prompt.rstrip())
-            f.write("\n\n---\n\n")
-            f.write(user_prompt)
-            message_file = Path(f.name)
-
-        logger.debug("Created temporary message file: %s", message_file)
-
-        try:
-            argv = [
-                "aider",
-                "--model",
-                model,
-                "--message-file",
-                str(message_file),
-                *self._base_args,
-                *[str(path) for path in files],
-            ]
-
-            result = self._run(
-                argv,
-                model=model,
-            )
-
-            logger.info(
-                "Aider text invocation successful, response length=%d",
-                len(result.stdout),
-            )
-
-            return result.stdout
-
-        finally:
-            message_file.unlink(missing_ok=True)
-
-    # ------------------------------------------------------------------
     # Artifact-producing invocation
     # ------------------------------------------------------------------
     def produce_artifact(

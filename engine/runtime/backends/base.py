@@ -6,15 +6,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-
-"""Backend interface for Jira2PR LLM execution."""
-
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
-from pathlib import Path
-
-
 class LLMBackend(ABC):
     """Execution backend used by the Jira2PR workflow runtime."""
 
@@ -53,13 +44,3 @@ class LLMBackend(ABC):
         map_tokens: int | None = None,
     ) -> None:
         """Modify repository files."""
-
-    @abstractmethod
-    def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        model: str,
-        files: list[Path] | None = None,
-    ) -> str:
-        """Run a text-producing agent turn and return its raw response."""

@@ -18,13 +18,12 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from runtime.backends.aider import AiderBackend
 from runtime.backends.jira2pr import Jira2PRBackend
 from runtime.backends.litellm_backend import LiteLLMBackend
-
 
 LOGGER = logging.getLogger("jira2pr-backend-cli")
 

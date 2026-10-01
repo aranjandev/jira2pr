@@ -31,7 +31,6 @@ from assembler.registry import CanonicalRegistry
 from assembler.templates import execution_policy_vars, generate_agents_section
 from assembler.writer import FileWriter
 
-
 CORE_PREFIX = ".jira2pr"
 
 

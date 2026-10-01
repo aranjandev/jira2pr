@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.backends.base import LLMBackend
 from runtime.backends.aider import AiderBackend
+from runtime.backends.base import LLMBackend
 from runtime.backends.litellm_backend import LiteLLMBackend
 from runtime.logging_config import get_logger
-
 
 logger = get_logger("backends.jira2pr")
 
