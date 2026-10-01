@@ -6,18 +6,17 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-class LLMBackend(ABC):
-    """Platform backend for invoking jira2pr agents."""
 
-    @abstractmethod
-    def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        model: str,
-        files: list[Path] | None = None,
-    ) -> str:
-        """Run a text-producing agent turn and return its raw response."""
+"""Backend interface for Jira2PR LLM execution."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from pathlib import Path
+
+
+class LLMBackend(ABC):
+    """Execution backend used by the Jira2PR workflow runtime."""
 
     @abstractmethod
     def produce_artifact(
@@ -28,32 +27,20 @@ class LLMBackend(ABC):
         output_file: Path,
         repo_root: Path,
         map_tokens: int | None = None,
-    ) -> None :
-        """Run an artifact-producing worker.
-
-        The backend must use *read_files* as read-only context and produce
-        *output_file* as the authoritative result.
-
-        Returns nothing.
-        """
+    ) -> None:
+        """Produce a workflow artifact."""
 
     @abstractmethod
     def produce_structured(
         self,
         *,
-        model:str,
+        model: str,
         read_files: list[Path],
         output_file: Path,
         repo_root: Path,
         map_tokens: int | None = None,
     ) -> None:
-        """Run a structured artifact-producing worker.
-
-        The backend must use *read_files* as read-only context and produce
-        *output_file* as the authoritative result.
-
-        Returns nothing.
-        """
+        """Produce structured machine-readable output."""
 
     @abstractmethod
     def edit_repository(
@@ -65,9 +52,14 @@ class LLMBackend(ABC):
         repo_root: Path,
         map_tokens: int | None = None,
     ) -> None:
-        """Perform repository edits using supplied workflow context.
+        """Modify repository files."""
 
-        ``read_files`` are immutable context.
-
-        ``edit_files`` are the source/test files the backend may modify.
-        """
+    @abstractmethod
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        files: list[Path] | None = None,
+    ) -> str:
+        """Run a text-producing agent turn and return its raw response."""

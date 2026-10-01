@@ -254,17 +254,18 @@ def _check_platform_models(
         )
         return
 
-    # Aider uses the Python workflow runtime instead of the orchestrator
-    # agent, so the orchestrator does not require an Aider model mapping.
-    required_agents = {
-        agent.slug
-        for agent in registry.agents
-        if not (
-            platform == "aider"
-            and agent.kind == "orchestrator"
-        )
-    }
-
+    if platform == "runtime":
+        required_agents = {
+            agent.slug
+            for agent in registry.agents
+            if agent.kind != "orchestrator"
+        }
+    else:
+        required_agents = {
+            agent.slug
+            for agent in registry.agents
+        }
+        
     configured_agents = set(models)
 
     missing = sorted(

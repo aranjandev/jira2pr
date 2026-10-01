@@ -20,11 +20,11 @@ UNSUPPORTED_PLATFORMS = {"opencode"}
 
 
 def _get_platforms() -> dict[str, type[PlatformAssembler]]:
-    from assembler.platforms.aider import AiderAssembler
+    from assembler.platforms.runtime import RuntimeAssembler
     from assembler.platforms.copilot import CopilotAssembler
     return {
         "copilot": CopilotAssembler,
-        "aider": AiderAssembler,
+        "runtime": RuntimeAssembler,
     }
 
 

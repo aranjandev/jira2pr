@@ -1,6 +1,6 @@
-"""PlatformAssembler — abstract base class for platform-specific assemblers."""
-
 from __future__ import annotations
+
+"""PlatformAssembler — abstract base class for platform-specific assemblers."""
 
 import typing
 from abc import ABC, abstractmethod
