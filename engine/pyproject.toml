@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "PyYAML>=6.0",
+    "litellm>=1.103.2",
 ]
 
 [project.scripts]
