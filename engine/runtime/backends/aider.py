@@ -395,6 +395,126 @@ class AiderBackend(LLMBackend):
             "Aider repository worker completed successfully"
         )
 
+
+    def repair_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """Repair repository changes using Aider's lint/test feedback loop."""
+
+        repo_root = repo_root.resolve()
+
+        if not edit_files:
+            raise AiderInvocationError(
+                "Repository repair requires at least one editable file"
+            )
+
+        for path in read_files:
+            if not path.is_file():
+                raise AiderInvocationError(
+                    f"Repair context file does not exist: {path}"
+                )
+
+        message_file = (
+            repo_root
+            / ".jira2pr"
+            / "runtime"
+            / "backends"
+            / "prompts"
+            / "aider-repair-worker.md"
+        )
+
+        if not message_file.is_file():
+            raise AiderInvocationError(
+                f"Aider repair prompt does not exist: {message_file}"
+            )
+
+        argv = [
+            "aider",
+            "--model",
+            model,
+            "--edit-format",
+            "diff",
+        ]
+
+        if map_tokens is not None:
+            argv.extend(
+                [
+                    "--map-tokens",
+                    str(map_tokens),
+                ]
+            )
+
+        for path in read_files:
+            argv.extend(
+                [
+                    "--read",
+                    str(path.resolve()),
+                ]
+            )
+
+        if lint_command.strip():
+            argv.extend(
+                [
+                    "--lint-cmd",
+                    lint_command,
+                ]
+            )
+
+        if test_command.strip():
+            argv.extend(
+                [
+                    "--test-cmd",
+                    test_command,
+                    "--auto-test",
+                ]
+            )
+
+        argv.extend(self._base_args)
+
+        argv.extend(
+            [
+                "--message-file",
+                str(message_file),
+            ]
+        )
+
+        argv.extend(
+            str(path.resolve())
+            for path in edit_files
+        )
+
+        logger.info(
+            "Running Aider repository repair: "
+            "model=%s edit_files=%d tests=%r lint=%r",
+            model,
+            len(edit_files),
+            test_command,
+            lint_command,
+        )
+
+        logger.debug(
+            "Running Aider repair command: %s",
+            " ".join(argv),
+        )
+
+        self._run(
+            argv,
+            model=model,
+            cwd=repo_root,
+        )
+
+        logger.info(
+            "Aider repository repair completed"
+        )
+
     # ------------------------------------------------------------------
     # Runtime prompt lookup
     # ------------------------------------------------------------------

@@ -87,6 +87,146 @@ class WorkflowExecutor:
 
         return self.run(ticket_key)
 
+    def _collect_implementation_evidence(
+        self,
+        *,
+        ticket_key: str,
+    ) -> ImplementationEvidence:
+        """Collect deterministic evidence for the current implementation."""
+
+        verification = self._project.backend_config.get(
+            "verification",
+            {},
+        )
+
+        test_command = verification.get(
+            "test_command",
+            "",
+        )
+
+        lint_command = verification.get(
+            "lint_command",
+            "",
+        )
+
+        repo_root = self._project.core_dir.parent
+
+        plan_path = (
+            self._project.artifacts_dir(ticket_key)
+            / "plan.yaml"
+        )
+
+        changed_files = planned_changed_files(
+            plan_path=plan_path,
+            repo_root=repo_root,
+        )
+
+        logger.debug(
+            "Collecting implementation evidence for planned files:\n%s",
+            "\n".join(
+                f"  - {path}"
+                for path in changed_files
+            ),
+        )
+
+        evidence = collect_implementation_evidence(
+            project=self._project,
+            ticket_key=ticket_key,
+            changed_files=changed_files,
+            test_command=test_command,
+            lint_command=lint_command,
+        )
+
+        logger.info(
+            "Implementation verification: tests=%s lint=%s",
+            "PASS" if evidence.tests_passed else "FAIL",
+            "PASS" if evidence.lint_passed else "FAIL",
+        )
+
+        return evidence
+
+    def _repair_implementation(
+        self,
+        *,
+        ticket_key: str,
+        evidence: ImplementationEvidence,
+    ) -> None:
+        """Run one Aider repair session using current verification failures."""
+
+        verification = self._project.backend_config.get(
+            "verification",
+            {},
+        )
+
+        test_command = verification.get(
+            "test_command",
+            "",
+        )
+
+        lint_command = verification.get(
+            "lint_command",
+            "",
+        )
+
+        repo_root = self._project.core_dir.parent
+
+        plan_path = (
+            self._project.artifacts_dir(ticket_key)
+            / "plan.yaml"
+        )
+
+        edit_files = planned_changed_files(
+            plan_path=plan_path,
+            repo_root=repo_root,
+        )
+
+        coder_path = self._project.agent_path(
+            "coder"
+        )
+
+        read_files = [
+            coder_path,
+            plan_path,
+            evidence.test_results_path,
+            evidence.lint_results_path,
+        ]
+
+        project_instructions = (
+            repo_root
+            / "AGENTS.md"
+        )
+
+        if project_instructions.is_file():
+            read_files.append(
+                project_instructions
+            )
+
+        map_tokens = self._project.map_tokens_for(
+            "repository"
+        )
+
+        model = self._project.model_for_agent(
+            "coder"
+        )
+
+        logger.info(
+            "Invoking implementation repair: "
+            "tests=%s lint=%s editable_files=%d",
+            "PASS" if evidence.tests_passed else "FAIL",
+            "PASS" if evidence.lint_passed else "FAIL",
+            len(edit_files),
+        )
+
+        self._backend.repair_repository(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=test_command,
+            lint_command=lint_command,
+            map_tokens=map_tokens,
+        )
+
     def run(
         self,
         ticket_key: str,
@@ -281,59 +421,32 @@ class WorkflowExecutor:
                             current.name,
                         )
 
-                        verification = (
-                            self._project.backend_config
-                            .get("verification", {})
-                        )
-
-                        test_command = verification.get(
-                            "test_command",
-                            "",
-                        )
-
-                        lint_command = verification.get(
-                            "lint_command",
-                            "",
-                        )
-
-                        repo_root = self._project.core_dir.parent
-                        plan_path = (
-                            self._project.artifacts_dir(ticket_key)
-                            / "plan.yaml"
-                        )
-                        changed_files = planned_changed_files(
-                            plan_path=plan_path,
-                            repo_root=repo_root,
-                        )
-                        logger.debug(
-                            "Collecting implementation evidence for planned files:\n%s",
-                            "\n".join(
-                                f"  - {path}"
-                                for path in changed_files
-                            ),
-                        )
-                        
-                        evidence = collect_implementation_evidence(
-                            project=self._project,
+                        evidence = self._collect_implementation_evidence(
                             ticket_key=ticket_key,
-                            changed_files=changed_files,
-                            test_command=test_command,
-                            lint_command=lint_command,
                         )
 
-                        logger.info(
-                            "Implementation evidence collected for "
-                            "ticket %s",
-                            ticket_key,
-                        )
+                        if not evidence.verification_passed:
+                            logger.warning(
+                                "Implementation verification failed: "
+                                "tests=%s lint=%s. "
+                                "Invoking Aider repair before supervisor evaluation.",
+                                "PASS" if evidence.tests_passed else "FAIL",
+                                "PASS" if evidence.lint_passed else "FAIL",
+                            )
 
-                        logger.debug(
-                            "Implementation evidence files:\n%s",
-                            "\n".join(
-                                f"  - {path}"
-                                for path in evidence.files()
-                            ),
-                        )
+                            self._repair_implementation(
+                                ticket_key=ticket_key,
+                                evidence=evidence,
+                            )
+
+                            logger.info(
+                                "Aider repair completed. "
+                                "Recollecting implementation evidence."
+                            )
+
+                            evidence = self._collect_implementation_evidence(
+                                ticket_key=ticket_key,
+                            )
 
                     # --------------------------------------------------
                     # Supervisor evaluation
@@ -594,3 +707,4 @@ def _feedback_from_supervisor(
         ),
         details=tuple(details),
     )
+

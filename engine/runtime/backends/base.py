@@ -44,3 +44,17 @@ class LLMBackend(ABC):
         map_tokens: int | None = None,
     ) -> None:
         """Modify repository files."""
+
+    @abstractmethod
+    def repair_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """Repair repository changes using verification feedback."""

@@ -47,6 +47,8 @@ class ImplementationEvidence:
     diff_path: Path
     test_results_path: Path
     lint_results_path: Path
+    tests_passed: bool
+    lint_passed: bool
 
     def files(self) -> list[Path]:
         """Return all evidence files in stable order."""
@@ -57,6 +59,11 @@ class ImplementationEvidence:
             self.lint_results_path,
         ]
 
+    @property
+    def verification_passed(self) -> bool:
+        """Return True when all deterministic verification passed."""
+
+        return self.tests_passed and self.lint_passed
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -195,6 +202,8 @@ def collect_implementation_evidence(
         diff_path=diff_path,
         test_results_path=test_results_path,
         lint_results_path=lint_results_path,
+        tests_passed=test_result.passed,
+        lint_passed=lint_result.passed,
     )
 
     logger.info(
@@ -213,30 +222,98 @@ def load_implementation_evidence(
     project: RuntimeProject,
     ticket_key: str,
 ) -> ImplementationEvidence:
-    """Load implementation evidence previously collected for a ticket."""
+    """Load previously collected implementation evidence."""
 
     context_dir = project.context_dir(ticket_key)
 
-    evidence = ImplementationEvidence(
-        diff_path=context_dir / "implementation-diff.patch",
-        test_results_path=context_dir / "test-results.txt",
-        lint_results_path=context_dir / "lint-results.txt",
+    diff_path = (
+        context_dir
+        / "implementation-diff.patch"
     )
+
+    test_results_path = (
+        context_dir
+        / "test-results.txt"
+    )
+
+    lint_results_path = (
+        context_dir
+        / "lint-results.txt"
+    )
+
+    required_paths = [
+        diff_path,
+        test_results_path,
+        lint_results_path,
+    ]
 
     missing = [
         path
-        for path in evidence.files()
+        for path in required_paths
         if not path.is_file()
     ]
 
     if missing:
         raise EvidenceCollectionError(
             "Missing implementation evidence: "
-            + ", ".join(str(path) for path in missing)
+            + ", ".join(
+                str(path)
+                for path in missing
+            )
         )
+
+    tests_passed = _evidence_result_passed(
+        test_results_path
+    )
+
+    lint_passed = _evidence_result_passed(
+        lint_results_path
+    )
+
+    evidence = ImplementationEvidence(
+        diff_path=diff_path,
+        test_results_path=test_results_path,
+        lint_results_path=lint_results_path,
+        tests_passed=tests_passed,
+        lint_passed=lint_passed,
+    )
+
+    logger.debug(
+        "Loaded implementation evidence: "
+        "tests_passed=%s lint_passed=%s",
+        tests_passed,
+        lint_passed,
+    )
 
     return evidence
 
+
+def _evidence_result_passed(
+    path: Path,
+) -> bool:
+    """Return whether a persisted verification result represents success."""
+
+    content = path.read_text(
+        encoding="utf-8"
+    )
+
+    for line in content.splitlines():
+        line = line.strip()
+
+        if line.startswith("exit_code:"):
+            value = line.partition(":")[2].strip()
+
+            try:
+                return int(value) == 0
+            except ValueError as exc:
+                raise EvidenceCollectionError(
+                    f"Invalid exit_code in verification evidence "
+                    f"{path}: {value!r}"
+                ) from exc
+
+    raise EvidenceCollectionError(
+        f"Verification evidence does not contain exit_code: {path}"
+    )
 
 def _normalize_repository_files(
     *,

@@ -104,6 +104,23 @@ class LiteLLMBackend(LLMBackend):
             "LiteLLMBackend does not support repository editing"
         )
 
+    def repair_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """LiteLLM does not directly repair repository files."""
+
+        raise NotImplementedError(
+            "LiteLLMBackend does not support repository repair"
+        )
+
     def _generate(
         self,
         *,

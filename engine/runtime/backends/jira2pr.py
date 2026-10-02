@@ -112,3 +112,33 @@ class Jira2PRBackend(LLMBackend):
             repo_root=repo_root,
             map_tokens=map_tokens,
         )
+
+    def repair_repository(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """Route repository repair to Aider."""
+
+        logger.info(
+            "Routing repository repair to Aider: "
+            "model=%s edit_files=%d",
+            model,
+            len(edit_files),
+        )
+
+        self._aider.repair_repository(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=test_command,
+            lint_command=lint_command,
+            map_tokens=map_tokens,
+        )
