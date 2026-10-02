@@ -122,7 +122,7 @@ CAPABILITY_HANDLER_SCRIPT_MAP = {
 CAPABILITY_ARGS_MAP = {
     "jira.read": ["<ticket_key_or_url>"],
     "git.status": ["status"],
-    "git.commit": ["commit", "<message>"],
+    "git.commit": ["commit", "<message>", "<files_from>"],
     "git.push": ["push"],
     "pr.create": ["create", "--title", "<title>", "--body-file", "<body_file>"],
     "pr.update": [

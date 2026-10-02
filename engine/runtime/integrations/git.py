@@ -115,25 +115,133 @@ def cmd_create_branch(ticket_key: str, branch_type: str):
     print(f"On branch: {branch_name}")
 
 
-def cmd_commit(message: str):
-    # Check if there are any changes
-    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True, check=False)
-    unstaged = subprocess.run(["git", "diff", "--quiet"], capture_output=True, check=False)
-    if staged.returncode == 0 and unstaged.returncode == 0:
-        print("No changes to commit.")
+def cmd_commit(
+    message: str,
+    files_from: str,
+):
+    """Commit only files explicitly listed in a manifest."""
+
+    manifest_path = Path(files_from).resolve()
+
+    if not manifest_path.is_file():
+        print(
+            f"ERROR: Commit manifest does not exist: {manifest_path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    repo_root = Path(
+        git(
+            "rev-parse",
+            "--show-toplevel",
+            capture=True,
+        )
+    ).resolve()
+
+    files = []
+
+    for line in manifest_path.read_text(
+        encoding="utf-8"
+    ).splitlines():
+        value = line.strip()
+
+        if not value:
+            continue
+
+        path = (
+            repo_root
+            / value
+        ).resolve()
+
+        try:
+            relative_path = path.relative_to(
+                repo_root
+            )
+        except ValueError:
+            print(
+                f"ERROR: Commit path is outside repository: {value}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        files.append(
+            relative_path.as_posix()
+        )
+
+    if not files:
+        print(
+            "ERROR: Commit manifest contains no files",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(
+        f"Staging {len(files)} explicitly authorized file(s):"
+    )
+
+    for path in files:
+        print(
+            f"  {path}"
+        )
+
+    git(
+        "add",
+        "--",
+        *files,
+    )
+
+    staged_files = git(
+        "diff",
+        "--cached",
+        "--name-only",
+        capture=True,
+    )
+
+    staged = [
+        path
+        for path in staged_files.splitlines()
+        if path.strip()
+    ]
+
+    if not staged:
+        print(
+            "No authorized changes to commit."
+        )
         sys.exit(0)
 
-    git("add", "-A")
-    git("commit", "-m", message)
-    print(f"Committed: {message}")
+    unauthorized = sorted(
+        set(staged)
+        - set(files)
+    )
 
-    # Count changed files
-    try:
-        files = git("diff", "--name-only", "HEAD~1", capture=True)
-        count = len([f for f in files.splitlines() if f])
-        print(f"Files changed: {count}")
-    except SystemExit:
-        pass
+    if unauthorized:
+        print(
+            "ERROR: Git index contains files that are not "
+            "authorized by the commit manifest:",
+            file=sys.stderr,
+        )
+
+        for path in unauthorized:
+            print(
+                f"  {path}",
+                file=sys.stderr,
+            )
+
+        sys.exit(1)
+
+    git(
+        "commit",
+        "-m",
+        message,
+    )
+
+    print(
+        f"Committed: {message}"
+    )
+
+    print(
+        f"Files changed: {len(staged)}"
+    )
 
 
 def _detect_remote_platform(remote_url: str) -> str:
@@ -249,10 +357,17 @@ Commands:
       Types: feat, fix, chore, refactor, docs, test
       Example: git_helper.py create-branch PROJ-123 feat
         → creates branch: feat/proj-123
+        
+  commit "<message>" <files-manifest>
+      Stage and commit only the repository-relative paths listed in the
+      manifest file.
 
-  commit "<message>"
-      Stage all changes (git add -A) and commit with the given message.
-      Example: git_helper.py commit "feat(auth): add JWT validation"
+      The manifest contains one repository-relative path per line.
+
+      Example:
+        git_helper.py commit \
+          "feat(auth): add JWT validation" \
+          .jira2pr/context/PROJ-123/commit-files.txt
 
   push
       Push the current branch to origin, setting upstream if needed.
@@ -282,11 +397,23 @@ def main():
         cmd_create_branch(args[0], args[1])
 
     elif command == "commit":
-        if len(args) < 1:
-            print("ERROR: commit requires a message", file=sys.stderr)
-            print('Usage: git_helper.py commit "feat(scope): description"', file=sys.stderr)
+        if len(args) != 2:
+            print(
+                "ERROR: commit requires a message and files manifest",
+                file=sys.stderr,
+            )
+            print(
+                'Usage: git_helper.py commit '
+                '"feat(scope): description" '
+                "/path/to/commit-files.txt",
+                file=sys.stderr,
+            )
             sys.exit(1)
-        cmd_commit(args[0])
+
+        cmd_commit(
+            args[0],
+            args[1],
+        )
 
     elif command == "push":
         cmd_push()

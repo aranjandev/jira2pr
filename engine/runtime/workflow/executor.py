@@ -609,6 +609,11 @@ class WorkflowExecutor:
                     )
 
                     try:
+                        logger.debug(
+                            "Action metadata for state '%s': %r",
+                            current.name,
+                            action_metadata,
+                        )                        
                         action_result = execute_actions(
                             self._project,
                             current,

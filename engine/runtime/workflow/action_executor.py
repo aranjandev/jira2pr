@@ -22,6 +22,7 @@ from assembler.model import StateSpec
 
 from runtime.capabilities import CapabilityError, resolve
 from runtime.logging_config import get_logger
+from runtime.workflow.evidence import planned_changed_files
 from runtime.workflow.loader import RuntimeProject
 
 logger = get_logger("workflow.action_executor")
@@ -83,7 +84,6 @@ def strip_pr_actions_block(response: str) -> str:
     """
     return PR_ACTIONS_BLOCK_RE.sub("", response).strip()
 
-
 def execute_actions(
     project: RuntimeProject,
     state: StateSpec,
@@ -95,29 +95,68 @@ def execute_actions(
     """Execute action capabilities for the current state.
 
     Steps:
-    1. Run git.commit with commit_metadata message
-    2. Run git.push
-    3. If not updating existing PR: run pr.create (extract PR_NUMBER/PR_URL from stdout)
-    4. Else: run pr.update with existing_pr_number
-    5. Return dict with pr_number and pr_url
+    1. Commit only plan-authorized files.
+    2. Push the current branch.
+    3. Create a new PR or update the existing PR.
+    4. Return PR metadata.
 
     Raises ActionExecutionError on any failure.
     """
-    logger.info(f"Executing actions for state: {state.name}")
 
-    # 1. Git commit
-    logger.info("Step 1: Creating git commit")
-    commit_msg = action_metadata.get("commit_message")
+    logger.info(
+        "Executing actions for state: %s",
+        state.name,
+    )
+
+    repo_root = repo_root.resolve()
+
+    # --------------------------------------------------------------
+    # Step 1: Git commit
+    # --------------------------------------------------------------
+
+    logger.info(
+        "Step 1: Creating git commit"
+    )
+
+    commit_msg = action_metadata.get(
+        "commit_message"
+    )
+
     if not commit_msg:
-        raise ActionExecutionError("action_metadata missing 'commit_message'")
+        raise ActionExecutionError(
+            "action_metadata missing 'commit_message'"
+        )
 
-    commit_cap = project.capabilities.get("git.commit")
+    commit_cap = project.capabilities.get(
+        "git.commit"
+    )
+
     if not commit_cap:
-        raise ActionExecutionError("Capability 'git.commit' not found")
+        raise ActionExecutionError(
+            "Capability 'git.commit' not found"
+        )
+
+    commit_manifest = _write_commit_manifest(
+        project=project,
+        ticket_key=ticket_key,
+        repo_root=repo_root,
+    )
 
     try:
-        commit_argv = resolve(commit_cap, str(repo_root), {"message": commit_msg})
-        logger.debug(f"Commit argv: {commit_argv}")
+        commit_argv = resolve(
+            commit_cap,
+            str(repo_root),
+            {
+                "message": commit_msg,
+                "files_from": str(commit_manifest),
+            },
+        )
+
+        logger.debug(
+            "Commit argv: %s",
+            commit_argv,
+        )
+
         result = subprocess.run(
             commit_argv,
             cwd=repo_root,
@@ -126,23 +165,61 @@ def execute_actions(
             text=True,
             timeout=30,
         )
-        if result.returncode != 0:
-            logger.error(f"git.commit failed: {result.stderr}")
-            raise ActionExecutionError(f"git.commit failed: {result.stderr.strip()}")
-        logger.info(f"Commit successful: {result.stdout.strip()}")
-    except CapabilityError as e:
-        logger.error(f"Failed to resolve git.commit: {e}")
-        raise ActionExecutionError(f"Failed to resolve git.commit: {e}") from e
 
-    # 2. Git push
-    logger.info("Step 2: Pushing commits")
-    push_cap = project.capabilities.get("git.push")
+        if result.returncode != 0:
+            logger.error(
+                "git.commit failed: %s",
+                result.stderr,
+            )
+
+            raise ActionExecutionError(
+                f"git.commit failed: {result.stderr.strip()}"
+            )
+
+        logger.info(
+            "Commit successful: %s",
+            result.stdout.strip(),
+        )
+
+    except CapabilityError as exc:
+        logger.error(
+            "Failed to resolve git.commit: %s",
+            exc,
+        )
+
+        raise ActionExecutionError(
+            f"Failed to resolve git.commit: {exc}"
+        ) from exc
+
+    # --------------------------------------------------------------
+    # Step 2: Git push
+    # --------------------------------------------------------------
+
+    logger.info(
+        "Step 2: Pushing commits"
+    )
+
+    push_cap = project.capabilities.get(
+        "git.push"
+    )
+
     if not push_cap:
-        raise ActionExecutionError("Capability 'git.push' not found")
+        raise ActionExecutionError(
+            "Capability 'git.push' not found"
+        )
 
     try:
-        push_argv = resolve(push_cap, str(repo_root), {})
-        logger.debug(f"Push argv: {push_argv}")
+        push_argv = resolve(
+            push_cap,
+            str(repo_root),
+            {},
+        )
+
+        logger.debug(
+            "Push argv: %s",
+            push_argv,
+        )
+
         result = subprocess.run(
             push_argv,
             cwd=repo_root,
@@ -151,40 +228,86 @@ def execute_actions(
             text=True,
             timeout=30,
         )
-        if result.returncode != 0:
-            logger.error(f"git.push failed: {result.stderr}")
-            raise ActionExecutionError(f"git.push failed: {result.stderr.strip()}")
-        logger.info(f"Push successful: {result.stdout.strip()}")
-    except CapabilityError as e:
-        logger.error(f"Failed to resolve git.push: {e}")
-        raise ActionExecutionError(f"Failed to resolve git.push: {e}") from e
 
-    # 3 & 4. PR create or update
-    result_metadata = {}
+        if result.returncode != 0:
+            logger.error(
+                "git.push failed: %s",
+                result.stderr,
+            )
+
+            raise ActionExecutionError(
+                f"git.push failed: {result.stderr.strip()}"
+            )
+
+        logger.info(
+            "Push successful: %s",
+            result.stdout.strip(),
+        )
+
+    except CapabilityError as exc:
+        logger.error(
+            "Failed to resolve git.push: %s",
+            exc,
+        )
+
+        raise ActionExecutionError(
+            f"Failed to resolve git.push: {exc}"
+        ) from exc
+
+    # --------------------------------------------------------------
+    # Step 3: PR create/update
+    # --------------------------------------------------------------
+
+    result_metadata: dict[str, str] = {}
+
+    body_file = (
+        project.artifacts_dir(ticket_key)
+        / "pr-description.md"
+    )
+
+    if not body_file.is_file():
+        raise ActionExecutionError(
+            f"pr-description.md not found at {body_file}"
+        )
 
     if not existing_pr_number:
-        # Create new PR
-        logger.info("Step 3: Creating new pull request")
-        pr_title = action_metadata.get("pr_title")
+        logger.info(
+            "Step 3: Creating new pull request"
+        )
+
+        pr_title = action_metadata.get(
+            "pr_title"
+        )
+
         if not pr_title:
-            raise ActionExecutionError("action_metadata missing 'pr_title' for new PR")
+            raise ActionExecutionError(
+                "action_metadata missing 'pr_title' for new PR"
+            )
 
-        # Find pr-description.md artifact
-        body_file = project.artifacts_dir(ticket_key) / "pr-description.md"
-        if not body_file.exists():
-            raise ActionExecutionError(f"pr-description.md not found at {body_file}")
+        create_cap = project.capabilities.get(
+            "pr.create"
+        )
 
-        create_cap = project.capabilities.get("pr.create")
         if not create_cap:
-            raise ActionExecutionError("Capability 'pr.create' not found")
+            raise ActionExecutionError(
+                "Capability 'pr.create' not found"
+            )
 
         try:
             create_argv = resolve(
                 create_cap,
                 str(repo_root),
-                {"title": pr_title, "body_file": str(body_file)},
+                {
+                    "title": pr_title,
+                    "body_file": str(body_file),
+                },
             )
-            logger.debug(f"PR create argv: {create_argv}")
+
+            logger.debug(
+                "PR create argv: %s",
+                create_argv,
+            )
+
             result = subprocess.run(
                 create_argv,
                 cwd=repo_root,
@@ -193,49 +316,93 @@ def execute_actions(
                 text=True,
                 timeout=30,
             )
-            if result.returncode != 0:
-                logger.error(f"pr.create failed: {result.stderr}")
-                raise ActionExecutionError(f"pr.create failed: {result.stderr.strip()}")
 
-            # Parse PR_URL and PR_NUMBER from stdout
+            if result.returncode != 0:
+                logger.error(
+                    "pr.create failed: %s",
+                    result.stderr,
+                )
+
+                raise ActionExecutionError(
+                    f"pr.create failed: {result.stderr.strip()}"
+                )
+
             pr_url = None
             pr_number = None
-            for line in result.stdout.split("\n"):
+
+            for line in result.stdout.splitlines():
                 if line.startswith("PR_URL="):
-                    pr_url = line.split("=", 1)[1]
+                    pr_url = line.split(
+                        "=",
+                        1,
+                    )[1]
+
                 elif line.startswith("PR_NUMBER="):
-                    pr_number = line.split("=", 1)[1]
+                    pr_number = line.split(
+                        "=",
+                        1,
+                    )[1]
 
             if not pr_number:
-                raise ActionExecutionError("pr.create did not output PR_NUMBER")
+                raise ActionExecutionError(
+                    "pr.create did not output PR_NUMBER"
+                )
 
-            result_metadata["pr_number"] = pr_number
+            result_metadata["pr_number"] = (
+                pr_number
+            )
+
             if pr_url:
-                result_metadata["pr_url"] = pr_url
-            logger.info(f"PR created: {pr_url or 'N/A'} (#{pr_number})")
-        except CapabilityError as e:
-            logger.error(f"Failed to resolve pr.create: {e}")
-            raise ActionExecutionError(f"Failed to resolve pr.create: {e}") from e
+                result_metadata["pr_url"] = (
+                    pr_url
+                )
+
+            logger.info(
+                "PR created: %s (#%s)",
+                pr_url or "N/A",
+                pr_number,
+            )
+
+        except CapabilityError as exc:
+            logger.error(
+                "Failed to resolve pr.create: %s",
+                exc,
+            )
+
+            raise ActionExecutionError(
+                f"Failed to resolve pr.create: {exc}"
+            ) from exc
+
     else:
-        # Update existing PR
-        logger.info(f"Step 3: Updating existing pull request #{existing_pr_number}")
+        logger.info(
+            "Step 3: Updating existing pull request #%s",
+            existing_pr_number,
+        )
 
-        # Find pr-description.md artifact
-        body_file = project.artifacts_dir(ticket_key) / "pr-description.md"
-        if not body_file.exists():
-            raise ActionExecutionError(f"pr-description.md not found at {body_file}")
+        update_cap = project.capabilities.get(
+            "pr.update"
+        )
 
-        update_cap = project.capabilities.get("pr.update")
         if not update_cap:
-            raise ActionExecutionError("Capability 'pr.update' not found")
+            raise ActionExecutionError(
+                "Capability 'pr.update' not found"
+            )
 
         try:
             update_argv = resolve(
                 update_cap,
                 str(repo_root),
-                {"pr_number": existing_pr_number, "body_file": str(body_file)},
+                {
+                    "pr_number": existing_pr_number,
+                    "body_file": str(body_file),
+                },
             )
-            logger.debug(f"PR update argv: {update_argv}")
+
+            logger.debug(
+                "PR update argv: %s",
+                update_argv,
+            )
+
             result = subprocess.run(
                 update_argv,
                 cwd=repo_root,
@@ -244,22 +411,121 @@ def execute_actions(
                 text=True,
                 timeout=30,
             )
+
             if result.returncode != 0:
-                logger.error(f"pr.update failed: {result.stderr}")
-                raise ActionExecutionError(f"pr.update failed: {result.stderr.strip()}")
+                logger.error(
+                    "pr.update failed: %s",
+                    result.stderr,
+                )
 
-            # Parse PR_URL from stdout
+                raise ActionExecutionError(
+                    f"pr.update failed: {result.stderr.strip()}"
+                )
+
             pr_url = None
-            for line in result.stdout.split("\n"):
-                if line.startswith("PR_URL="):
-                    pr_url = line.split("=", 1)[1]
 
-            result_metadata["pr_number"] = existing_pr_number
+            for line in result.stdout.splitlines():
+                if line.startswith("PR_URL="):
+                    pr_url = line.split(
+                        "=",
+                        1,
+                    )[1]
+
+            result_metadata["pr_number"] = (
+                existing_pr_number
+            )
+
             if pr_url:
-                result_metadata["pr_url"] = pr_url
-            logger.info(f"PR updated: {pr_url or 'N/A'} (#{existing_pr_number})")
-        except CapabilityError as e:
-            logger.error(f"Failed to resolve pr.update: {e}")
-            raise ActionExecutionError(f"Failed to resolve pr.update: {e}") from e
+                result_metadata["pr_url"] = (
+                    pr_url
+                )
+
+            logger.info(
+                "PR updated: %s (#%s)",
+                pr_url or "N/A",
+                existing_pr_number,
+            )
+
+        except CapabilityError as exc:
+            logger.error(
+                "Failed to resolve pr.update: %s",
+                exc,
+            )
+
+            raise ActionExecutionError(
+                f"Failed to resolve pr.update: {exc}"
+            ) from exc
 
     return result_metadata
+
+
+def _write_commit_manifest(
+    project: RuntimeProject,
+    ticket_key: str,
+    repo_root: Path,
+) -> Path:
+    """Write the plan-authorized commit file list."""
+
+    repo_root = repo_root.resolve()
+
+    plan_path = (
+        project.artifacts_dir(ticket_key)
+        / "plan.yaml"
+    )
+
+    commit_files = planned_changed_files(
+        plan_path=plan_path,
+        repo_root=repo_root,
+    )
+
+    if not commit_files:
+        raise ActionExecutionError(
+            "No plan-authorized files available to commit"
+        )
+
+    relative_paths: list[str] = []
+
+    for path in commit_files:
+        resolved = path.resolve()
+
+        try:
+            relative = resolved.relative_to(repo_root)
+        except ValueError as exc:
+            raise ActionExecutionError(
+                f"Commit file is outside repository root: {resolved}"
+            ) from exc
+
+        relative_paths.append(
+            relative.as_posix()
+        )
+
+    manifest_path = (
+        project.context_dir(ticket_key)
+        / "commit-files.txt"
+    )
+
+    manifest_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    manifest_path.write_text(
+        "\n".join(relative_paths) + "\n",
+        encoding="utf-8",
+    )
+
+    logger.info(
+        "Commit manifest contains %d plan-authorized file(s)",
+        len(relative_paths),
+    )
+
+    logger.debug(
+        "Commit manifest written to %s:\n%s",
+        manifest_path,
+        "\n".join(
+            f"  - {path}"
+            for path in relative_paths
+        ),
+    )
+
+    return manifest_path

@@ -20,6 +20,7 @@ resolved deterministically before worker invocation and materialized under
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -49,6 +50,13 @@ from runtime.workflow.context_strategy import (
 from runtime.workflow.feedback import WorkerOutputError
 from runtime.workflow.loader import (
     RuntimeProject,
+)
+
+_PR_ACTIONS_BLOCK_RE = re.compile(
+    r"```pr-actions\s*\n"
+    r"(?P<content>.*?)"
+    r"\n```\s*$",
+    re.DOTALL,
 )
 
 logger = get_logger("workflow.worker_invoker")
@@ -324,14 +332,9 @@ def _invoke_artifact_worker(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Execute an artifact-producing worker."""
 
-    output_name = _require_single_output(
-        state
-    )
+    output_name = _require_single_output(state)
 
-    output_path = (
-        artifacts_dir
-        / output_name
-    )
+    output_path = artifacts_dir / output_name
 
     output_path.parent.mkdir(
         parents=True,
@@ -345,12 +348,21 @@ def _invoke_artifact_worker(
     )
 
     execution_mode = (
-        "planning" 
-        if worker_slug == "planner" else "artifact"
+        "planning"
+        if worker_slug == "planner"
+        else "artifact"
     )
-    map_tokens = project.map_tokens_for(execution_mode)
-    logger.debug("Worker '%s' execution mode: %s, map_tokens: %s", 
-                 worker_slug, execution_mode, map_tokens)
+
+    map_tokens = project.map_tokens_for(
+        execution_mode
+    )
+
+    logger.debug(
+        "Worker '%s' execution mode: %s, map_tokens: %s",
+        worker_slug,
+        execution_mode,
+        map_tokens,
+    )
 
     try:
         backend.produce_artifact(
@@ -360,11 +372,21 @@ def _invoke_artifact_worker(
             repo_root=repo_root,
             map_tokens=map_tokens,
         )
-        logger.info("Normalizing artifact at: %s", output_path)
+
+        logger.info(
+            "Normalizing artifact at: %s",
+            output_path,
+        )
+
         normalize_artifact(
             output_path
         )
-        logger.info("Validating artifact at: %s", output_path)
+
+        logger.info(
+            "Validating artifact at: %s",
+            output_path,
+        )
+
         validate_artifact(
             output_path,
             repo_root=repo_root,
@@ -401,12 +423,15 @@ def _invoke_artifact_worker(
 
     action_metadata: dict[str, str] = {}
 
-    if worker and worker.actions:
-        logger.warning(
-            "Worker '%s' declares runtime actions while also producing "
-            "an artifact. Action metadata should be handled separately "
-            "from artifact content.",
+    if worker_slug == "pr-author":
+        action_metadata = _extract_pr_action_metadata(
+            output_path
+        )
+
+        logger.debug(
+            "Worker '%s' action metadata: %s",
             worker_slug,
+            action_metadata,
         )
 
     return {
@@ -761,6 +786,111 @@ def _invoke_repository_worker(
     action_metadata: dict[str, str] = {}
 
     return produced, action_metadata
+
+
+def _extract_pr_action_metadata(
+    artifact_path: Path,
+) -> dict[str, str]:
+    """Extract action metadata from the trailing pr-actions block.
+
+    The PR description remains normal Markdown. Runtime action parameters
+    are read from the final fenced block:
+
+        ```pr-actions
+        commit_message: "feat: example"
+        pr_title: "Example PR"
+        ```
+
+    commit_message is always required.
+
+    pr_title is optional because it may be omitted when updating an
+    existing pull request.
+    """
+
+    content = artifact_path.read_text(
+        encoding="utf-8",
+    )
+
+    match = _PR_ACTIONS_BLOCK_RE.search(
+        content
+    )
+
+    if match is None:
+        raise WorkerOutputError(
+            source="artifact-validation",
+            reason=(
+                "pr-description.md must end with a "
+                "```pr-actions metadata block"
+            ),
+        )
+
+    raw_metadata = match.group(
+        "content"
+    )
+
+    try:
+        metadata = yaml.safe_load(
+            raw_metadata
+        )
+    except yaml.YAMLError as exc:
+        raise WorkerOutputError(
+            source="artifact-validation",
+            reason=(
+                "Unable to parse pr-actions metadata: "
+                f"{exc}"
+            ),
+        ) from exc
+
+    if not isinstance(metadata, dict):
+        raise WorkerOutputError(
+            source="artifact-validation",
+            reason=(
+                "pr-actions metadata must contain a YAML mapping"
+            ),
+        )
+
+    commit_message = metadata.get(
+        "commit_message"
+    )
+
+    if (
+        not isinstance(commit_message, str)
+        or not commit_message.strip()
+    ):
+        raise WorkerOutputError(
+            source="artifact-validation",
+            reason=(
+                "pr-actions metadata must contain a "
+                "non-empty commit_message"
+            ),
+        )
+
+    action_metadata = {
+        "commit_message": commit_message.strip(),
+    }
+
+    pr_title = metadata.get(
+        "pr_title"
+    )
+
+    if pr_title is not None:
+        if (
+            not isinstance(pr_title, str)
+            or not pr_title.strip()
+        ):
+            raise WorkerOutputError(
+                source="artifact-validation",
+                reason=(
+                    "pr_title must be a non-empty string "
+                    "when present"
+                ),
+            )
+
+        action_metadata["pr_title"] = (
+            pr_title.strip()
+        )
+
+    return action_metadata
 
 def invoke_worker(
     project: RuntimeProject,
