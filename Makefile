@@ -13,4 +13,4 @@ test: ## Run the full unit test suite
 	cd $(ENGINE) && $(PYTHON) -m pytest tests/ -q
 
 lint: ## Lint the code using ruff
-	$(PYTHON) -m ruff check $(ENGINE)
+	$(PYTHON) -m ruff check $(if $(FIX),--fix,) $(ENGINE)
