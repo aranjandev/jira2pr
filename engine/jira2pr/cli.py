@@ -1,12 +1,13 @@
 """jira2pr CLI - assemble platform packages and drive workflow execution.
 
 Subcommands:
-    init    Generate a platform-specific Jira2PR package.
-    check   Dry-run init; exit 1 if generated output would change.
-    run     Start a workflow for a ticket using the Jira2PR runtime.
-    resume  Resume an in-progress workflow from persisted state.
-    status  Show the status of a workflow.
-    list    List all known workflow states in a target repository.
+    init         Generate a platform-specific Jira2PR package.
+    check        Dry-run init; exit 1 if generated output would change.
+    run          Start a workflow for a ticket using the Jira2PR runtime.
+    resume       Resume an in-progress workflow from persisted state.
+    status       Show the status of a workflow.
+    list         List all known workflow states in a target repository.
+    clear-cache  Remove cached artifacts and state for a ticket.
 
 Platform targets:
     runtime  Jira2PR runtime-driven execution. This is the default.
@@ -543,6 +544,200 @@ def cmd_list(
         return 1
 
 
+def cmd_clear_cache(
+    args: argparse.Namespace,
+) -> int:
+    """Remove cached artifacts and state for a ticket."""
+
+    import shutil
+
+    from runtime.workflow.loader import RuntimeProject
+
+    target_dir = Path(
+        args.target_dir
+    ).resolve()
+
+    ticket = args.ticket.upper()
+
+    log_level = (
+        "DEBUG"
+        if args.debug
+        else "INFO"
+    )
+
+    setup_logging(
+        log_dir=(
+            target_dir
+            / ".jira2pr"
+            / "logs"
+        ),
+        log_level=log_level,
+    )
+
+    logger.info(
+        "Clearing cache for ticket: %s",
+        ticket,
+    )
+
+    try:
+        project = RuntimeProject.load(
+            target_dir
+        )
+        core_dir = project.core_dir
+        state_dir = project.state_dir()
+
+        # Paths to remove
+        paths_to_remove: list[Path] = []
+
+        def find_ticket_paths(parent_dir: Path) -> list[Path]:
+            if not parent_dir.is_dir():
+                return []
+            prefixes = (
+                f"{ticket}.",
+                f"{ticket}-",
+                f"{ticket}_",
+            )
+            matched = []
+            for item in parent_dir.iterdir():
+                name_upper = item.name.upper()
+                if name_upper == ticket or name_upper.startswith(prefixes):
+                    matched.append(item)
+            return sorted(matched)
+
+        # Remove artifacts/TICKET (directory and matching files)
+        artifacts_dir = core_dir / "artifacts"
+        paths_to_remove.extend(find_ticket_paths(artifacts_dir))
+
+        # Remove context/TICKET (directory and matching files)
+        context_dir = core_dir / "context"
+        paths_to_remove.extend(find_ticket_paths(context_dir))
+
+        # Remove state/TICKET.yaml and matching state files
+        paths_to_remove.extend(find_ticket_paths(state_dir))
+
+        if not paths_to_remove:
+            print(
+                f"No cached artifacts found for {ticket}."
+            )
+
+            logger.info(
+                "No cached artifacts found for ticket: %s",
+                ticket,
+            )
+
+            return 0
+
+        # Display what will be removed
+        print(
+            f"\n⚠️  WARNING: About to remove cached artifacts for {ticket}:"
+        )
+
+        total_files = 0
+        for path in paths_to_remove:
+            if path.is_dir():
+                files = sorted(f for f in path.rglob("*") if f.is_file())
+                if files:
+                    print(
+                        f"   📁 {path.relative_to(target_dir)}/ ({len(files)} file(s)):"
+                    )
+                    for file_path in files:
+                        print(
+                            f"       - {file_path.relative_to(target_dir)}"
+                        )
+                    total_files += len(files)
+                else:
+                    print(
+                        f"   📁 {path.relative_to(target_dir)}/ (empty directory)"
+                    )
+                    total_files += 1
+            else:
+                print(
+                    f"   📄 {path.relative_to(target_dir)}"
+                )
+                total_files += 1
+
+        print(
+            f"\n📊 Total items to remove: {total_files}"
+        )
+
+        print(
+            "\n📝 NOTE: This only removes .jira2pr cache artifacts, "
+            "NOT actual changes made to the repository."
+        )
+
+        print()
+
+        # Ask for confirmation
+        response = input(
+            f"Are you sure you want to clear cache for {ticket}? "
+            "(yes/no): "
+        ).strip().lower()
+
+        if response not in ("yes", "y"):
+            print(
+                "Cache clear cancelled."
+            )
+
+            logger.info(
+                "Cache clear cancelled by user for ticket: %s",
+                ticket,
+            )
+
+            return 0
+
+        # Remove the files
+        removed_count = 0
+
+        for path in paths_to_remove:
+            try:
+                if path.is_file():
+                    path.unlink()
+                    removed_count += 1
+                    logger.info("Removed: %s", path)
+                elif path.is_dir():
+                    count = sum(1 for f in path.rglob("*") if f.is_file())
+                    shutil.rmtree(path)
+                    removed_count += count if count > 0 else 1
+                    logger.info("Removed directory: %s", path)
+
+            except OSError as exc:
+                logger.warning(
+                    "Failed to remove %s: %s",
+                    path,
+                    exc,
+                )
+
+                print(
+                    f"⚠️  Failed to remove {path.relative_to(target_dir)}: {exc}",
+                    file=sys.stderr,
+                )
+
+        print(
+            f"\n✅ Successfully cleared cache for {ticket} "
+            f"({removed_count} item(s) removed)."
+        )
+
+        logger.info(
+            "Cache cleared for ticket %s (%d items removed)",
+            ticket,
+            removed_count,
+        )
+
+        return 0
+
+    except Exception:
+        logger.exception(
+            "Failed to clear cache"
+        )
+
+        print(
+            "❌ Error clearing cache. See logs for details.",
+            file=sys.stderr,
+        )
+
+        return 1
+
+
 def _print_state(
     state,
 ) -> None:
@@ -780,6 +975,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_list.set_defaults(
         func=cmd_list
+    )
+
+    # --------------------------------------------------------------
+    # clear-cache
+    # --------------------------------------------------------------
+
+    p_clear_cache = sub.add_parser(
+        "clear-cache",
+        help="Remove cached artifacts and state for a ticket.",
+    )
+
+    p_clear_cache.add_argument(
+        "ticket",
+        help="Ticket key (e.g., PROJ-123).",
+    )
+
+    p_clear_cache.add_argument(
+        "--target-dir",
+        default=".",
+    )
+
+    p_clear_cache.set_defaults(
+        func=cmd_clear_cache
     )
 
     return parser
