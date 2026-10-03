@@ -142,3 +142,33 @@ class Jira2PRBackend(LLMBackend):
             lint_command=lint_command,
             map_tokens=map_tokens,
         )
+
+    def remediate_review(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """Route review remediation to Aider."""
+
+        logger.info(
+            "Routing review remediation to Aider: "
+            "model=%s edit_files=%d",
+            model,
+            len(edit_files),
+        )
+
+        self._aider.remediate_review(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=test_command,
+            lint_command=lint_command,
+            map_tokens=map_tokens,
+        )

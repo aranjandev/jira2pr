@@ -66,21 +66,15 @@ states:
   review:
     worker: reviewer
     consumes:
-      - plan.yaml
       - requirements.md
-      - decisions/*.md
+      - plan.yaml
     produces:
       - review.md
-    updates:
-      - workflow-state.md
-    validation:
-      success_criteria: review
-    # bounds total review<->implement rework cycles, not a self-retry
     retry:
       max_attempts: 3
     transitions:
       success: submit
-      failure: implement
+      failure: review
       escalate: human-review
 
   submit:
@@ -89,15 +83,9 @@ states:
       - requirements.md
       - plan.yaml
       - review.md
-      - decisions/*.md
     produces:
       - pr-description.md
-    updates:
-      - workflow-state.md
-    validation:
-      success_criteria: submit
-    retry:
-      max_attempts: 2
+
     transitions:
       success: done
       failure: submit
@@ -110,4 +98,3 @@ states:
   human-review:
     terminal: true
     outcome: escalated
-

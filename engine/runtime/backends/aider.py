@@ -515,6 +515,107 @@ class AiderBackend(LLMBackend):
             "Aider repository repair completed"
         )
 
+
+    def remediate_review(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """Repair review findings using Aider."""
+
+        repo_root = repo_root.resolve()
+
+        if not edit_files:
+            raise AiderInvocationError(
+                "Review remediation requires at least one editable file"
+            )
+
+        for path in read_files:
+            if not path.is_file():
+                raise AiderInvocationError(
+                    f"Review remediation context file does not exist: {path}"
+                )
+
+        message_file = (
+            repo_root
+            / ".jira2pr"
+            / "runtime"
+            / "backends"
+            / "prompts"
+            / "aider-review-remediation.md"
+        )
+
+        if not message_file.is_file():
+            raise AiderInvocationError(
+                f"Review remediation prompt does not exist: {message_file}"
+            )
+
+        argv = [
+            "aider",
+            "--model",
+            model,
+            "--edit-format",
+            "diff",
+        ]
+
+        if map_tokens is not None:
+            argv.extend(
+                [
+                    "--map-tokens",
+                    str(map_tokens),
+                ]
+            )
+
+        for path in read_files:
+            argv.extend(
+                [
+                    "--read",
+                    str(path.resolve()),
+                ]
+            )
+
+        argv.extend(self._base_args)
+
+        argv.extend(
+            [
+                "--message-file",
+                str(message_file),
+            ]
+        )
+
+        argv.extend(
+            str(path.resolve())
+            for path in edit_files
+        )
+
+        logger.info(
+            "Running Aider review remediation: "
+            "model=%s edit_files=%d",
+            model,
+            len(edit_files),
+        )
+
+        logger.debug(
+            "Aider review remediation argv: %s",
+            argv,
+        )
+
+        self._run(
+            argv,
+            model=model,
+            cwd=repo_root,
+        )
+
+        logger.info(
+            "Aider review remediation completed"
+        )
+        
     # ------------------------------------------------------------------
     # Runtime prompt lookup
     # ------------------------------------------------------------------

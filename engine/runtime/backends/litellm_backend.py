@@ -121,6 +121,23 @@ class LiteLLMBackend(LLMBackend):
             "LiteLLMBackend does not support repository repair"
         )
 
+    def remediate_review(
+        self,
+        *,
+        model: str,
+        read_files: list[Path],
+        edit_files: list[Path],
+        repo_root: Path,
+        test_command: str,
+        lint_command: str,
+        map_tokens: int | None = None,
+    ) -> None:
+        """LiteLLM does not directly remediate code review issues."""
+
+        raise NotImplementedError(
+            "LiteLLMBackend does not support repository remediation"
+        )
+
     def _generate(
         self,
         *,

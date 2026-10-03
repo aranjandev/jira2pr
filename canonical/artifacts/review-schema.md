@@ -139,38 +139,28 @@ Requirements:
 
 ---
 
-## Recommendation
+## Review Verdict
 
-Exactly one of:
+THE REVIEW MUST END WITH EXACTLY ONE FENCED `review-verdict` block.
 
-- APPROVE
-- APPROVE WITH SUGGESTIONS
-- REQUEST CHANGES
+Allowed verdicts:
 
-### Approval Criteria
+- `approve`
+- `changes_requested`
+- `escalate`
 
-APPROVE
+Example:
 
-- No correctness defects
-- No significant risks
-- Requirements satisfied
+```review-verdict
+verdict: changes_requested
+reason: "The implementation does not correctly preserve first-file-wins semantics."
+```
 
-APPROVE WITH SUGGESTIONS
+For an approved implementation:
 
-- Minor improvements only
-- No blocking issues
+```review-verdict
+verdict: approve
+reason: "No blocking findings."
+```
 
-REQUEST CHANGES
-
-- Correctness issue exists
-- Security risk exists
-- Data integrity risk exists
-- Requirements are not fully implemented
-
----
-
-## Reviewer Notes
-
-Optional observations that do not affect approval status.
-
-Keep concise.
+No content may appear after the `review-verdict` block.

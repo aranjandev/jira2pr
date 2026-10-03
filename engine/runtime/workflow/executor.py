@@ -1,9 +1,13 @@
-"""The workflow executor — drives a workflow from its current state to a terminal one.
+"""Drive a workflow from its current state to a terminal state.
 
-Loop: invoke worker -> invoke supervisor -> compute transition -> persist
-state -> repeat. Every iteration is a single, atomically-saved step, so a
-crash between iterations loses at most the in-flight step (resumable via
-`resume()`, which just re-reads the last saved state and continues).
+Objective implementation verification is performed deterministically using
+test and lint commands.
+
+The reviewer owns semantic implementation evaluation through review.md and
+its trailing review-verdict block.
+
+Supervisor evaluation remains available for workflow states other than
+implement and review.
 """
 
 from __future__ import annotations
@@ -11,7 +15,10 @@ from __future__ import annotations
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow import transitions
-from runtime.workflow.action_executor import ActionExecutionError, execute_actions
+from runtime.workflow.action_executor import (
+    ActionExecutionError,
+    execute_actions,
+)
 from runtime.workflow.evidence import (
     ImplementationEvidence,
     collect_implementation_evidence,
@@ -24,11 +31,23 @@ from runtime.workflow.feedback import (
     write_feedback,
 )
 from runtime.workflow.loader import RuntimeProject
-from runtime.workflow.state_manager import StateManager, WorkflowState
-from runtime.workflow.supervisor_invoker import invoke_supervisor
-from runtime.workflow.worker_invoker import invoke_worker
+from runtime.workflow.review import (
+    ReviewDecisionError,
+    load_review_decision,
+)
+from runtime.workflow.state_manager import (
+    StateManager,
+    WorkflowState,
+)
+from runtime.workflow.supervisor_invoker import (
+    invoke_supervisor,
+)
+from runtime.workflow.worker_invoker import (
+    invoke_worker,
+)
 
 logger = get_logger("workflow.executor")
+
 
 class WorkflowExecutor:
     def __init__(
@@ -38,7 +57,9 @@ class WorkflowExecutor:
     ) -> None:
         self._project = project
         self._backend = backend
-        self._state_manager = StateManager(project.core_dir)
+        self._state_manager = StateManager(
+            project.core_dir
+        )
 
         logger.debug(
             "WorkflowExecutor initialized with backend: %s",
@@ -58,7 +79,9 @@ class WorkflowExecutor:
             ticket_key,
         )
 
-        workflow = self._project.workflow(workflow_name)
+        workflow = self._project.workflow(
+            workflow_name
+        )
 
         self._state_manager.create(
             ticket_key,
@@ -72,7 +95,9 @@ class WorkflowExecutor:
             workflow.initial_state,
         )
 
-        return self.run(ticket_key)
+        return self.run(
+            ticket_key
+        )
 
     def resume(
         self,
@@ -85,18 +110,22 @@ class WorkflowExecutor:
             ticket_key,
         )
 
-        return self.run(ticket_key)
+        return self.run(
+            ticket_key
+        )
 
     def _collect_implementation_evidence(
         self,
         *,
         ticket_key: str,
     ) -> ImplementationEvidence:
-        """Collect deterministic evidence for the current implementation."""
+        """Collect deterministic evidence for the implementation."""
 
-        verification = self._project.backend_config.get(
-            "verification",
-            {},
+        verification = (
+            self._project.backend_config.get(
+                "verification",
+                {},
+            )
         )
 
         test_command = verification.get(
@@ -109,7 +138,9 @@ class WorkflowExecutor:
             "",
         )
 
-        repo_root = self._project.core_dir.parent
+        repo_root = (
+            self._project.core_dir.parent.resolve()
+        )
 
         plan_path = (
             self._project.artifacts_dir(ticket_key)
@@ -139,8 +170,12 @@ class WorkflowExecutor:
 
         logger.info(
             "Implementation verification: tests=%s lint=%s",
-            "PASS" if evidence.tests_passed else "FAIL",
-            "PASS" if evidence.lint_passed else "FAIL",
+            "PASS"
+            if evidence.tests_passed
+            else "FAIL",
+            "PASS"
+            if evidence.lint_passed
+            else "FAIL",
         )
 
         return evidence
@@ -151,11 +186,13 @@ class WorkflowExecutor:
         ticket_key: str,
         evidence: ImplementationEvidence,
     ) -> None:
-        """Run one Aider repair session using current verification failures."""
+        """Run one implementation repair using verification failures."""
 
-        verification = self._project.backend_config.get(
-            "verification",
-            {},
+        verification = (
+            self._project.backend_config.get(
+                "verification",
+                {},
+            )
         )
 
         test_command = verification.get(
@@ -168,7 +205,9 @@ class WorkflowExecutor:
             "",
         )
 
-        repo_root = self._project.core_dir.parent
+        repo_root = (
+            self._project.core_dir.parent.resolve()
+        )
 
         plan_path = (
             self._project.artifacts_dir(ticket_key)
@@ -179,6 +218,12 @@ class WorkflowExecutor:
             plan_path=plan_path,
             repo_root=repo_root,
         )
+
+        if not edit_files:
+            raise RuntimeError(
+                "Implementation repair has no "
+                "plan-authorized editable files"
+            )
 
         coder_path = self._project.agent_path(
             "coder"
@@ -201,19 +246,27 @@ class WorkflowExecutor:
                 project_instructions
             )
 
-        map_tokens = self._project.map_tokens_for(
-            "repository"
+        map_tokens = (
+            self._project.map_tokens_for(
+                "repository"
+            )
         )
 
-        model = self._project.model_for_agent(
-            "coder"
+        model = (
+            self._project.model_for_agent(
+                "coder"
+            )
         )
 
         logger.info(
             "Invoking implementation repair: "
             "tests=%s lint=%s editable_files=%d",
-            "PASS" if evidence.tests_passed else "FAIL",
-            "PASS" if evidence.lint_passed else "FAIL",
+            "PASS"
+            if evidence.tests_passed
+            else "FAIL",
+            "PASS"
+            if evidence.lint_passed
+            else "FAIL",
             len(edit_files),
         )
 
@@ -227,6 +280,391 @@ class WorkflowExecutor:
             map_tokens=map_tokens,
         )
 
+    def _remediate_review(
+        self,
+        *,
+        ticket_key: str,
+    ) -> None:
+        """Repair blocking implementation findings identified by review."""
+
+        repo_root = (
+            self._project.core_dir.parent.resolve()
+        )
+
+        artifacts_dir = (
+            self._project.artifacts_dir(
+                ticket_key
+            )
+        )
+
+        plan_path = (
+            artifacts_dir
+            / "plan.yaml"
+        )
+
+        requirements_path = (
+            artifacts_dir
+            / "requirements.md"
+        )
+
+        review_path = (
+            artifacts_dir
+            / "review.md"
+        )
+
+        required_read_files = [
+            plan_path,
+            requirements_path,
+            review_path,
+        ]
+
+        for path in required_read_files:
+            if not path.is_file():
+                raise RuntimeError(
+                    "Review remediation context "
+                    f"file does not exist: {path}"
+                )
+
+        edit_files = planned_changed_files(
+            plan_path=plan_path,
+            repo_root=repo_root,
+        )
+
+        if not edit_files:
+            raise RuntimeError(
+                "Review remediation has no "
+                "plan-authorized editable files"
+            )
+
+        read_files = list(
+            required_read_files
+        )
+
+        project_instructions = (
+            repo_root
+            / "AGENTS.md"
+        )
+
+        if project_instructions.is_file():
+            read_files.append(
+                project_instructions
+            )
+
+        verification = (
+            self._project.backend_config.get(
+                "verification",
+                {},
+            )
+        )
+
+        test_command = verification.get(
+            "test_command",
+            "",
+        )
+
+        lint_command = verification.get(
+            "lint_command",
+            "",
+        )
+
+        model = (
+            self._project.model_for_agent(
+                "coder"
+            )
+        )
+
+        map_tokens = (
+            self._project.map_tokens_for(
+                "repository"
+            )
+        )
+
+        logger.info(
+            "Invoking review remediation with %d editable file(s)",
+            len(edit_files),
+        )
+
+        logger.debug(
+            "Review remediation read-only files:\n%s",
+            "\n".join(
+                f"  - {path}"
+                for path in read_files
+            ),
+        )
+
+        logger.debug(
+            "Review remediation editable files:\n%s",
+            "\n".join(
+                f"  - {path}"
+                for path in edit_files
+            ),
+        )
+
+        self._backend.remediate_review(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=test_command,
+            lint_command=lint_command,
+            map_tokens=map_tokens,
+        )
+
+    def _evaluate_implementation(
+        self,
+        *,
+        ticket_key: str,
+    ) -> tuple[
+        str,
+        dict,
+        WorkerFeedback | None,
+        ImplementationEvidence,
+    ]:
+        """Verify implementation and attempt one repair when necessary."""
+
+        evidence = (
+            self._collect_implementation_evidence(
+                ticket_key=ticket_key,
+            )
+        )
+
+        if not evidence.verification_passed:
+            logger.warning(
+                "Implementation verification failed: "
+                "tests=%s lint=%s. Attempting repair.",
+                "PASS"
+                if evidence.tests_passed
+                else "FAIL",
+                "PASS"
+                if evidence.lint_passed
+                else "FAIL",
+            )
+
+            self._repair_implementation(
+                ticket_key=ticket_key,
+                evidence=evidence,
+            )
+
+            logger.info(
+                "Implementation repair completed. "
+                "Recollecting evidence."
+            )
+
+            evidence = (
+                self._collect_implementation_evidence(
+                    ticket_key=ticket_key,
+                )
+            )
+
+        if evidence.verification_passed:
+            result = {
+                "outcome": "success",
+                "reason": (
+                    "Deterministic implementation verification "
+                    "passed: tests and lint succeeded."
+                ),
+                "violations": [],
+            }
+
+            logger.info(
+                "Implementation verification passed; "
+                "skipping implementation supervisor"
+            )
+
+            return (
+                "success",
+                result,
+                None,
+                evidence,
+            )
+
+        reason = (
+            "Implementation verification failed after repair: "
+            f"tests={'PASS' if evidence.tests_passed else 'FAIL'}, "
+            f"lint={'PASS' if evidence.lint_passed else 'FAIL'}."
+        )
+
+        feedback = WorkerFeedback(
+            source="verification",
+            reason=reason,
+            details=(),
+        )
+
+        result = {
+            "outcome": "failure",
+            "reason": reason,
+            "violations": [
+                name
+                for name, passed in (
+                    (
+                        "tests_pass",
+                        evidence.tests_passed,
+                    ),
+                    (
+                        "lint_pass",
+                        evidence.lint_passed,
+                    ),
+                )
+                if not passed
+            ],
+        }
+
+        return (
+            "failure",
+            result,
+            feedback,
+            evidence,
+        )
+
+    def _evaluate_review(
+        self,
+        *,
+        ticket_key: str,
+    ) -> tuple[
+        str,
+        dict,
+        WorkerFeedback | None,
+        ImplementationEvidence | None,
+    ]:
+        """Use the reviewer's own verdict to determine the review outcome."""
+
+        review_path = (
+            self._project.artifacts_dir(ticket_key)
+            / "review.md"
+        )
+
+        try:
+            decision = load_review_decision(
+                review_path
+            )
+        except ReviewDecisionError as exc:
+            reason = str(exc)
+
+            feedback = WorkerFeedback(
+                source="review-validation",
+                reason=reason,
+                details=(),
+            )
+
+            return (
+                "failure",
+                {
+                    "outcome": "failure",
+                    "reason": reason,
+                    "violations": [],
+                },
+                feedback,
+                None,
+            )
+
+        logger.info(
+            "Reviewer verdict: %s",
+            decision.verdict,
+        )
+
+        logger.info(
+            "Reviewer reason: %s",
+            decision.reason,
+        )
+
+        if decision.verdict == "approve":
+            return (
+                "success",
+                {
+                    "outcome": "success",
+                    "reason": decision.reason,
+                    "violations": [],
+                },
+                None,
+                None,
+            )
+
+        if decision.verdict == "escalate":
+            return (
+                "escalate",
+                {
+                    "outcome": "escalate",
+                    "reason": decision.reason,
+                    "violations": [],
+                },
+                None,
+                None,
+            )
+
+        if decision.verdict != "changes_requested":
+            raise RuntimeError(
+                "Unsupported review verdict: "
+                f"{decision.verdict}"
+            )
+
+        logger.info(
+            "Reviewer requested implementation changes"
+        )
+
+        self._remediate_review(
+            ticket_key=ticket_key,
+        )
+
+        logger.info(
+            "Review remediation completed. "
+            "Collecting deterministic verification evidence."
+        )
+
+        evidence = (
+            self._collect_implementation_evidence(
+                ticket_key=ticket_key,
+            )
+        )
+
+        if evidence.verification_passed:
+            reason = (
+                "Review remediation completed and deterministic "
+                "verification passed. The corrected implementation "
+                "requires another review."
+            )
+
+            return (
+                "failure",
+                {
+                    "outcome": "failure",
+                    "reason": reason,
+                    "violations": [],
+                },
+                None,
+                evidence,
+            )
+
+        reason = (
+            "Review remediation completed, but the corrected "
+            "implementation does not pass deterministic verification: "
+            f"tests={'PASS' if evidence.tests_passed else 'FAIL'}, "
+            f"lint={'PASS' if evidence.lint_passed else 'FAIL'}."
+        )
+
+        return (
+            "escalate",
+            {
+                "outcome": "escalate",
+                "reason": reason,
+                "violations": [
+                    name
+                    for name, passed in (
+                        (
+                            "tests_pass",
+                            evidence.tests_passed,
+                        ),
+                        (
+                            "lint_pass",
+                            evidence.lint_passed,
+                        ),
+                    )
+                    if not passed
+                ],
+            },
+            None,
+            evidence,
+        )
+
     def run(
         self,
         ticket_key: str,
@@ -238,10 +676,13 @@ class WorkflowExecutor:
             ticket_key,
         )
 
-        state = self._state_manager.load(ticket_key)
+        state = self._state_manager.load(
+            ticket_key
+        )
 
         logger.info(
-            "Loaded state for %s: workflow=%s, current_state=%s",
+            "Loaded state for %s: "
+            "workflow=%s, current_state=%s",
             ticket_key,
             state.workflow,
             state.current_state,
@@ -251,7 +692,9 @@ class WorkflowExecutor:
             state.workflow
         )
 
-        policy = self._project.execution_policy
+        policy = (
+            self._project.execution_policy
+        )
 
         iteration = 0
 
@@ -286,7 +729,8 @@ class WorkflowExecutor:
                 )
 
                 logger.info(
-                    "Workflow reached terminal state: %s (outcome=%s)",
+                    "Workflow reached terminal state: %s "
+                    "(outcome=%s)",
                     current.name,
                     current.outcome,
                 )
@@ -299,7 +743,7 @@ class WorkflowExecutor:
                 return state
 
             # ----------------------------------------------------------
-            # Global iteration safety limit
+            # Global iteration limit
             # ----------------------------------------------------------
 
             max_total_iterations = (
@@ -308,19 +752,25 @@ class WorkflowExecutor:
                 else policy.max_total_iterations
             )
 
-            if state.total_iterations >= max_total_iterations:
+            if (
+                state.total_iterations
+                >= max_total_iterations
+            ):
                 logger.warning(
-                    "Global iteration cap (%d) exceeded at state %s. "
-                    "Escalating due to possible transition cycle.",
+                    "Global iteration cap (%d) exceeded "
+                    "at state %s. Escalating due to "
+                    "possible transition cycle.",
                     max_total_iterations,
                     current.name,
                 )
 
                 state.record_escalation(
                     current.name,
-                    f"global iteration cap "
-                    f"({max_total_iterations}) exceeded; "
-                    "possible transition cycle",
+                    (
+                        "global iteration cap "
+                        f"({max_total_iterations}) exceeded; "
+                        "possible transition cycle"
+                    ),
                 )
 
                 state.current_state = (
@@ -357,15 +807,27 @@ class WorkflowExecutor:
                 state.total_iterations,
             )
 
-            try:
-                # ------------------------------------------------------
-                # Worker execution
-                # ------------------------------------------------------
+            context_dir = (
+                self._project.context_dir(
+                    ticket_key
+                )
+            )
 
+            if attempt == 1:
+                clear_feedback(
+                    context_dir=context_dir,
+                    state_name=current.name,
+                )
+
+            try:
                 produced: dict[str, str] = {}
                 action_metadata: dict[str, str] = {}
                 feedback: WorkerFeedback | None = None
                 evidence: ImplementationEvidence | None = None
+
+                # ------------------------------------------------------
+                # Worker execution
+                # ------------------------------------------------------
 
                 try:
                     logger.debug(
@@ -373,7 +835,10 @@ class WorkflowExecutor:
                         current.name,
                     )
 
-                    produced, action_metadata = invoke_worker(
+                    (
+                        produced,
+                        action_metadata,
+                    ) = invoke_worker(
                         project=self._project,
                         workflow=workflow,
                         state=current,
@@ -383,15 +848,15 @@ class WorkflowExecutor:
 
                     logger.debug(
                         "Worker produced artifacts: %s",
-                        list(produced.keys()),
+                        list(
+                            produced.keys()
+                        ),
                     )
 
                 except WorkerOutputError as exc:
-                    # Expected worker-output failure. This becomes a normal
-                    # workflow failure and can participate in the retry loop.
-
                     logger.warning(
-                        "Worker output failed validation for state '%s': %s",
+                        "Worker output failed validation "
+                        "for state '%s': %s",
                         current.name,
                         exc,
                     )
@@ -403,7 +868,9 @@ class WorkflowExecutor:
                         "outcome": outcome,
                         "reason": feedback.reason,
                         "feedback": (
-                            "\n".join(feedback.details)
+                            "\n".join(
+                                feedback.details
+                            )
                             if feedback.details
                             else ""
                         ),
@@ -412,87 +879,74 @@ class WorkflowExecutor:
 
                 else:
                     # --------------------------------------------------
-                    # Collect implementation evidence
+                    # State evaluation
                     # --------------------------------------------------
 
                     if current.name == "implement":
-                        logger.info(
-                            "Collecting implementation evidence for state: %s",
-                            current.name,
-                        )
-
-                        evidence = self._collect_implementation_evidence(
+                        (
+                            outcome,
+                            result,
+                            feedback,
+                            evidence,
+                        ) = self._evaluate_implementation(
                             ticket_key=ticket_key,
                         )
 
-                        if not evidence.verification_passed:
-                            logger.warning(
-                                "Implementation verification failed: "
-                                "tests=%s lint=%s. "
-                                "Invoking Aider repair before supervisor evaluation.",
-                                "PASS" if evidence.tests_passed else "FAIL",
-                                "PASS" if evidence.lint_passed else "FAIL",
-                            )
-
-                            self._repair_implementation(
-                                ticket_key=ticket_key,
-                                evidence=evidence,
-                            )
-
-                            logger.info(
-                                "Aider repair completed. "
-                                "Recollecting implementation evidence."
-                            )
-
-                            evidence = self._collect_implementation_evidence(
-                                ticket_key=ticket_key,
-                            )
-
-                    # --------------------------------------------------
-                    # Supervisor evaluation
-                    # --------------------------------------------------
-
-                    logger.debug(
-                        "Invoking supervisor for state: %s",
-                        current.name,
-                    )
-
-                    evidence_files = (
-                        evidence.files()
-                        if evidence is not None
-                        else []
-                    )
-
-                    result = invoke_supervisor(
-                        self._project,
-                        workflow,
-                        current,
-                        ticket_key,
-                        produced,
-                        self._backend,
-                        evidence_files=evidence_files,
-                    )
-
-                    outcome = result["outcome"]
-
-                    logger.info(
-                        "Supervisor outcome: %s, Reason: %s",
-                        outcome,
-                        result.get("reason", "N/A"),
-                    )
-
-                    if outcome != "success":
-                        feedback = _feedback_from_supervisor(
-                            result
+                    elif current.name == "review":
+                        (
+                            outcome,
+                            result,
+                            feedback,
+                            evidence,
+                        ) = self._evaluate_review(
+                            ticket_key=ticket_key,
                         )
+
+                    else:
+                        logger.debug(
+                            "Invoking supervisor for state: %s",
+                            current.name,
+                        )
+
+                        evidence_files = (
+                            evidence.files()
+                            if evidence is not None
+                            else []
+                        )
+
+                        result = invoke_supervisor(
+                            self._project,
+                            workflow,
+                            current,
+                            ticket_key,
+                            produced,
+                            self._backend,
+                            evidence_files=evidence_files,
+                        )
+
+                        outcome = result[
+                            "outcome"
+                        ]
+
+                        logger.info(
+                            "Supervisor outcome: %s, Reason: %s",
+                            outcome,
+                            result.get(
+                                "reason",
+                                "N/A",
+                            ),
+                        )
+
+                        if outcome != "success":
+                            feedback = (
+                                _feedback_from_supervisor(
+                                    result
+                                )
+                            )
 
                 # ------------------------------------------------------
                 # Persist or clear retry feedback
                 # ------------------------------------------------------
-
-                context_dir = self._project.context_dir(
-                    ticket_key
-                )
 
                 if outcome == "success":
                     clear_feedback(
@@ -528,7 +982,7 @@ class WorkflowExecutor:
                         )
 
                 # ------------------------------------------------------
-                # Resolve workflow transition
+                # Resolve transition
                 # ------------------------------------------------------
 
                 transition = transitions.next_state(
@@ -542,6 +996,66 @@ class WorkflowExecutor:
                 state.retry_counts = (
                     transition.retry_counts
                 )
+
+                # ------------------------------------------------------
+                # Runtime action capabilities
+                #
+                # Action states are not recorded as successful until their
+                # actions have completed successfully.
+                # ------------------------------------------------------
+
+                worker_binding = (
+                    self._project.workers.get(
+                        current.worker
+                    )
+                )
+
+                if (
+                    worker_binding
+                    and worker_binding.actions
+                    and outcome == "success"
+                ):
+                    logger.info(
+                        "Executing actions for state: %s",
+                        current.name,
+                    )
+
+                    logger.debug(
+                        "Action metadata for state '%s': %r",
+                        current.name,
+                        action_metadata,
+                    )
+
+                    try:
+                        action_result = execute_actions(
+                            self._project,
+                            current,
+                            ticket_key,
+                            action_metadata,
+                            self._project.core_dir.parent,
+                            state.metadata.get(
+                                "pr_number"
+                            ),
+                        )
+
+                        state.metadata.update(
+                            action_result
+                        )
+
+                        logger.info(
+                            "Actions completed: %s",
+                            action_result,
+                        )
+
+                    except ActionExecutionError:
+                        logger.exception(
+                            "Action execution failed"
+                        )
+                        raise
+
+                # ------------------------------------------------------
+                # Record history
+                # ------------------------------------------------------
 
                 state.record_history(
                     current.name,
@@ -579,7 +1093,8 @@ class WorkflowExecutor:
                     )
 
                     logger.warning(
-                        "Escalating due to supervisor feedback: %s",
+                        "Escalating state '%s': %s",
+                        current.name,
                         reason,
                     )
 
@@ -587,58 +1102,6 @@ class WorkflowExecutor:
                         current.name,
                         reason,
                     )
-
-                # ------------------------------------------------------
-                # Runtime action capabilities
-                # ------------------------------------------------------
-
-                worker_binding = (
-                    self._project.workers.get(
-                        current.worker
-                    )
-                )
-
-                if (
-                    worker_binding
-                    and worker_binding.actions
-                    and outcome == "success"
-                ):
-                    logger.info(
-                        "Executing actions for state: %s",
-                        current.name,
-                    )
-
-                    try:
-                        logger.debug(
-                            "Action metadata for state '%s': %r",
-                            current.name,
-                            action_metadata,
-                        )                        
-                        action_result = execute_actions(
-                            self._project,
-                            current,
-                            ticket_key,
-                            action_metadata,
-                            self._project.core_dir.parent,
-                            state.metadata.get(
-                                "pr_number"
-                            ),
-                        )
-
-                        state.metadata.update(
-                            action_result
-                        )
-
-                        logger.info(
-                            "Actions completed: %s",
-                            action_result,
-                        )
-
-                    except ActionExecutionError:
-                        logger.exception(
-                            "Action execution failed"
-                        )
-                        raise
 
                 # ------------------------------------------------------
                 # Advance workflow
@@ -664,14 +1127,13 @@ class WorkflowExecutor:
                 )
 
             except Exception:
-                # Unexpected infrastructure/runtime/programming failures
-                # remain catastrophic.
-
                 logger.exception(
-                    "Error during workflow execution at state %s",
+                    "Error during workflow execution "
+                    "at state %s",
                     current.name,
                 )
                 raise
+
 
 def _feedback_from_supervisor(
     result: dict,
@@ -687,7 +1149,9 @@ def _feedback_from_supervisor(
 
     if supervisor_feedback:
         details.append(
-            str(supervisor_feedback)
+            str(
+                supervisor_feedback
+            )
         )
 
     violations = result.get(
@@ -695,7 +1159,10 @@ def _feedback_from_supervisor(
         [],
     )
 
-    if isinstance(violations, list):
+    if isinstance(
+        violations,
+        list,
+    ):
         details.extend(
             str(violation)
             for violation in violations
@@ -710,6 +1177,7 @@ def _feedback_from_supervisor(
                 "Supervisor rejected worker output",
             )
         ),
-        details=tuple(details),
+        details=tuple(
+            details
+        ),
     )
-
