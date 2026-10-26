@@ -1,11 +1,11 @@
 # canonical/platform-extras/copilot/models.yaml
 
 models:
-  orchestrator: github-copilot/gpt-5-mini
-  jira-reader: github-copilot/gpt-5-mini
-  researcher: github-copilot/claude-sonnet-4.6
-  planner: github-copilot/claude-sonnet-4.6
-  coder: github-copilot/claude-sonnet-4.6
-  reviewer: github-copilot/gpt-5
-  pr-author: github-copilot/gpt-5-mini
-  supervisor: github-copilot/gpt-5
+  orchestrator: GPT-5.6 Luna (copilot)
+  jira-reader: GPT-5.6 Luna (copilot)
+  researcher: GPT-5.6 Luna (copilot)
+  planner: Claude Sonnet 5.5 (copilot)
+  coder: Claude Haiku 5.5 (copilot)
+  reviewer: GPT-6.1 Sol (copilot)
+  pr-author: Claude Haiku 5.5 (copilot)
+  supervisor: GPT-5.6 Luna (copilot)
