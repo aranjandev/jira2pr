@@ -12,6 +12,7 @@ dependencies = [
     "PyYAML>=6.0",
     "aider>=0.2.6",
     "litellm>=1.103.2",
+    "mcp",
     "tree-sitter>=0.26.0",
     "tree-sitter-python>=0.25.0",
 ]
@@ -32,6 +33,12 @@ packages = ["compiler/assembler", "runtime", "jira2pr"]
 # jira2pr source checkout.
 "../canonical" = "jira2pr/_canonical"
 
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -42,12 +42,12 @@ def test_self_loop_failure_retries_until_exhaustion(workflow, policy):
     assert result2.escalated_due_to_retry_exhaustion
 
 
-def test_review_failure_routes_to_implement_without_counting(workflow, policy):
-    # review: failure target != "review" -> forward routing, not a retry;
-    # review's own max_attempts is not consulted here (see docstring above).
+def test_review_failure_loops_on_review_and_counts_attempts(workflow, policy):
+    # review's failure target is review itself, so it is a bounded self-loop:
+    # each failure increments review's retry count until max_attempts.
     result = transitions.next_state(workflow, "review", "failure", {}, policy)
-    assert result.next_state == "implement"
-    assert result.retry_counts == {}
+    assert result.next_state == "review"
+    assert result.retry_counts == {"review": 1}
     assert not result.escalated_due_to_retry_exhaustion
 
 

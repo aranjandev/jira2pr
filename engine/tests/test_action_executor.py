@@ -4,9 +4,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from assembler.platforms.aider import AiderAssembler
+from assembler.platforms.runtime import RuntimeAssembler
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
+from runtime.backends.mock import DEFAULT_PLAN
 from runtime.workflow.action_executor import (
     ActionExecutionError,
     execute_actions,
@@ -22,9 +23,16 @@ CANONICAL_DIR = Path(__file__).resolve().parent.parent.parent / "canonical"
 def project(tmp_path):
     reg = CanonicalRegistry.load(CANONICAL_DIR)
     writer = FileWriter(tmp_path)
-    AiderAssembler().assemble(reg, writer)
+    RuntimeAssembler().assemble(reg, writer)
     writer.finalize()
     return RuntimeProject.load(tmp_path)
+
+
+def _write_plan(project, ticket_key):
+    """Commit manifests are derived from the ticket's plan.yaml."""
+    artifacts_dir = project.artifacts_dir(ticket_key)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (artifacts_dir / "plan.yaml").write_text(DEFAULT_PLAN, encoding="utf-8")
 
 
 def test_parse_pr_actions_valid_block():
@@ -168,6 +176,7 @@ def test_execute_actions_create_new_pr(mock_run, project, tmp_path):
     artifacts_dir = project.artifacts_dir("PROJ-1")
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     (artifacts_dir / "pr-description.md").write_text("# PR Description\n\nTest content.")
+    _write_plan(project, "PROJ-1")
     
     action_metadata = {
         "commit_message": "feat: add feature",
@@ -227,6 +236,7 @@ def test_execute_actions_update_existing_pr(mock_run, project):
     artifacts_dir = project.artifacts_dir("PROJ-2")
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     (artifacts_dir / "pr-description.md").write_text("# Updated PR\n\nTest content.")
+    _write_plan(project, "PROJ-2")
     
     action_metadata = {"commit_message": "fix: update something"}
     
@@ -291,6 +301,7 @@ def test_execute_actions_subprocess_failure(mock_run, project):
     )
     
     action_metadata = {"commit_message": "feat: add"}
+    _write_plan(project, "PROJ-4")
     
     with pytest.raises(ActionExecutionError, match="git.commit failed"):
         execute_actions(

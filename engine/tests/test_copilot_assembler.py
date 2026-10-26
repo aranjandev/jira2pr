@@ -49,7 +49,7 @@ def test_worker_agents_not_user_invocable(tmp_path):
 def test_core_package_emitted(tmp_path):
     out = _assemble(tmp_path)
     assert (out / ".jira2pr/workflows/feature.workflow.yaml").exists()
-    assert (out / ".jira2pr/artifacts/plan-schema.md").exists()
+    assert (out / ".jira2pr/artifacts/plan.schema.yaml").exists()
     assert (out / ".jira2pr/state/workflow-state.template.yaml").exists()
     assert (out / ".jira2pr/capabilities.yaml").exists()
     assert (out / ".jira2pr/config.yaml").exists()
@@ -85,7 +85,7 @@ def test_no_skills_or_model_tiers_json(tmp_path):
 def test_model_baked_into_frontmatter(tmp_path):
     out = _assemble(tmp_path)
     content = (out / ".github/agents/jira-reader.agent.md").read_text()
-    assert "GPT-5.6 Luna (copilot)" in content
+    assert 'model: "github-copilot/gpt-5-mini"' in content
 
 
 def test_idempotent(tmp_path):

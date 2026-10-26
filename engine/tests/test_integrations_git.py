@@ -1,6 +1,7 @@
 """Tests for git_helper.py — branch naming, commit, push, status commands."""
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -125,36 +126,54 @@ class TestCmdCreateBranch(unittest.TestCase):
 
 class TestCmdCommit(unittest.TestCase):
 
-    def test_exits_0_when_no_changes(self):
-        """When both staged and unstaged diffs are clean, exit(0) without committing."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            with self.assertRaises(SystemExit) as ctx:
-                mod.cmd_commit("feat: no-op")
-            self.assertEqual(ctx.exception.code, 0)
+    def _manifest(self, tmp, lines):
+        path = Path(tmp) / "commit-files.txt"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return str(path)
 
-    def test_stages_and_commits_when_changes_present(self):
-        git_calls = []
-
+    def _fake_run(self, repo_root, staged, git_calls):
         def fake_run(cmd, **kwargs):
             git_calls.append(cmd)
-            result = MagicMock(returncode=0, stdout="file.py\n", stderr="", text=True)
-            # diff --quiet returns 1 when there ARE changes
-            if cmd == ["git", "diff", "--cached", "--quiet"]:
-                result.returncode = 1
+            result = MagicMock(returncode=0, stdout="", stderr="", text=True)
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                result.stdout = f"{repo_root}\n"
+            elif cmd[:4] == ["git", "diff", "--cached", "--name-only"]:
+                result.stdout = "\n".join(staged) + ("\n" if staged else "")
             return result
 
-        with patch("subprocess.run", side_effect=fake_run):
-            mod.cmd_commit("feat(scope): my commit message")
+        return fake_run
 
-        cmds = [" ".join(c) for c in git_calls]
-        self.assertTrue(any("add" in c for c in cmds), f"Expected git add; got: {cmds}")
-        self.assertTrue(any("commit" in c for c in cmds), f"Expected git commit; got: {cmds}")
-        # -m message should be present
-        self.assertTrue(
-            any("my commit message" in c for c in cmds),
-            f"Expected commit message; got: {cmds}",
-        )
+    def test_exits_0_when_no_authorized_changes_staged(self):
+        """When nothing ends up staged, exit(0) without committing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = self._manifest(tmp, ["file.py"])
+            git_calls = []
+            fake = self._fake_run(tmp, [], git_calls)
+            with patch("subprocess.run", side_effect=fake), self.assertRaises(SystemExit) as ctx:
+                mod.cmd_commit("feat: no-op", manifest)
+            self.assertEqual(ctx.exception.code, 0)
+            self.assertFalse(any(c[:2] == ["git", "commit"] for c in git_calls))
+
+    def test_stages_only_manifest_files_and_commits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = self._manifest(tmp, ["file.py", "pkg/mod.py"])
+            git_calls = []
+            fake = self._fake_run(tmp, ["file.py", "pkg/mod.py"], git_calls)
+            with patch("subprocess.run", side_effect=fake):
+                mod.cmd_commit("feat(scope): my commit message", manifest)
+
+        self.assertIn(["git", "add", "--", "file.py", "pkg/mod.py"], git_calls)
+        self.assertIn(["git", "commit", "-m", "feat(scope): my commit message"], git_calls)
+
+    def test_rejects_unauthorized_staged_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = self._manifest(tmp, ["file.py"])
+            git_calls = []
+            fake = self._fake_run(tmp, ["file.py", "other.py"], git_calls)
+            with patch("subprocess.run", side_effect=fake), self.assertRaises(SystemExit) as ctx:
+                mod.cmd_commit("feat: x", manifest)
+            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(any(c[:2] == ["git", "commit"] for c in git_calls))
 
 
 # ─── cmd_push ─────────────────────────────────────────────────────────────────

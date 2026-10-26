@@ -23,7 +23,7 @@ def _load():
 def test_valid_registry_passes():
     reg = _load()
     validate(reg, "copilot")
-    validate(reg, "aider")
+    validate(reg, "runtime")
 
 
 def test_unknown_worker_rejected():
@@ -109,10 +109,23 @@ def test_unknown_capability_rejected():
     assert any("not.a.real.capability" in e for e in exc_info.value.errors)
 
 
-def test_unknown_model_tier_for_platform_rejected():
+def test_missing_agent_model_for_platform_rejected(monkeypatch):
     reg = _load()
-    reg.model_tiers["tiers"][2]["models"].pop("aider", None)
+    models = reg.platform_models("runtime")
+    models.pop("coder")
+    monkeypatch.setattr(CanonicalRegistry, "platform_models", lambda self, platform: models)
 
     with pytest.raises(CanonicalValidationError) as exc_info:
-        validate(reg, "aider")
-    assert any("tier 2" in e for e in exc_info.value.errors)
+        validate(reg, "runtime")
+    assert any("models.coder" in e for e in exc_info.value.errors)
+
+
+def test_blank_agent_model_for_platform_rejected(monkeypatch):
+    reg = _load()
+    models = reg.platform_models("copilot")
+    models["coder"] = "  "
+    monkeypatch.setattr(CanonicalRegistry, "platform_models", lambda self, platform: models)
+
+    with pytest.raises(CanonicalValidationError) as exc_info:
+        validate(reg, "copilot")
+    assert any("models.coder" in e and "non-empty" in e for e in exc_info.value.errors)

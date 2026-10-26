@@ -38,19 +38,20 @@ def test_resolve_git_status_no_params():
 
 
 def test_resolve_git_commit_with_message():
-    """git.commit capability requires a message parameter."""
+    """git.commit capability requires message and files_from parameters."""
     cap = CapabilitySpec(
         id="git.commit",
         description="Create a git commit",
         type="action",
         binding=CapabilityBinding(kind="script", handler="git"),
     )
-    argv = resolve(cap, "/repo", {"message": "feat: add feature"})
+    argv = resolve(cap, "/repo", {"message": "feat: add feature", "files_from": "/tmp/files.txt"})
     assert argv == [
         "python3",
         "/repo/.jira2pr/runtime/integrations/git.py",
         "commit",
         "feat: add feature",
+        "/tmp/files.txt",
     ]
 
 

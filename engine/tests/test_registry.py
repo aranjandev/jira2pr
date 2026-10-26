@@ -19,14 +19,12 @@ def test_loads_all_eight_agents():
     }
 
 
-def test_agent_model_tier_and_kind():
+def test_agent_kind_and_artifact_schema():
     reg = _load()
     orchestrator = reg.agent("orchestrator")
     assert orchestrator.kind == "orchestrator"
-    assert orchestrator.model_tier == 0
     supervisor = reg.agent("supervisor")
     assert supervisor.kind == "supervisor"
-    assert supervisor.model_tier == 2
     coder = reg.agent("coder")
     assert coder.kind == "worker"
     assert coder.artifact_schema is None
@@ -76,11 +74,15 @@ def test_capabilities_loaded_with_bindings():
     assert web_search.binding.kind == "native"
 
 
-def test_model_for_tier_all_platforms():
+def test_platform_models_maps_every_agent():
     reg = _load()
-    assert "GPT-5.6 Luna (copilot)" in reg.model_for_tier(0, "copilot")
-    assert reg.model_for_tier(2, "aider")
-    assert "unknown for" in reg.model_for_tier(2, "nonexistent-platform")
+    agent_slugs = {a.slug for a in reg.agents}
+    copilot_models = reg.platform_models("copilot")
+    assert set(copilot_models) == agent_slugs
+    assert copilot_models["jira-reader"] == "github-copilot/gpt-5-mini"
+    # The runtime platform does not execute the orchestrator.
+    assert set(reg.platform_models("runtime")) == agent_slugs - {"orchestrator"}
+    assert reg.platform_models("nonexistent-platform") == {}
 
 
 def test_execution_policy_loaded():
@@ -95,5 +97,5 @@ def test_execution_policy_loaded():
 def test_artifact_schema_files_exclude_registry():
     reg = _load()
     names = {p.name for p in reg.artifact_schema_files()}
-    assert "plan-schema.md" in names
+    assert "plan.schema.yaml" in names
     assert "REGISTRY.md" not in names

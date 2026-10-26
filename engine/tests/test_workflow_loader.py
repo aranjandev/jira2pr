@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from assembler.platforms.aider import AiderAssembler
+from assembler.platforms.runtime import RuntimeAssembler
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
 from runtime.workflow.loader import RuntimeProject, WorkflowNotFoundError
@@ -15,7 +15,7 @@ CANONICAL_DIR = Path(__file__).resolve().parent.parent.parent / "canonical"
 def project_dir(tmp_path):
     reg = CanonicalRegistry.load(CANONICAL_DIR)
     writer = FileWriter(tmp_path)
-    AiderAssembler().assemble(reg, writer)
+    RuntimeAssembler().assemble(reg, writer)
     writer.finalize()
     return tmp_path
 
@@ -53,5 +53,5 @@ def test_capabilities_and_workers_loaded(project_dir):
 def test_agent_metadata_matches_config(project_dir):
     project = RuntimeProject.load(project_dir)
     reviewer = project.agent("reviewer")
-    assert reviewer.model_tier == 2
+    assert reviewer.kind == "worker"
     assert reviewer.artifact_schema == "review-schema.md"
