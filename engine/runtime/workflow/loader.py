@@ -67,7 +67,7 @@ class RuntimeProject:
         if not core_dir.is_dir():
             logger.error(f"{core_dir} not found")
             raise FileNotFoundError(
-                f"{core_dir} not found — run `jira2pr init --platform <copilot|aider>` first."
+                f"{core_dir} not found — run `jira2pr init --platform runtime` first."
             )
 
         logger.debug(f"Core directory found: {core_dir}")
@@ -97,7 +97,9 @@ class RuntimeProject:
         if not backend_config_path.is_file():
             raise FileNotFoundError(
                 f"Backend configuration not found: "
-                f"{backend_config_path}"
+                f"{backend_config_path} — the package was generated for "
+                f"platform '{platform}', which does not provide a runtime "
+                f"backend. Re-run `jira2pr init --platform runtime`."
             )
         logger.debug(
             "Loading backend configuration: %s",
