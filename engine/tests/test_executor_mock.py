@@ -184,7 +184,9 @@ def test_review_changes_requested_routes_to_implement_then_rereviews(project, fa
     assert state.status == "completed"
     ops = [c["op"] for c in backend.calls]
     assert "remediate_review" not in ops
-    assert ops.count("fix_repository") == 1
+    # Review findings use the coder edit path (2 tasks first pass, 2 on re-entry).
+    assert "fix_repository" not in ops
+    assert ops.count("edit_repository") == 4
     assert state.retry_counts == {"implement-cycle": 1}
     assert [h["state"] for h in state.history].count("review") == 2
 
@@ -274,5 +276,62 @@ def test_backend_error_counts_as_implement_failure_then_recovers(project, fake_s
     assert state.retry_counts == {"implement": 1}
     failed = [h for h in state.history if h["state"] == "implement" and h["outcome"] == "failure"]
     assert len(failed) == 1
-    assert "Coder backend call failed" in failed[0]["notes"]
+    assert "coder backend call failed" in failed[0]["notes"]
     assert "Aider timed out" in failed[0]["notes"]
+    # Backend failures retry through the coder edit path, not the test-repair mode.
+    assert "fix_repository" not in [c["op"] for c in backend.calls]
+
+
+class SecondTaskNoOpBackend(MockBackend):
+    """The second edit call of the first attempt changes nothing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.edit_calls = 0
+
+    def edit_repository(self, **kwargs):
+        self.edit_calls += 1
+        if self.edit_calls == 2:
+            self.calls.append({"op": "edit_repository", "files": [str(p) for p in kwargs["edit_files"]]})
+            return
+        return super().edit_repository(**kwargs)
+
+
+def test_task_without_change_fails_attempt_at_that_task(project, fake_subprocess):
+    backend = SecondTaskNoOpBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-13")
+    assert state.status == "completed"
+    assert state.retry_counts == {"implement": 1}
+    failed = [h for h in state.history if h["state"] == "implement" and h["outcome"] == "failure"]
+    assert len(failed) == 1
+    assert "made no changes" in failed[0]["notes"]
+    # Attempt 2 resumes at T2. T1's edit from attempt 1 is kept and not re-run.
+    assert backend.edit_calls == 3
+    edited = [c["files"][0] for c in backend.calls if c["op"] == "edit_repository"]
+    assert edited[0] != edited[1]
+    assert edited[2] == edited[1]
+
+
+class SecondTaskFailsOnceBackend(MockBackend):
+    """The second task's first edit call raises a backend error."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.edit_calls = 0
+
+    def edit_repository(self, **kwargs):
+        self.edit_calls += 1
+        if self.edit_calls == 2:
+            raise BackendInvocationError("Aider timed out after 600s")
+        return super().edit_repository(**kwargs)
+
+
+def test_backend_error_resumes_at_failed_task(project, fake_subprocess):
+    backend = SecondTaskFailsOnceBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-14")
+    assert state.status == "completed"
+    assert state.retry_counts == {"implement": 1}
+    # Attempt 1 made two calls (T1, then T2 failing). Attempt 2 made one call, for T2 only.
+    assert backend.edit_calls == 3
+    edited = [c["files"][0] for c in backend.calls if c["op"] == "edit_repository"]
+    assert len(edited) == 2 and edited[0] != edited[1]

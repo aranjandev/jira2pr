@@ -20,6 +20,7 @@ resolved deterministically before worker invocation and materialized under
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -51,6 +52,7 @@ from runtime.workflow.feedback import WorkerOutputError, feedback_path
 from runtime.workflow.loader import (
     RuntimeProject,
 )
+from runtime.workflow.task_scope import capture_scope, revert_out_of_scope
 
 _PR_ACTIONS_BLOCK_RE = re.compile(
     r"```pr-actions\s*\n"
@@ -561,6 +563,45 @@ def _resolve_task_target(
     return target
 
 
+_RESUMABLE_FEEDBACK_SOURCES = frozenset({"llm-error", "empty-diff", "out-of-scope-edit"})
+
+
+def _resume_task_id(context_dir: Path, state_name: str, task_ids: list[str]) -> str | None:
+    """Return the task to resume at, or None to run every task.
+
+    Only task-level failures resume. Review findings and fix-pass results
+    change the work across tasks, so those re-run the whole plan.
+    """
+    path = feedback_path(context_dir, state_name)
+    if not path.is_file():
+        return None
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    resume_from = data.get("resume_from")
+    if data.get("source") not in _RESUMABLE_FEEDBACK_SOURCES or resume_from is None:
+        return None
+    if resume_from not in task_ids:
+        logger.warning(
+            "Feedback resumes at task %s, which is not in the plan; running all tasks",
+            resume_from,
+        )
+        return None
+    return resume_from
+
+
+def _has_verification_feedback(context_dir: Path, state_name: str) -> bool:
+    """True when pending feedback reports failed tests or lint.
+
+    Only that feedback goes to the test-repair mode. Review findings and
+    attempt failures (llm-error, empty-diff) need the normal coder edit path,
+    because a test-repair run has nothing to fix when tests already pass.
+    """
+    path = feedback_path(context_dir, state_name)
+    if not path.is_file():
+        return False
+    return json.loads(path.read_text(encoding="utf-8")).get("source") == "verification"
+
+
 def _invoke_fix_pass(
     *,
     project: RuntimeProject,
@@ -594,15 +635,31 @@ def _invoke_fix_pass(
         len(edit_files),
     )
 
-    backend.fix_repository(
-        model=model,
-        read_files=read_files,
-        edit_files=edit_files,
-        repo_root=repo_root,
-        test_command=verification.get("test_command", ""),
-        lint_command=verification.get("lint_command", ""),
-        map_tokens=map_tokens,
-    )
+    scope = capture_scope(repo_root)
+
+    try:
+        backend.fix_repository(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=verification.get("test_command", ""),
+            lint_command=verification.get("lint_command", ""),
+            map_tokens=map_tokens,
+        )
+    except Exception:
+        revert_out_of_scope(scope, allowed=set(edit_files))
+        raise
+
+    out_of_scope = revert_out_of_scope(scope, allowed=set(edit_files))
+    if out_of_scope:
+        raise WorkerOutputError(
+            source="out-of-scope-edit",
+            reason=(
+                "The fix may edit only plan-authorized files. "
+                f"It also changed {', '.join(out_of_scope)}; those changes were reverted."
+            ),
+        )
 
 
 def _write_task_context(
@@ -746,12 +803,10 @@ def _invoke_repository_worker(
 
     completed_tasks: set[str] = set()
 
-    feedback_file = feedback_path(
+    if _has_verification_feedback(
         project.context_dir(ticket_key=ticket_key),
         state.name,
-    )
-
-    if feedback_file.is_file():
+    ):
         _invoke_fix_pass(
             project=project,
             worker_slug=worker_slug,
@@ -765,7 +820,30 @@ def _invoke_repository_worker(
 
         return {}, {}
 
+    resume_task = _resume_task_id(
+        project.context_dir(ticket_key=ticket_key),
+        state.name,
+        [task.id for task in tasks],
+    )
+    skipping = resume_task is not None
+    if skipping:
+        logger.info(
+            "Resuming at task %s; earlier tasks keep their edits from the previous attempt",
+            resume_task,
+        )
+
     for task in tasks:
+        if skipping:
+            if task.id == resume_task:
+                skipping = False
+            else:
+                completed_tasks.add(task.id)
+                logger.info(
+                    "Skipping task %s: completed in an earlier attempt",
+                    task.id,
+                )
+                continue
+
         _check_task_dependencies(
             task=task,
             completed_tasks=completed_tasks,
@@ -811,6 +889,9 @@ def _invoke_repository_worker(
             target_path,
         )
 
+        scope = capture_scope(repo_root)
+        before_task = _snapshot_files([target_path])
+
         try:
             backend.edit_repository(
                 model=model,
@@ -820,13 +901,45 @@ def _invoke_repository_worker(
                 map_tokens=map_tokens,
             )
 
+        except BackendInvocationError as exc:
+            revert_out_of_scope(scope, allowed={target_path})
+            raise WorkerOutputError(
+                source="llm-error",
+                reason=f"Task {task.id} failed: coder backend call failed: {exc}",
+                resume_from=task.id,
+            ) from exc
+
         except Exception:
+            revert_out_of_scope(scope, allowed={target_path})
             logger.exception(
                 "Repository task %s failed for worker '%s'",
                 task.id,
                 worker_slug,
             )
             raise
+
+        out_of_scope = revert_out_of_scope(scope, allowed={target_path})
+        if out_of_scope:
+            raise WorkerOutputError(
+                source="out-of-scope-edit",
+                reason=(
+                    f"Task {task.id} may edit only {task.file_path}. "
+                    f"It also changed {', '.join(out_of_scope)}; those changes were reverted."
+                ),
+                resume_from=task.id,
+            )
+
+        # A task that names a file must change that file. Checking here stops
+        # the attempt at the first no-op task instead of after the whole plan.
+        if _snapshot_files([target_path]) == before_task:
+            raise WorkerOutputError(
+                source="empty-diff",
+                reason=(
+                    f"Task {task.id} made no changes to "
+                    f"{task.file_path} in this attempt."
+                ),
+                resume_from=task.id,
+            )
 
         completed_tasks.add(task.id)
 
@@ -1085,8 +1198,9 @@ def _invoke_coder_attempt(
     Two outcomes count as a failed attempt, regardless of backend:
     - the backend raised BackendInvocationError (timeout, process exit,
       provider error), reported as ``llm-error``;
-    - the attempt left every plan-authorized file unchanged, reported as
-      ``empty-diff``. This is a deterministic check on file contents.
+    - no plan task changed its file (task path), or the fix pass changed
+      nothing, reported as ``empty-diff``. This is a deterministic check on
+      file contents.
     """
     tasks = _load_repository_tasks(
         project=project,

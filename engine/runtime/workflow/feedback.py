@@ -9,17 +9,23 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class WorkerFeedback:
-    """Actionable feedback for the next attempt of a workflow state."""
+    """Actionable feedback for the next attempt of a workflow state.
+
+    ``resume_from`` names the repository task that failed. When set, a retry
+    may resume at that task and keep the edits of the tasks before it.
+    """
 
     source: str
     reason: str
     details: tuple[str, ...] = field(default_factory=tuple)
+    resume_from: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "source": self.source,
             "reason": self.reason,
             "details": list(self.details),
+            "resume_from": self.resume_from,
         }
 
 
@@ -32,11 +38,13 @@ class WorkerOutputError(RuntimeError):
         source: str,
         reason: str,
         details: list[str] | None = None,
+        resume_from: str | None = None,
     ) -> None:
         self.feedback = WorkerFeedback(
             source=source,
             reason=reason,
             details=tuple(details or []),
+            resume_from=resume_from,
         )
 
         super().__init__(reason)

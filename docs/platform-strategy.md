@@ -451,11 +451,11 @@ produce_artifact()     # write a document/YAML artifact to a file
 produce_structured()   # write machine-readable output (supervisor JSON)
 edit_repository()      # edit exactly the files the caller marks editable
 repair_repository()    # fix test/lint failures using Aider's lint/test loop
-fix_repository()       # one feedback-driven fix attempt (default: edit_repository)
+fix_repository()       # test-repair attempt for verification feedback (default: edit_repository)
 ```
 
-`fix_repository()` is the hook for the implement ⇄ run-tests loop. The runtime calls it when `implement`
-is re-entered with failure feedback (failing tests, or review findings), instead of the per-task
+`fix_repository()` is the hook for verification feedback in the implement ⇄ run-tests loop. The runtime calls it when
+`implement` is re-entered with failing tests or lint, instead of the per-task
 `edit_repository()` path. The runtime re-verifies after every call and owns the attempt budget, so a
 backend performs one attempt per call. A backend can use its own in-session test loop inside that call.
 `remediate_review()` no longer exists: review findings go back to `implement`, and the coder applies them.
@@ -511,8 +511,9 @@ runtime/workflow/
 ├── review.py               # parses the reviewer's `review-verdict` block
 ├── state_manager.py        # atomic read/write of state/<TICKET>.yaml
 ├── supervisor_invoker.py   # supervisor evaluation → success|failure|escalate
+├── task_scope.py           # keeps a coder attempt to its allowed files (reverts the rest)
 ├── transitions.py          # pure transition/retry/escalation logic (cycle budgets)
-└── worker_invoker.py       # artifact workers, task-wise editing, and feedback fix passes
+└── worker_invoker.py       # artifact workers, task-wise editing, and test-repair passes
 ```
 
 The workflow engine is responsible for:
@@ -758,7 +759,7 @@ loop until the current state is terminal:
     ├─ invoke worker (model from config/runtime.yaml)              [kind: worker]
     │     ├─ state.produces non-empty → artifact worker → normalize → validate
     │     ├─ state.produces empty     → repository worker → one plan task at a time
-    │     │                              (or one feedback fix pass if <state>-feedback.json exists)
+    │     │                              (or one test-repair pass when the pending feedback reports failed verification)
     ├─ run deterministic verification                              [kind: verification]
     │     └─ test + lint commands from config/runtime.yaml → evidence
     ├─ evaluate the result  (see "Who judges what")
@@ -774,12 +775,12 @@ loop until the current state is terminal:
 |-------|--------|-----------|
 | `jira-ingest` | jira-reader | supervisor (criteria `jira-ingest`) |
 | `plan` | planner | structural validator, then supervisor (criteria `planning`) |
-| `implement` | coder | the coder's own completion, with two failure checks. A backend error (Aider timeout or non-zero exit) and an attempt that leaves every plan-authorized file unchanged both count as failures against `implement`'s `max_attempts` (2). No supervisor. Otherwise the next state, `run-tests`, judges the result |
+| `implement` | coder | the coder's own completion, with three failure checks. A backend error (Aider timeout or non-zero exit) counts as a failure against `implement`'s `max_attempts` (2). So does a task that changes a file outside its allowed set (the change is reverted), and a task whose file is unchanged after its edit. Each check runs after the task, so the attempt stops early. No supervisor. Otherwise the next state, `run-tests`, judges the result |
 | `run-tests` | none (`kind: verification`) | **deterministic** test + lint evidence. Pass → `review`. Fail → `implement` with the test output as feedback |
 | `review` | reviewer | the reviewer's trailing `review-verdict` block: `approve` → success, `escalate` → escalate, `changes_requested` → failure to `implement` with the reviewer's reason as feedback. A missing or malformed block is `invalid_output` and re-runs `review` |
 | `submit` | pr-author | action execution (`git.commit`, `git.push`, `pr.create`/`pr.update`) driven by a trailing `pr-actions` block |
 
-## Implement state: task-wise editing and feedback fixes
+## Implement state: task-wise editing and retry feedback
 
 The coder never receives the whole plan as one prompt. On a first pass, `_invoke_repository_worker()`
 loads `plan.yaml`, checks `dependencies`, and for each task calls `edit_repository()` with:
@@ -791,10 +792,30 @@ editable:   exactly one repository file (task.file_path)
 
 This keeps context small and edit-format compliance high for local models.
 
-When `implement` is re-entered with feedback (from `run-tests` or `review`), the runtime makes one
-`fix_repository()` call over all plan-authorized files. The feedback file, `implement-feedback.json`,
-is part of its read-only context. Then `run-tests` verifies the result again. The feedback file is
-cleared when `implement` succeeds.
+After each task, the runtime does two checks. Both run before the attempt can move on.
+
+1. **Scope.** The working tree is captured before the task. Afterward, any change outside the task's one editable file is
+   reverted, and the attempt fails with `out-of-scope-edit`. Fix passes check against the plan's files the same way.
+2. **Progress.** A task that names a file must change it. If the file is unchanged, the attempt fails with `empty-diff`.
+
+Together these verify that each step changed its own file and nothing else. They do not verify that the step did what
+the plan asked. A task can change its file and still leave part of its instructions undone. Those gaps are caught
+downstream: `run-tests` catches them only if the tests exercise the missing behavior, and `review` judges the combined
+change across all planned files using `implementation-diff.patch`. The commit manifest (`git.py commit` aborts on files
+outside `plan.yaml`) is the last check on scope.
+
+When `implement` is re-entered with failure feedback, the runtime chooses a mode from the feedback's `source`:
+
+- `verification` (failing tests or lint from `run-tests`): one `fix_repository()` call over all plan-authorized files,
+  using Aider's test-repair prompt and `--auto-test`.
+- `review` (`changes_requested`): the normal per-task edit path over all tasks. The coder prompt tells the coder to
+  address the findings in the feedback file and in `review.md`.
+- `llm-error`, `empty-diff`, or `out-of-scope-edit` (task-level failures): the retry resumes at the failed task. Tasks
+  before it keep the edits they made in the previous attempt and are not run again. The failed task and the tasks after
+  it run as normal. Re-running an earlier task would make it see its own finished work and report no change.
+
+The feedback file, `implement-feedback.json`, is part of the read-only context in both modes. `run-tests` verifies the
+result again. The feedback file is cleared when `implement` succeeds.
 
 ## Implement ⇄ run-tests ⇄ review loop
 
@@ -808,7 +829,7 @@ The loop is declared in the workflow DSL, not in code. Each failing edge goes ba
   (`budgets: {implement-cycle: 5}`). The fifth such failure escalates to `human-review`. The budget is cumulative
   for the run and is not reset on forward progress.
 - `review`'s `max_attempts: 3` bounds malformed `review.md` (`invalid_output`, a self-loop). It is separate from the shared budget.
-- `implement` (`max_attempts: 2`) bounds its own failures: backend errors (`llm-error`) and attempts that change no plan-authorized file (`empty-diff`). See "Counting retry attempts".
+- `implement` (`max_attempts: 2`) bounds its own failures: backend errors (`llm-error`), out-of-scope edits (`out-of-scope-edit`), and tasks whose file is unchanged after the edit (`empty-diff`). See "Counting retry attempts".
 - The backend's `fix_repository()` may run its own in-session test loop. Aider uses `--auto-test`.
   The runtime still re-verifies after each fix, so a backend cannot mark a run as passing on its own.
 
@@ -843,7 +864,7 @@ The canonical `feature` workflow counts as follows:
 |---------|---------|-------|
 | `jira-ingest` invalid output (self-loop) | `jira-ingest` | 2 |
 | `plan` invalid output (self-loop) | `plan` | 2 |
-| `implement` backend error (`llm-error`) or no change to planned files (`empty-diff`) | `implement` | 2 |
+| `implement` backend error (`llm-error`), out-of-scope edit (`out-of-scope-edit`), or unchanged task file (`empty-diff`) | `implement` | 2 |
 | `run-tests` verification failed (`→ implement`) | `implement-cycle` | 5, shared |
 | `review` `changes_requested` (`→ implement`) | `implement-cycle` | 5, shared |
 | `review` malformed `review.md` (`invalid_output`, self-loop) | `review` | 3 |
@@ -891,8 +912,8 @@ include `workflow`, `work_item`, `status` (`active|completed|escalated|failed`),
 `runtime` platform.** History: an `AiderAssembler` (`platforms/aider.py`) originally let Aider
 drive every worker. Commit `3fd3a07` ("replaced aider by runtime platform") introduced the composite
 backend so that only repository edits go through Aider, while everything else uses LiteLLM.
-`platforms/aider.py` and `platform-extras/aider/` remain in the tree for reference but are not in
-the `PLATFORMS` registry (so `--platform aider` is rejected by the CLI).
+The legacy `platforms/aider.py` and `platform-extras/aider/` have been removed; the per-platform
+models for the runtime platform live in `platform-extras/runtime/models.yaml`.
 
 Aider has no native multi-agent orchestration, so Jira2PR supplies it. `RuntimeAssembler` emits
 **data only** — no workflow Python is generated into the target repo; the installed `jira2pr`
@@ -1092,7 +1113,7 @@ deleting files by hand.
   placeholders raise `CapabilityError`, so no arbitrary arguments reach a script.
 - **Workers cannot mutate workflow state or choose transitions**; only the runtime/orchestrator does.
 - **Bounded loops**: per-state `max_attempts`, shared `budgets` (for example `implement-cycle` across run-tests and review),
-  global `max_total_iterations`, one fix attempt per `implement` re-entry, and bounded evidence output
+  global `max_total_iterations`, one test-repair attempt per verification failure, and bounded evidence output
   (`MAX_FAILURE_OUTPUT_CHARS`, 600s command timeout).
 - **Secrets** live in `.env` (never committed); `.env.example` is the template.
 
@@ -1182,12 +1203,11 @@ Verified against the repository state at the time of writing; reconcile before r
 | `runtime` platform (LiteLLM + Aider), `feature` workflow | Implemented end to end |
 | `copilot` platform | `CopilotAssembler` reads models per agent via `registry.platform_models("copilot")` (same as `runtime.py`); `jira2pr init --platform copilot` works. The generated shell has not been exercised in a live Copilot session |
 | `bugfix` and `scope-creep` workflows | Files are empty (the loader skips them with a warning), yet the Copilot assembler renders a prompt per workflow and the README advertises `/bugfix` |
-| `--platform aider` | Rejected; Aider is the runtime platform's backend. `README.md` and `platform-extras/runtime/README.md.tpl` still say `--platform aider` and `config/aider.yaml` and need updating |
-| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`). 229 pass. `test_model_baked_into_frontmatter` checks that every agent's frontmatter model matches `platform-extras/copilot/models.yaml`. Models are per-platform, so no test pins a model name. `MockBackend` implements all `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests || Implement ⇄ run-tests ⇄ review loop | Implemented in the runtime engine (`kind: verification`, shared `budgets:` in the DSL, feedback addressed to the target state, `fix_repository()` hook). Aider uses its `--auto-test` loop per fix attempt. Copilot: the protocol instructs the agent to run the test and lint commands for verification states, but this path has not been exercised in a live session || OpenCode | Not supported; quarantined in `_opencode_quarantined.py` |
-| `docs/` vs project instructions | The root project instructions mention `scripts/` and `examples-autogenerated/`; the current layout uses `engine/` and no checked-in generated examples |
+| `--platform aider` | Rejected; Aider is the runtime platform's backend. `README.md` and `platform-extras/runtime/README.md.tpl` now use `--platform runtime`. `config/aider.yaml` references in the runtime template are still stale |
+| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`). 235 pass. `test_model_baked_into_frontmatter` checks that every agent's frontmatter model matches `platform-extras/copilot/models.yaml`. Models are per-platform, so no test pins a model name. `MockBackend` implements all `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests || Implement ⇄ run-tests ⇄ review loop | Implemented in the runtime engine (`kind: verification`, shared `budgets:` in the DSL, feedback addressed to the target state). `fix_repository()` (Aider's `--auto-test` loop) runs only for verification feedback. Review findings and attempt failures use the coder edit path. Copilot: the protocol instructs the agent to run the test and lint commands for verification states, but this path has not been exercised in a live session || OpenCode | Not supported; quarantined in `_opencode_quarantined.py` || `docs/` vs project instructions | The root project instructions mention `scripts/` and `examples-autogenerated/`; the current layout uses `engine/` and no checked-in generated examples |
 | `produce_structured()` | Used by the supervisor invoker only; `plan.yaml` is produced through `produce_artifact()` and validated structurally |
 | Context strategy | Implemented in `runtime/workflow/context_strategy.py`; repo map via `git ls-files` + tree-sitter for non-editing workers, Aider's repo map for editing workers |
 
 Suggested next steps, in order: (1) refresh the stale README/templates for the runtime platform;
-(2) author `bugfix` and `scope-creep` workflows or remove their prompt generation; (3) update or
-delete the legacy Aider assembler (`platforms/aider.py`, `platform-extras/aider/`).
+(2) author `bugfix` and `scope-creep` workflows or remove their prompt generation; (3) done: the
+legacy Aider assembler (`platforms/aider.py`, `platform-extras/aider/`) has been deleted.

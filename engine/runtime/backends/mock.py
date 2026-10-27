@@ -100,6 +100,7 @@ class MockBackend(LLMBackend):
         self._decision_responder = decision_responder
         self.calls: list[dict] = []
         self.fix_count = 0
+        self.edit_count = 0
 
     def produce_artifact(
         self,
@@ -184,7 +185,8 @@ class MockBackend(LLMBackend):
 
         for path in edit_files:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("# edited by MockBackend\n", encoding="utf-8")
+            self.edit_count += 1
+            path.write_text(f"# edited by MockBackend (edit {self.edit_count})\n", encoding="utf-8")
 
     def repair_repository(
         self,
