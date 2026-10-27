@@ -64,6 +64,18 @@ def test_unknown_success_criteria_key_rejected():
     assert any("not-a-real-key" in e for e in exc_info.value.errors)
 
 
+def test_undefined_budget_rejected():
+    reg = _load()
+    feature = reg.workflows["feature"]
+    states = dict(feature.states)
+    states["run-tests"] = replace(states["run-tests"], budget="no-such-budget")
+    reg.workflows["feature"] = replace(feature, states=states)
+
+    with pytest.raises(CanonicalValidationError) as exc_info:
+        validate(reg, "copilot")
+    assert any("no-such-budget" in e for e in exc_info.value.errors)
+
+
 def test_terminal_state_without_outcome_rejected():
     reg = _load()
     feature = reg.workflows["feature"]

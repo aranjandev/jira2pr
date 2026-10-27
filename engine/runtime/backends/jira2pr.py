@@ -143,7 +143,7 @@ class Jira2PRBackend(LLMBackend):
             map_tokens=map_tokens,
         )
 
-    def remediate_review(
+    def fix_repository(
         self,
         *,
         model: str,
@@ -154,16 +154,16 @@ class Jira2PRBackend(LLMBackend):
         lint_command: str,
         map_tokens: int | None = None,
     ) -> None:
-        """Route review remediation to Aider."""
+        """Route feedback-driven repository fixes to Aider."""
 
         logger.info(
-            "Routing review remediation to Aider: "
+            "Routing repository fix to Aider: "
             "model=%s edit_files=%d",
             model,
             len(edit_files),
         )
 
-        self._aider.remediate_review(
+        self._aider.fix_repository(
             model=model,
             read_files=read_files,
             edit_files=edit_files,

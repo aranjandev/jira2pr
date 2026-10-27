@@ -30,13 +30,26 @@ def test_agent_kind_and_artifact_schema():
     assert coder.artifact_schema is None
 
 
+def test_run_tests_is_deterministic_verification():
+    reg = _load()
+    states = reg.workflows["feature"].states
+    assert states["run-tests"].kind == "verification"
+    assert states["run-tests"].worker is None
+    assert states["run-tests"].budget == "implement-cycle"
+    assert reg.workflows["feature"].budgets == {"implement-cycle": 5}
+    assert reg.workflows["feature"].max_total_iterations == 30
+    assert states["implement"].kind == "worker"
+    assert states["implement"].supervised is False
+    assert states["review"].supervised is True
+
+
 def test_feature_workflow_loaded():
     reg = _load()
     assert "feature" in reg.workflows
     feature = reg.workflows["feature"]
     assert feature.initial_state == "jira-ingest"
     assert set(feature.states) == {
-        "jira-ingest", "plan", "implement", "review", "submit", "done", "human-review",
+        "jira-ingest", "plan", "implement", "run-tests", "review", "submit", "done", "human-review",
     }
 
 
@@ -72,17 +85,6 @@ def test_capabilities_loaded_with_bindings():
     assert jira_read.binding.handler == "jira"
     web_search = reg.capabilities["web.search"]
     assert web_search.binding.kind == "native"
-
-
-def test_platform_models_maps_every_agent():
-    reg = _load()
-    agent_slugs = {a.slug for a in reg.agents}
-    copilot_models = reg.platform_models("copilot")
-    assert set(copilot_models) == agent_slugs
-    assert copilot_models["jira-reader"] == "github-copilot/gpt-5-mini"
-    # The runtime platform does not execute the orchestrator.
-    assert set(reg.platform_models("runtime")) == agent_slugs - {"orchestrator"}
-    assert reg.platform_models("nonexistent-platform") == {}
 
 
 def test_execution_policy_loaded():

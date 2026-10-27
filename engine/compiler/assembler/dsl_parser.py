@@ -60,6 +60,12 @@ def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
     for state_name, state_raw in (raw.get("states") or {}).items():
         state_raw = state_raw or {}
         transitions_raw = state_raw.get("transitions") or {}
+        kind = state_raw.get("kind", "worker")
+        if kind not in ("worker", "verification"):
+            raise ValueError(
+                f"{path}: state '{state_name}' has unknown kind {kind!r} "
+                "(expected 'worker' or 'verification')"
+            )
         states[state_name] = StateSpec(
             name=state_name,
             worker=state_raw.get("worker"),
@@ -68,10 +74,14 @@ def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
             updates=as_str_tuple(state_raw.get("updates")),
             success_criteria=(state_raw.get("validation") or {}).get("success_criteria"),
             max_attempts=(state_raw.get("retry") or {}).get("max_attempts"),
+            budget=(state_raw.get("retry") or {}).get("budget"),
+            kind=kind,
+            supervised=bool((state_raw.get("validation") or {}).get("supervisor", True)),
             transitions=TransitionSpec(
                 success=transitions_raw.get("success"),
                 failure=transitions_raw.get("failure"),
                 escalate=transitions_raw.get("escalate"),
+                invalid_output=transitions_raw.get("invalid_output"),
             ),
             terminal=bool(state_raw.get("terminal", False)),
             outcome=state_raw.get("outcome"),
@@ -90,6 +100,7 @@ def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
         max_total_iterations=(
             int(workflow_max_total_iterations) if workflow_max_total_iterations is not None else None
         ),
+        budgets={str(k): int(v) for k, v in (raw.get("budgets") or {}).items()},
     )
 
 

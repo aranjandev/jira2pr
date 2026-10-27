@@ -6,6 +6,15 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
+class BackendInvocationError(RuntimeError):
+    """A backend call failed at run time (timeout, process exit, provider error).
+
+    The workflow runtime treats this as a failed worker attempt, so it counts
+    against the state's retry budget. Precondition or configuration errors
+    should use a different exception type so they still stop the run.
+    """
+
+
 class LLMBackend(ABC):
     """Execution backend used by the Jira2PR workflow runtime."""
 
@@ -59,8 +68,7 @@ class LLMBackend(ABC):
     ) -> None:
         """Repair repository changes using verification feedback."""
 
-    @abstractmethod
-    def remediate_review(
+    def fix_repository(
         self,
         *,
         model: str,
@@ -71,4 +79,19 @@ class LLMBackend(ABC):
         lint_command: str,
         map_tokens: int | None = None,
     ) -> None:
-        """Repair implementation issues identified by code review."""
+        """Apply one fix attempt guided by feedback in ``read_files``.
+
+        The engine calls this on a state re-entry that carries failure
+        feedback (e.g. failing tests), and then re-runs verification itself.
+        The engine owns the attempt budget, so a backend performs one attempt
+        per call. Backends may override this to run their own in-session
+        test loop. By default it is a plain edit attempt.
+        """
+
+        self.edit_repository(
+            model=model,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            map_tokens=map_tokens,
+        )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from runtime.backends.base import LLMBackend
+from runtime.backends.base import BackendInvocationError, LLMBackend
 from runtime.logging_config import get_logger
 
 logger = get_logger("backends.aider")
@@ -14,7 +14,11 @@ DEFAULT_TIMEOUT_SECONDS = 600
 
 
 class AiderInvocationError(RuntimeError):
-    """Raised when an Aider invocation cannot complete successfully."""
+    """Raised when Aider cannot be invoked because of a precondition or configuration problem."""
+
+
+class AiderRunError(BackendInvocationError):
+    """Raised when an Aider run times out or exits non-zero."""
 
 
 class AiderBackend(LLMBackend):
@@ -516,7 +520,7 @@ class AiderBackend(LLMBackend):
         )
 
 
-    def remediate_review(
+    def fix_repository(
         self,
         *,
         model: str,
@@ -527,95 +531,22 @@ class AiderBackend(LLMBackend):
         lint_command: str,
         map_tokens: int | None = None,
     ) -> None:
-        """Repair review findings using Aider."""
+        """Fix one attempt with Aider's in-session lint/test loop.
 
-        repo_root = repo_root.resolve()
+        Aider runs the test and lint commands itself while editing. The engine
+        re-verifies after this returns and owns the outer attempt budget.
+        """
 
-        if not edit_files:
-            raise AiderInvocationError(
-                "Review remediation requires at least one editable file"
-            )
-
-        for path in read_files:
-            if not path.is_file():
-                raise AiderInvocationError(
-                    f"Review remediation context file does not exist: {path}"
-                )
-
-        message_file = (
-            repo_root
-            / ".jira2pr"
-            / "runtime"
-            / "backends"
-            / "prompts"
-            / "aider-review-remediation.md"
-        )
-
-        if not message_file.is_file():
-            raise AiderInvocationError(
-                f"Review remediation prompt does not exist: {message_file}"
-            )
-
-        argv = [
-            "aider",
-            "--model",
-            model,
-            "--edit-format",
-            "diff",
-        ]
-
-        if map_tokens is not None:
-            argv.extend(
-                [
-                    "--map-tokens",
-                    str(map_tokens),
-                ]
-            )
-
-        for path in read_files:
-            argv.extend(
-                [
-                    "--read",
-                    str(path.resolve()),
-                ]
-            )
-
-        argv.extend(self._base_args)
-
-        argv.extend(
-            [
-                "--message-file",
-                str(message_file),
-            ]
-        )
-
-        argv.extend(
-            str(path.resolve())
-            for path in edit_files
-        )
-
-        logger.info(
-            "Running Aider review remediation: "
-            "model=%s edit_files=%d",
-            model,
-            len(edit_files),
-        )
-
-        logger.debug(
-            "Aider review remediation argv: %s",
-            argv,
-        )
-
-        self._run(
-            argv,
+        self.repair_repository(
             model=model,
-            cwd=repo_root,
+            read_files=read_files,
+            edit_files=edit_files,
+            repo_root=repo_root,
+            test_command=test_command,
+            lint_command=lint_command,
+            map_tokens=map_tokens,
         )
 
-        logger.info(
-            "Aider review remediation completed"
-        )
-        
     # ------------------------------------------------------------------
     # Runtime prompt lookup
     # ------------------------------------------------------------------
@@ -716,7 +647,7 @@ class AiderBackend(LLMBackend):
                 model,
             )
 
-            raise AiderInvocationError(
+            raise AiderRunError(
                 f"Aider timed out after {self._timeout}s "
                 f"(model={model})"
             ) from exc
@@ -729,7 +660,7 @@ class AiderBackend(LLMBackend):
         if result.returncode != 0:
             self._log_diagnostics(result)
 
-            raise AiderInvocationError(
+            raise AiderRunError(
                 f"Aider exited {result.returncode}: "
                 f"{result.stderr.strip()}"
             )

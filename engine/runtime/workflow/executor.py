@@ -180,237 +180,7 @@ class WorkflowExecutor:
 
         return evidence
 
-    def _repair_implementation(
-        self,
-        *,
-        ticket_key: str,
-        evidence: ImplementationEvidence,
-    ) -> None:
-        """Run one implementation repair using verification failures."""
-
-        verification = (
-            self._project.backend_config.get(
-                "verification",
-                {},
-            )
-        )
-
-        test_command = verification.get(
-            "test_command",
-            "",
-        )
-
-        lint_command = verification.get(
-            "lint_command",
-            "",
-        )
-
-        repo_root = (
-            self._project.core_dir.parent.resolve()
-        )
-
-        plan_path = (
-            self._project.artifacts_dir(ticket_key)
-            / "plan.yaml"
-        )
-
-        edit_files = planned_changed_files(
-            plan_path=plan_path,
-            repo_root=repo_root,
-        )
-
-        if not edit_files:
-            raise RuntimeError(
-                "Implementation repair has no "
-                "plan-authorized editable files"
-            )
-
-        coder_path = self._project.agent_path(
-            "coder"
-        )
-
-        read_files = [
-            coder_path,
-            plan_path,
-            evidence.test_results_path,
-            evidence.lint_results_path,
-        ]
-
-        project_instructions = (
-            repo_root
-            / "AGENTS.md"
-        )
-
-        if project_instructions.is_file():
-            read_files.append(
-                project_instructions
-            )
-
-        map_tokens = (
-            self._project.map_tokens_for(
-                "repository"
-            )
-        )
-
-        model = (
-            self._project.model_for_agent(
-                "coder"
-            )
-        )
-
-        logger.info(
-            "Invoking implementation repair: "
-            "tests=%s lint=%s editable_files=%d",
-            "PASS"
-            if evidence.tests_passed
-            else "FAIL",
-            "PASS"
-            if evidence.lint_passed
-            else "FAIL",
-            len(edit_files),
-        )
-
-        self._backend.repair_repository(
-            model=model,
-            read_files=read_files,
-            edit_files=edit_files,
-            repo_root=repo_root,
-            test_command=test_command,
-            lint_command=lint_command,
-            map_tokens=map_tokens,
-        )
-
-    def _remediate_review(
-        self,
-        *,
-        ticket_key: str,
-    ) -> None:
-        """Repair blocking implementation findings identified by review."""
-
-        repo_root = (
-            self._project.core_dir.parent.resolve()
-        )
-
-        artifacts_dir = (
-            self._project.artifacts_dir(
-                ticket_key
-            )
-        )
-
-        plan_path = (
-            artifacts_dir
-            / "plan.yaml"
-        )
-
-        requirements_path = (
-            artifacts_dir
-            / "requirements.md"
-        )
-
-        review_path = (
-            artifacts_dir
-            / "review.md"
-        )
-
-        required_read_files = [
-            plan_path,
-            requirements_path,
-            review_path,
-        ]
-
-        for path in required_read_files:
-            if not path.is_file():
-                raise RuntimeError(
-                    "Review remediation context "
-                    f"file does not exist: {path}"
-                )
-
-        edit_files = planned_changed_files(
-            plan_path=plan_path,
-            repo_root=repo_root,
-        )
-
-        if not edit_files:
-            raise RuntimeError(
-                "Review remediation has no "
-                "plan-authorized editable files"
-            )
-
-        read_files = list(
-            required_read_files
-        )
-
-        project_instructions = (
-            repo_root
-            / "AGENTS.md"
-        )
-
-        if project_instructions.is_file():
-            read_files.append(
-                project_instructions
-            )
-
-        verification = (
-            self._project.backend_config.get(
-                "verification",
-                {},
-            )
-        )
-
-        test_command = verification.get(
-            "test_command",
-            "",
-        )
-
-        lint_command = verification.get(
-            "lint_command",
-            "",
-        )
-
-        model = (
-            self._project.model_for_agent(
-                "coder"
-            )
-        )
-
-        map_tokens = (
-            self._project.map_tokens_for(
-                "repository"
-            )
-        )
-
-        logger.info(
-            "Invoking review remediation with %d editable file(s)",
-            len(edit_files),
-        )
-
-        logger.debug(
-            "Review remediation read-only files:\n%s",
-            "\n".join(
-                f"  - {path}"
-                for path in read_files
-            ),
-        )
-
-        logger.debug(
-            "Review remediation editable files:\n%s",
-            "\n".join(
-                f"  - {path}"
-                for path in edit_files
-            ),
-        )
-
-        self._backend.remediate_review(
-            model=model,
-            read_files=read_files,
-            edit_files=edit_files,
-            repo_root=repo_root,
-            test_command=test_command,
-            lint_command=lint_command,
-            map_tokens=map_tokens,
-        )
-
-    def _evaluate_implementation(
+    def _evaluate_verification(
         self,
         *,
         ticket_key: str,
@@ -420,7 +190,7 @@ class WorkflowExecutor:
         WorkerFeedback | None,
         ImplementationEvidence,
     ]:
-        """Verify implementation and attempt one repair when necessary."""
+        """Run deterministic test and lint checks. Repair is the coder's job."""
 
         evidence = (
             self._collect_implementation_evidence(
@@ -428,58 +198,27 @@ class WorkflowExecutor:
             )
         )
 
-        if not evidence.verification_passed:
-            logger.warning(
-                "Implementation verification failed: "
-                "tests=%s lint=%s. Attempting repair.",
-                "PASS"
-                if evidence.tests_passed
-                else "FAIL",
-                "PASS"
-                if evidence.lint_passed
-                else "FAIL",
-            )
-
-            self._repair_implementation(
-                ticket_key=ticket_key,
-                evidence=evidence,
-            )
-
-            logger.info(
-                "Implementation repair completed. "
-                "Recollecting evidence."
-            )
-
-            evidence = (
-                self._collect_implementation_evidence(
-                    ticket_key=ticket_key,
-                )
-            )
-
         if evidence.verification_passed:
-            result = {
-                "outcome": "success",
-                "reason": (
-                    "Deterministic implementation verification "
-                    "passed: tests and lint succeeded."
-                ),
-                "violations": [],
-            }
-
             logger.info(
-                "Implementation verification passed; "
-                "skipping implementation supervisor"
+                "Deterministic verification passed: tests and lint succeeded"
             )
 
             return (
                 "success",
-                result,
+                {
+                    "outcome": "success",
+                    "reason": (
+                        "Deterministic verification passed: "
+                        "tests and lint succeeded."
+                    ),
+                    "violations": [],
+                },
                 None,
                 evidence,
             )
 
         reason = (
-            "Implementation verification failed after repair: "
+            "Deterministic verification failed: "
             f"tests={'PASS' if evidence.tests_passed else 'FAIL'}, "
             f"lint={'PASS' if evidence.lint_passed else 'FAIL'}."
         )
@@ -487,34 +226,30 @@ class WorkflowExecutor:
         feedback = WorkerFeedback(
             source="verification",
             reason=reason,
-            details=(),
+            details=(
+                f"Test results: {evidence.test_results_path}",
+                f"Lint results: {evidence.lint_results_path}",
+            ),
         )
-
-        result = {
-            "outcome": "failure",
-            "reason": reason,
-            "violations": [
-                name
-                for name, passed in (
-                    (
-                        "tests_pass",
-                        evidence.tests_passed,
-                    ),
-                    (
-                        "lint_pass",
-                        evidence.lint_passed,
-                    ),
-                )
-                if not passed
-            ],
-        }
 
         return (
             "failure",
-            result,
+            {
+                "outcome": "failure",
+                "reason": reason,
+                "violations": [
+                    name
+                    for name, passed in (
+                        ("tests_pass", evidence.tests_passed),
+                        ("lint_pass", evidence.lint_passed),
+                    )
+                    if not passed
+                ],
+            },
             feedback,
             evidence,
         )
+
 
     def _evaluate_review(
         self,
@@ -547,9 +282,9 @@ class WorkflowExecutor:
             )
 
             return (
-                "failure",
+                "invalid_output",
                 {
-                    "outcome": "failure",
+                    "outcome": "invalid_output",
                     "reason": reason,
                     "violations": [],
                 },
@@ -598,71 +333,23 @@ class WorkflowExecutor:
             )
 
         logger.info(
-            "Reviewer requested implementation changes"
-        )
-
-        self._remediate_review(
-            ticket_key=ticket_key,
-        )
-
-        logger.info(
-            "Review remediation completed. "
-            "Collecting deterministic verification evidence."
-        )
-
-        evidence = (
-            self._collect_implementation_evidence(
-                ticket_key=ticket_key,
-            )
-        )
-
-        if evidence.verification_passed:
-            reason = (
-                "Review remediation completed and deterministic "
-                "verification passed. The corrected implementation "
-                "requires another review."
-            )
-
-            return (
-                "failure",
-                {
-                    "outcome": "failure",
-                    "reason": reason,
-                    "violations": [],
-                },
-                None,
-                evidence,
-            )
-
-        reason = (
-            "Review remediation completed, but the corrected "
-            "implementation does not pass deterministic verification: "
-            f"tests={'PASS' if evidence.tests_passed else 'FAIL'}, "
-            f"lint={'PASS' if evidence.lint_passed else 'FAIL'}."
+            "Reviewer requested implementation changes; "
+            "routing review findings to implement"
         )
 
         return (
-            "escalate",
+            "failure",
             {
-                "outcome": "escalate",
-                "reason": reason,
-                "violations": [
-                    name
-                    for name, passed in (
-                        (
-                            "tests_pass",
-                            evidence.tests_passed,
-                        ),
-                        (
-                            "lint_pass",
-                            evidence.lint_passed,
-                        ),
-                    )
-                    if not passed
-                ],
+                "outcome": "failure",
+                "reason": decision.reason,
+                "violations": [],
             },
+            WorkerFeedback(
+                source="review",
+                reason=decision.reason,
+                details=("Blocking findings are in the review artifact: review.md",),
+            ),
             None,
-            evidence,
         )
 
     def run(
@@ -790,10 +477,13 @@ class WorkflowExecutor:
 
             state.total_iterations += 1
 
+            # Visit number of this state in the run (budgets may be shared, so
+            # retry_counts is not a per-state attempt counter).
             attempt = (
-                state.retry_counts.get(
-                    current.name,
-                    0,
+                sum(
+                    1
+                    for entry in state.history
+                    if entry.get("state") == current.name
                 )
                 + 1
             )
@@ -813,12 +503,6 @@ class WorkflowExecutor:
                 )
             )
 
-            if attempt == 1:
-                clear_feedback(
-                    context_dir=context_dir,
-                    state_name=current.name,
-                )
-
             try:
                 produced: dict[str, str] = {}
                 action_metadata: dict[str, str] = {}
@@ -830,28 +514,29 @@ class WorkflowExecutor:
                 # ------------------------------------------------------
 
                 try:
-                    logger.debug(
-                        "Invoking worker for state: %s",
-                        current.name,
-                    )
+                    if current.kind == "worker":
+                        logger.debug(
+                            "Invoking worker for state: %s",
+                            current.name,
+                        )
 
-                    (
-                        produced,
-                        action_metadata,
-                    ) = invoke_worker(
-                        project=self._project,
-                        workflow=workflow,
-                        state=current,
-                        ticket_key=ticket_key,
-                        backend=self._backend,
-                    )
+                        (
+                            produced,
+                            action_metadata,
+                        ) = invoke_worker(
+                            project=self._project,
+                            workflow=workflow,
+                            state=current,
+                            ticket_key=ticket_key,
+                            backend=self._backend,
+                        )
 
-                    logger.debug(
-                        "Worker produced artifacts: %s",
-                        list(
-                            produced.keys()
-                        ),
-                    )
+                        logger.debug(
+                            "Worker produced artifacts: %s",
+                            list(
+                                produced.keys()
+                            ),
+                        )
 
                 except WorkerOutputError as exc:
                     logger.warning(
@@ -882,17 +567,17 @@ class WorkflowExecutor:
                     # State evaluation
                     # --------------------------------------------------
 
-                    if current.name == "implement":
+                    if current.kind == "verification":
                         (
                             outcome,
                             result,
                             feedback,
                             evidence,
-                        ) = self._evaluate_implementation(
+                        ) = self._evaluate_verification(
                             ticket_key=ticket_key,
                         )
 
-                    elif current.name == "review":
+                    elif current.worker == "reviewer":
                         (
                             outcome,
                             result,
@@ -901,6 +586,14 @@ class WorkflowExecutor:
                         ) = self._evaluate_review(
                             ticket_key=ticket_key,
                         )
+
+                    elif not current.supervised:
+                        outcome = "success"
+                        result = {
+                            "outcome": "success",
+                            "reason": "Worker completed; supervisor evaluation is disabled for this state.",
+                            "violations": [],
+                        }
 
                     else:
                         logger.debug(
@@ -945,30 +638,13 @@ class WorkflowExecutor:
                             )
 
                 # ------------------------------------------------------
-                # Persist or clear retry feedback
+                # Clear the state's own feedback once it succeeds
                 # ------------------------------------------------------
 
                 if outcome == "success":
                     clear_feedback(
                         context_dir=context_dir,
                         state_name=current.name,
-                    )
-
-                elif (
-                    outcome == "failure"
-                    and feedback is not None
-                ):
-                    feedback_file = write_feedback(
-                        context_dir=context_dir,
-                        state_name=current.name,
-                        attempt=attempt,
-                        feedback=feedback,
-                    )
-
-                    logger.info(
-                        "Saved retry feedback for state '%s': %s",
-                        current.name,
-                        feedback_file,
                     )
 
                 # ------------------------------------------------------
@@ -996,6 +672,32 @@ class WorkflowExecutor:
                 state.retry_counts = (
                     transition.retry_counts
                 )
+
+                # ------------------------------------------------------
+                # Hand failure feedback to the state that acts on it.
+                #
+                # Feedback is addressed to the transition target, so a
+                # failure routed to implement (from run-tests or review)
+                # is read by the coder on its next attempt.
+                # ------------------------------------------------------
+
+                if (
+                    outcome in ("failure", "invalid_output")
+                    and feedback is not None
+                    and not workflow.states[transition.next_state].terminal
+                ):
+                    feedback_file = write_feedback(
+                        context_dir=context_dir,
+                        state_name=transition.next_state,
+                        attempt=attempt,
+                        feedback=feedback,
+                    )
+
+                    logger.info(
+                        "Saved retry feedback for state '%s': %s",
+                        transition.next_state,
+                        feedback_file,
+                    )
 
                 # ------------------------------------------------------
                 # Runtime action capabilities

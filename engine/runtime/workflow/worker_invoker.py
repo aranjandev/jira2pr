@@ -38,7 +38,7 @@ from runtime.artifacts.validator import (
     ArtifactValidationError,
     validate_artifact,
 )
-from runtime.backends.base import LLMBackend
+from runtime.backends.base import BackendInvocationError, LLMBackend
 from runtime.capabilities import (
     CapabilityError,
     resolve,
@@ -47,7 +47,7 @@ from runtime.logging_config import get_logger
 from runtime.workflow.context_strategy import (
     ContextStrategy,
 )
-from runtime.workflow.feedback import WorkerOutputError
+from runtime.workflow.feedback import WorkerOutputError, feedback_path
 from runtime.workflow.loader import (
     RuntimeProject,
 )
@@ -561,6 +561,50 @@ def _resolve_task_target(
     return target
 
 
+def _invoke_fix_pass(
+    *,
+    project: RuntimeProject,
+    worker_slug: str,
+    tasks: list[RepositoryTask],
+    read_files: list[Path],
+    repo_root: Path,
+    model: str,
+    map_tokens: int | None,
+    backend: LLMBackend,
+) -> None:
+    """Run one feedback-driven fix over every plan-authorized file.
+
+    Used when the state is re-entered with failure feedback (failing tests,
+    or review findings). The feedback file is already part of ``read_files``.
+    The backend decides how to make the attempt. The runtime re-verifies
+    afterwards and owns the attempt budget.
+    """
+    verification = project.backend_config.get("verification", {})
+
+    edit_files = list(
+        dict.fromkeys(
+            _resolve_task_target(task=task, repo_root=repo_root)
+            for task in tasks
+        )
+    )
+
+    logger.info(
+        "Worker '%s' running feedback fix over %d file(s)",
+        worker_slug,
+        len(edit_files),
+    )
+
+    backend.fix_repository(
+        model=model,
+        read_files=read_files,
+        edit_files=edit_files,
+        repo_root=repo_root,
+        test_command=verification.get("test_command", ""),
+        lint_command=verification.get("lint_command", ""),
+        map_tokens=map_tokens,
+    )
+
+
 def _write_task_context(
     project: RuntimeProject,
     workflow: WorkflowSpec,
@@ -701,6 +745,25 @@ def _invoke_repository_worker(
     )
 
     completed_tasks: set[str] = set()
+
+    feedback_file = feedback_path(
+        project.context_dir(ticket_key=ticket_key),
+        state.name,
+    )
+
+    if feedback_file.is_file():
+        _invoke_fix_pass(
+            project=project,
+            worker_slug=worker_slug,
+            tasks=tasks,
+            read_files=read_files,
+            repo_root=repo_root,
+            model=model,
+            map_tokens=map_tokens,
+            backend=backend,
+        )
+
+        return {}, {}
 
     for task in tasks:
         _check_task_dependencies(
@@ -985,7 +1048,7 @@ def invoke_worker(
             backend=backend,
         )
 
-    return _invoke_repository_worker(
+    return _invoke_coder_attempt(
         project=project,
         workflow=workflow,
         state=state,
@@ -997,3 +1060,74 @@ def invoke_worker(
         repo_root=repo_root,
         backend=backend,
     )
+
+
+def _snapshot_files(paths: list[Path]) -> dict[Path, bytes | None]:
+    """Return each file's bytes, or None when it does not exist."""
+    return {path: path.read_bytes() if path.is_file() else None for path in paths}
+
+
+def _invoke_coder_attempt(
+    *,
+    project: RuntimeProject,
+    workflow: WorkflowSpec,
+    state: StateSpec,
+    ticket_key: str,
+    worker_slug: str,
+    worker,
+    model: str,
+    read_files: list[Path],
+    repo_root: Path,
+    backend: LLMBackend,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Run one repository-editing attempt and classify its outcome.
+
+    Two outcomes count as a failed attempt, regardless of backend:
+    - the backend raised BackendInvocationError (timeout, process exit,
+      provider error), reported as ``llm-error``;
+    - the attempt left every plan-authorized file unchanged, reported as
+      ``empty-diff``. This is a deterministic check on file contents.
+    """
+    tasks = _load_repository_tasks(
+        project=project,
+        ticket_key=ticket_key,
+    )
+
+    target_paths = list(
+        dict.fromkeys(
+            _resolve_task_target(task=task, repo_root=repo_root)
+            for task in tasks
+        )
+    )
+
+    before = _snapshot_files(target_paths)
+
+    try:
+        result = _invoke_repository_worker(
+            project=project,
+            workflow=workflow,
+            state=state,
+            ticket_key=ticket_key,
+            worker_slug=worker_slug,
+            worker=worker,
+            model=model,
+            read_files=read_files,
+            repo_root=repo_root,
+            backend=backend,
+        )
+    except BackendInvocationError as exc:
+        raise WorkerOutputError(
+            source="llm-error",
+            reason=f"Coder backend call failed: {exc}",
+        ) from exc
+
+    if _snapshot_files(target_paths) == before:
+        raise WorkerOutputError(
+            source="empty-diff",
+            reason=(
+                "The coder made no changes to the plan-authorized "
+                "files in this attempt."
+            ),
+        )
+
+    return result

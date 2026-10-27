@@ -45,6 +45,9 @@ class TransitionSpec:
     success: str | None = None
     failure: str | None = None
     escalate: str | None = None
+    # Target when a worker's output is unusable (e.g. review.md without a
+    # valid verdict). Falls back to `failure` when not set.
+    invalid_output: str | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,16 @@ class StateSpec:
     updates: tuple[str, ...] = ()
     success_criteria: str | None = None
     max_attempts: int | None = None
+    # "worker": an LLM worker runs, then success is judged by the supervisor
+    # (or the reviewer verdict / plain success when no criteria apply).
+    # "verification": deterministic test + lint run, no worker.
+    kind: str = "worker"
+    # False when the worker's success is final without a supervisor call.
+    # Deterministic checks that follow the worker (run-tests) are the judge.
+    supervised: bool = True
+    # Name of a workflow-level budget (WorkflowSpec.budgets). When set, this
+    # state's failures consume that shared budget instead of its own.
+    budget: str | None = None
     transitions: TransitionSpec = field(default_factory=TransitionSpec)
     terminal: bool = False
     outcome: str | None = None  # required when terminal is True: "success" | "escalated"
@@ -69,6 +82,8 @@ class WorkflowSpec:
     states: dict[str, StateSpec]
     source_path: str = ""
     max_total_iterations: int | None = None  # None -> use ExecutionPolicy.max_total_iterations
+    # Named budgets shared by several states, e.g. {"implement-cycle": 5}.
+    budgets: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

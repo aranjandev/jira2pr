@@ -11,6 +11,7 @@ import pytest
 from assembler.platforms.runtime import RuntimeAssembler
 from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
+from runtime.backends.base import BackendInvocationError
 from runtime.backends.mock import DEFAULT_PLAN, MockBackend
 from runtime.workflow.executor import WorkflowExecutor
 from runtime.workflow.loader import RuntimeProject
@@ -90,13 +91,14 @@ def test_happy_path_reaches_done(project, fake_subprocess):
     assert state.status == "completed"
     assert state.current_state == "done"
     assert [h["state"] for h in state.history] == [
-        "jira-ingest", "plan", "implement", "review", "submit",
+        "jira-ingest", "plan", "implement", "run-tests", "review", "submit",
     ]
     assert set(state.artifacts) == {"requirements.md", "plan.yaml", "review.md", "pr-description.md"}
 
     ops = [c["op"] for c in backend.calls]
     # One edit per plan task/test; implement and review need no supervisor call.
     assert ops.count("edit_repository") == 2
+    assert "fix_repository" not in ops
     assert [c["state"] for c in backend.calls if c["op"] == "produce_structured"] == [
         "jira-ingest", "plan", "submit",
     ]
@@ -136,34 +138,69 @@ def test_malformed_supervisor_output_treated_as_failure(project, fake_subprocess
     assert state.retry_counts == {"jira-ingest": 2}
 
 
-def test_failed_verification_triggers_one_repair(project, fake_subprocess):
-    # First `make test` fails; after one repair it passes.
+def test_failed_verification_routes_fix_back_to_implement(project, fake_subprocess):
+    # First `make test` fails. The coder gets the failure as feedback on
+    # re-entry and fixes it. The second verification passes.
     fake_subprocess.test_exit_codes = [1]
     backend = MockBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-6")
     assert state.status == "completed"
-    assert [c["op"] for c in backend.calls].count("repair_repository") == 1
+    assert state.retry_counts == {"implement-cycle": 1}
+    assert [c["op"] for c in backend.calls].count("fix_repository") == 1
+    assert [h["state"] for h in state.history] == [
+        "jira-ingest", "plan", "implement", "run-tests",
+        "implement", "run-tests", "review", "submit",
+    ]
 
 
-def test_verification_still_failing_after_repair_retries_implement(project, fake_subprocess):
-    # Fails before and after repair on the first attempt, then passes.
+def test_verification_failing_twice_then_passes(project, fake_subprocess):
     fake_subprocess.test_exit_codes = [1, 1]
     backend = MockBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-7")
     assert state.status == "completed"
-    assert state.retry_counts == {"implement": 1}
-    assert [h["state"] for h in state.history].count("implement") == 2
+    assert state.retry_counts == {"implement-cycle": 2}
+    assert [c["op"] for c in backend.calls].count("fix_repository") == 2
+    assert [h["state"] for h in state.history].count("implement") == 3
 
 
-def test_review_changes_requested_remediates_then_rereviews(project, fake_subprocess):
+def test_verification_budget_exhausted_escalates(project, fake_subprocess):
+    # run-tests allows 3 attempts. Three failed verifications escalate.
+    fake_subprocess.test_exit_codes = [1, 1, 1, 1, 1]
+    backend = MockBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-9")
+    assert state.status == "escalated"
+    assert state.current_state == "human-review"
+    assert state.retry_counts == {"implement-cycle": 5}
+    assert state.escalations[-1]["state"] == "run-tests"
+    assert "retry attempts exhausted" in state.escalations[-1]["reason"]
+
+
+def test_review_changes_requested_routes_to_implement_then_rereviews(project, fake_subprocess):
     reviews = iter([CHANGES_REQUESTED_REVIEW])
     backend = MockBackend(
         artifact_responder=lambda name: next(reviews, None) if name == "review.md" else None,
     )
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-8")
     assert state.status == "completed"
-    assert [c["op"] for c in backend.calls].count("remediate_review") == 1
+    ops = [c["op"] for c in backend.calls]
+    assert "remediate_review" not in ops
+    assert ops.count("fix_repository") == 1
+    assert state.retry_counts == {"implement-cycle": 1}
     assert [h["state"] for h in state.history].count("review") == 2
+
+
+def test_malformed_review_artifact_reruns_review_not_implement(project, fake_subprocess):
+    reviews = iter(["# Review\n\nNo verdict block here.\n"])
+    backend = MockBackend(
+        artifact_responder=lambda name: next(reviews, None) if name == "review.md" else None,
+    )
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-10")
+    assert state.status == "completed"
+    assert [h["state"] for h in state.history if h["state"] in ("review", "implement")] == [
+        "implement", "review", "review",
+    ]
+    assert [c["op"] for c in backend.calls].count("fix_repository") == 0
+    assert state.retry_counts == {"review": 1}
 
 
 def test_resume_continues_from_saved_state(project, fake_subprocess):
@@ -182,5 +219,60 @@ def test_resume_continues_from_saved_state(project, fake_subprocess):
     (artifacts / "plan.yaml").write_text(DEFAULT_PLAN, encoding="utf-8")
 
     state = WorkflowExecutor(project, MockBackend()).resume("PROJ-4")
-    assert [h["state"] for h in state.history] == ["jira-ingest", "implement", "review", "submit"]
+    assert [h["state"] for h in state.history] == ["jira-ingest", "implement", "run-tests", "review", "submit"]
     assert state.status == "completed"
+
+
+class NoEditBackend(MockBackend):
+    """Accepts edit and fix calls but leaves every file untouched."""
+
+    def edit_repository(self, **kwargs):
+        self.calls.append({"op": "edit_repository", "files": [str(p) for p in kwargs["edit_files"]]})
+
+    def fix_repository(self, **kwargs):
+        self.calls.append({"op": "fix_repository", "files": [str(p) for p in kwargs["edit_files"]]})
+
+
+class FlakyBackend(MockBackend):
+    """Raises a backend invocation error on the first coder call, then works."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures_left = 1
+
+    def _maybe_fail(self) -> None:
+        if self.failures_left:
+            self.failures_left -= 1
+            raise BackendInvocationError("Aider timed out after 600s")
+
+    def edit_repository(self, **kwargs):
+        self._maybe_fail()
+        return super().edit_repository(**kwargs)
+
+    def fix_repository(self, **kwargs):
+        self._maybe_fail()
+        return super().fix_repository(**kwargs)
+
+
+def test_empty_diff_counts_as_implement_failure_and_escalates(project, fake_subprocess):
+    # implement allows 2 attempts. Both produce no change, so it escalates.
+    backend = NoEditBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-11")
+    assert state.status == "escalated"
+    assert state.current_state == "human-review"
+    assert state.retry_counts == {"implement": 2}
+    implement_history = [h for h in state.history if h["state"] == "implement"]
+    assert [h["outcome"] for h in implement_history] == ["failure", "failure"]
+    assert all("no changes" in h["notes"] for h in implement_history)
+    assert "run-tests" not in [h["state"] for h in state.history]
+
+
+def test_backend_error_counts_as_implement_failure_then_recovers(project, fake_subprocess):
+    backend = FlakyBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-12")
+    assert state.status == "completed"
+    assert state.retry_counts == {"implement": 1}
+    failed = [h for h in state.history if h["state"] == "implement" and h["outcome"] == "failure"]
+    assert len(failed) == 1
+    assert "Coder backend call failed" in failed[0]["notes"]
+    assert "Aider timed out" in failed[0]["notes"]

@@ -100,8 +100,17 @@ def validate(
                 f"(found: {workflow.max_total_iterations})"
             )
 
+        for name, size in workflow.budgets.items():
+            if size < 1:
+                errors.append(f"{src}: budgets.{name} must be at least 1 (found: {size})")
+
         for state in workflow.states.values():
             key = f"{src}: states.{state.name}"
+
+            if state.budget is not None and state.budget not in workflow.budgets:
+                errors.append(
+                    f"{key}.retry.budget: '{state.budget}' is not defined under budgets"
+                )
 
             if state.terminal:
                 if state.outcome not in (
@@ -116,7 +125,13 @@ def validate(
 
                 continue
 
-            if state.worker is None:
+            if state.kind == "verification":
+                if state.worker is not None:
+                    errors.append(
+                        f"{key}.worker: verification state must not declare a worker"
+                    )
+
+            elif state.worker is None:
                 errors.append(
                     f"{key}.worker: non-terminal state must "
                     "declare a worker"

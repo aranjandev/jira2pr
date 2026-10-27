@@ -4,7 +4,7 @@
 
 Jira2PR defines platform-independent software-development workflows and projects them into different agent execution environments.
 
-**Purpose:** take a JIRA ticket through `jira-ingest → plan → implement → review → submit` and end with a
+**Purpose:** take a JIRA ticket through `jira-ingest → plan → implement ⇄ run-tests → review ⇄ implement → submit` and end with a
 pull request, using AI agents under human supervision. Workflows, agents, artifact schemas, and capabilities are
 written once in `canonical/`; the `jira2pr` CLI compiles them into a generated package for a target
 repository and, on runtime-driven platforms, executes them. Two execution platforms are supported:
@@ -444,23 +444,29 @@ runtime/backends/
 ```
 
 Backends translate Jira2PR execution semantics into model/platform invocation. They implement the
-abstract `LLMBackend` interface in `base.py`, which defines five distinct execution modes:
+abstract `LLMBackend` interface in `base.py`, which defines these execution modes:
 
 ```text
 produce_artifact()     # write a document/YAML artifact to a file
 produce_structured()   # write machine-readable output (supervisor JSON)
 edit_repository()      # edit exactly the files the caller marks editable
 repair_repository()    # fix test/lint failures using Aider's lint/test loop
-remediate_review()     # fix blocking findings raised by the reviewer
+fix_repository()       # one feedback-driven fix attempt (default: edit_repository)
 ```
+
+`fix_repository()` is the hook for the implement ⇄ run-tests loop. The runtime calls it when `implement`
+is re-entered with failure feedback (failing tests, or review findings), instead of the per-task
+`edit_repository()` path. The runtime re-verifies after every call and owns the attempt budget, so a
+backend performs one attempt per call. A backend can use its own in-session test loop inside that call.
+`remediate_review()` no longer exists: review findings go back to `implement`, and the coder applies them.
 
 Implementations:
 
 | Backend | Role |
 |---------|------|
-| `jira2pr.py` (`Jira2PRBackend`) | Composite and default. Routes `produce_*` to LiteLLM and `edit/repair/remediate` to Aider |
+| `jira2pr.py` (`Jira2PRBackend`) | Composite and default. Routes `produce_*` to LiteLLM and `edit/repair/fix` to Aider |
 | `litellm_backend.py` | Direct `litellm.completion()` calls; writes the response to the artifact file |
-| `aider.py` | Runs `aider` as a subprocess (`--message-file`, `--read`, `--map-tokens`, `--test-cmd`, `--lint-cmd`) |
+| `aider.py` | Runs `aider` as a subprocess (`--message-file`, `--read`, `--map-tokens`, `--test-cmd`, `--lint-cmd`). `fix_repository()` uses its `--auto-test` loop |
 | `mock.py` | Deterministic backend for tests (`--backend mock`) |
 
 Why composite: content-producing workers do not need Aider's edit-format protocol, so they use
@@ -505,8 +511,8 @@ runtime/workflow/
 ├── review.py               # parses the reviewer's `review-verdict` block
 ├── state_manager.py        # atomic read/write of state/<TICKET>.yaml
 ├── supervisor_invoker.py   # supervisor evaluation → success|failure|escalate
-├── transitions.py          # pure transition/retry/escalation logic
-└── worker_invoker.py       # artifact workers and task-wise repository workers
+├── transitions.py          # pure transition/retry/escalation logic (cycle budgets)
+└── worker_invoker.py       # artifact workers, task-wise editing, and feedback fix passes
 ```
 
 The workflow engine is responsible for:
@@ -520,7 +526,7 @@ Invoke workers
 Normalize/validate artifacts
 Invoke supervisor
 Apply workflow transitions
-Track attempts
+Track retry counters and state visits
 Persist state
 Resume execution
 ```
@@ -749,11 +755,15 @@ load state/<TICKET>.yaml (or create it at initial_state)
 loop until the current state is terminal:
     ├─ enforce global max_total_iterations (else escalate)
     ├─ resolve context (consumes + runtime_context + ContextStrategy)
-    ├─ invoke worker (model from config/runtime.yaml)
+    ├─ invoke worker (model from config/runtime.yaml)              [kind: worker]
     │     ├─ state.produces non-empty → artifact worker → normalize → validate
-    │     └─ state.produces empty     → repository worker → one plan task at a time
+    │     ├─ state.produces empty     → repository worker → one plan task at a time
+    │     │                              (or one feedback fix pass if <state>-feedback.json exists)
+    ├─ run deterministic verification                              [kind: verification]
+    │     └─ test + lint commands from config/runtime.yaml → evidence
     ├─ evaluate the result  (see "Who judges what")
     ├─ transitions.next_state(outcome, retry_counts)
+    ├─ write failure feedback to the transition target (e.g. implement-feedback.json)
     ├─ run the worker's declared actions on success (pr-author only)
     └─ persist state
 ```
@@ -764,39 +774,95 @@ loop until the current state is terminal:
 |-------|--------|-----------|
 | `jira-ingest` | jira-reader | supervisor (criteria `jira-ingest`) |
 | `plan` | planner | structural validator, then supervisor (criteria `planning`) |
-| `implement` | coder | **deterministic** test + lint evidence; one Aider repair attempt on failure; supervisor is skipped when verification passes |
-| `review` | reviewer | the reviewer's own trailing `review-verdict` block: `approve` → success, `escalate` → escalate, `changes_requested` → Aider remediation, re-verify, then re-review |
+| `implement` | coder | the coder's own completion, with two failure checks. A backend error (Aider timeout or non-zero exit) and an attempt that leaves every plan-authorized file unchanged both count as failures against `implement`'s `max_attempts` (2). No supervisor. Otherwise the next state, `run-tests`, judges the result |
+| `run-tests` | none (`kind: verification`) | **deterministic** test + lint evidence. Pass → `review`. Fail → `implement` with the test output as feedback |
+| `review` | reviewer | the reviewer's trailing `review-verdict` block: `approve` → success, `escalate` → escalate, `changes_requested` → failure to `implement` with the reviewer's reason as feedback. A missing or malformed block is `invalid_output` and re-runs `review` |
 | `submit` | pr-author | action execution (`git.commit`, `git.push`, `pr.create`/`pr.update`) driven by a trailing `pr-actions` block |
 
-## Implement state: task-wise editing
+## Implement state: task-wise editing and feedback fixes
 
-The coder never receives the whole plan as one prompt. `_invoke_repository_worker()` loads
-`plan.yaml`, checks `dependencies`, and for each task calls `edit_repository()` with:
+The coder never receives the whole plan as one prompt. On a first pass, `_invoke_repository_worker()`
+loads `plan.yaml`, checks `dependencies`, and for each task calls `edit_repository()` with:
 
 ```text
 read-only:  coder.md + project instructions + repo map + a small per-task context file
 editable:   exactly one repository file (task.file_path)
 ```
 
-This keeps context small and edit-format compliance high for local models. After all tasks run,
-the executor collects evidence (diff of planned files, `test_command`, `lint_command` from
-`config/runtime.yaml` → `verification`), attempts at most one `repair_repository()` pass if either
-failed, and re-collects evidence.
+This keeps context small and edit-format compliance high for local models.
+
+When `implement` is re-entered with feedback (from `run-tests` or `review`), the runtime makes one
+`fix_repository()` call over all plan-authorized files. The feedback file, `implement-feedback.json`,
+is part of its read-only context. Then `run-tests` verifies the result again. The feedback file is
+cleared when `implement` succeeds.
+
+## Implement ⇄ run-tests ⇄ review loop
+
+The loop is declared in the workflow DSL, not in code. Each failing edge goes back to `implement`:
+
+- `implement` → `run-tests` on success.
+- `run-tests` → `review` on success. On failure, → `implement` with the test output as feedback.
+- `review` → `submit` on `approve`. On `changes_requested`, → `implement` with the review reason as feedback.
+  A malformed `review.md` (no valid verdict) is `invalid_output` and goes back to `review` (`invalid_output: review`).
+- `run-tests` and `review`'s `changes_requested` both draw from the shared budget `implement-cycle`
+  (`budgets: {implement-cycle: 5}`). The fifth such failure escalates to `human-review`. The budget is cumulative
+  for the run and is not reset on forward progress.
+- `review`'s `max_attempts: 3` bounds malformed `review.md` (`invalid_output`, a self-loop). It is separate from the shared budget.
+- `implement` (`max_attempts: 2`) bounds its own failures: backend errors (`llm-error`) and attempts that change no plan-authorized file (`empty-diff`). See "Counting retry attempts".
+- The backend's `fix_repository()` may run its own in-session test loop. Aider uses `--auto-test`.
+  The runtime still re-verifies after each fix, so a backend cannot mark a run as passing on its own.
 
 ## Retry and escalation
 
 Defined by `workflows/shared/execution-policy.yaml` and each state's `retry` / `transitions`:
 
-- `retry.max_attempts` bounds self-looping failures; exhaustion escalates (`on_exhaustion: escalate`).
+- `retry.max_attempts` bounds a state's own failures: self-loops, and cross-state failures from a state that declares
+  `max_attempts` explicitly. Exhaustion escalates (`on_exhaustion: escalate`). If a state declares neither `max_attempts`
+  nor `budget`, the policy default (`default_max_attempts`, 1) applies to self-loops only.
+- `retry.budget: <name>` draws a state's failures from a shared workflow budget (`budgets:`) instead of its own counter.
 - `retry.max_total_iterations` (workflow override, else policy default) bounds total state visits.
 - `escalate` always routes to the terminal `human-review` state (status `escalated`).
 - `done` is the terminal success state (status `completed`).
+
+### Counting retry attempts
+
+Every failure increments exactly one counter in `retry_counts`. Counters are keyed by state name or budget name.
+
+1. A failure from a state with `retry.budget` increments that budget, whatever the failure target. Failures from
+   `run-tests` and `review` (`changes_requested`) both increment `implement-cycle`.
+2. Otherwise, a self-loop failure or a cross-state failure from a state with `max_attempts` increments the state's own
+   counter. This includes `invalid_output` (malformed `review.md`), which increments `review`.
+3. Any other cross-state failure is plain routing and increments nothing.
+
+Counters are cumulative for the run. Nothing resets them on forward progress. When a counter reaches its limit, the
+transition escalates to `human-review`.
+
+The canonical `feature` workflow counts as follows:
+
+| Failure | Counter | Limit |
+|---------|---------|-------|
+| `jira-ingest` invalid output (self-loop) | `jira-ingest` | 2 |
+| `plan` invalid output (self-loop) | `plan` | 2 |
+| `implement` backend error (`llm-error`) or no change to planned files (`empty-diff`) | `implement` | 2 |
+| `run-tests` verification failed (`→ implement`) | `implement-cycle` | 5, shared |
+| `review` `changes_requested` (`→ implement`) | `implement-cycle` | 5, shared |
+| `review` malformed `review.md` (`invalid_output`, self-loop) | `review` | 3 |
+| `submit` failure (self-loop, no `max_attempts`) | `submit` | 1 (policy default) |
+
+The `attempt` number in logs, history, and feedback files is the visit number of the state in the run. It is not the
+counter value. A shared budget therefore does not make `attempt` look like a per-state retry count. Total visits are
+also capped by `max_total_iterations` (30 in the canonical workflow). A full implement → run-tests → review cycle costs
+3 visits, and each counted cycle adds 3. Five shared cycles plus the first pass need about 22 visits. The remaining
+headroom covers `plan` and `jira-ingest` retries.
+
+Other exceptions, such as missing plan files, dependency errors, and Aider precondition errors, are not counted. They
+stop the run.
 
 ## State file
 
 `.jira2pr/state/<TICKET>.yaml` is written atomically **only** by the runtime/orchestrator. Fields
 include `workflow`, `work_item`, `status` (`active|completed|escalated|failed`), `current_state`,
-`retry_counts`, `total_iterations`, `artifacts`, `decisions`, `escalations`, `history`.
+`retry_counts` (keyed by state name or budget name, e.g. `implement-cycle`), `total_iterations`, `artifacts`, `decisions`, `escalations`, `history`.
 `jira2pr resume <TICKET>` simply reloads it and re-enters `run()`. Ticket keys are validated
 (`^[A-Z][A-Z0-9]*-[0-9]+$`) before being used in a path.
 
@@ -869,7 +935,8 @@ Operating Aider safely:
 - Each Aider call receives an explicit `--read` list and an explicit editable-file list, so the
   model cannot wander across the repository.
 - Local-model reliability is the main design pressure: per-task editing, explicit file lists,
-  small context, bounded evidence output, and an Aider lint/test repair loop before escalation.
+  small context, bounded evidence output, and an Aider in-session test loop per fix attempt. The
+  shared `implement-cycle` budget bounds the outer loop before escalation.
 
 Requirements in the target environment: `aider` on `PATH`, `jira2pr` installed, `.env` with JIRA
 and GitHub/Bitbucket credentials, and credentials/endpoints for each model provider referenced in
@@ -929,7 +996,9 @@ version: 1
 workflow: feature
 initial_state: jira-ingest
 retry:
-  max_total_iterations: 20        # optional override of the policy default (40)
+  max_total_iterations: 30        # optional override of the policy default (40)
+budgets:
+  implement-cycle: 5              # shared by every state that sets retry.budget
 states:
   plan:
     worker: planner               # slug from workflows/shared/workers.yaml
@@ -944,10 +1013,35 @@ states:
       success: implement
       failure: plan               # self-loop = bounded retry
       escalate: human-review
+  implement:
+    worker: coder
+    consumes: [plan.yaml, decisions/*.md, review.md]  # review.md exists only after a review
+    updates: [workflow-state.md]
+    validation:
+      supervisor: false           # success is final; the next state judges it
+    retry:
+      max_attempts: 2
+    transitions:
+      success: run-tests
+      failure: implement          # self-loop = bounded retry
+      escalate: human-review
+  run-tests:
+    kind: verification            # deterministic test + lint; no worker
+    retry:
+      budget: implement-cycle     # draws from the shared budget (cycle edge)
+    transitions:
+      success: review
+      failure: implement          # feedback is handed to implement
+      escalate: human-review
   done:
     terminal: true
     outcome: success              # success | escalated
 ```
+
+Fields: `kind` is `worker` (default) or `verification`. A verification state declares no `worker`.
+`validation.supervisor: false` skips the supervisor for a worker state. `retry.max_attempts` and `retry.budget`
+determine whether a cross-state failure consumes a counter (see "Counting retry attempts"). `transitions.invalid_output`
+routes unusable worker output (for example, a malformed `review.md`) and falls back to `failure` when unset.
 
 Rules enforced by `validate()` at compile time: every `worker` exists in `workers.yaml`; every
 transition target is a defined state; every `success_criteria` key exists; capabilities referenced by
@@ -976,7 +1070,8 @@ context/<TICKET>/implementation-diff.patch   # evidence: diff of plan-authorized
 context/<TICKET>/test-results.txt            # evidence: includes `exit_code:`
 context/<TICKET>/lint-results.txt
 context/<TICKET>/supervisor-<state>-decision.json
-context/<TICKET>/<state>-feedback.json       # WorkerFeedback for the next attempt
+context/<TICKET>/<state>-feedback.json       # WorkerFeedback, addressed to the state that acts on it
+                                             # (e.g. implement-feedback.json after a failed run-tests)
 context/<TICKET>/commit-files.txt            # commit manifest: files `git.commit` may stage (from plan.yaml)
 logs/jira2pr.log                             # all levels; console shows INFO (DEBUG with --debug)
 ```
@@ -996,8 +1091,9 @@ deleting files by hand.
 - **Capability params** are validated against the DSL's argument template; unknown params and missing
   placeholders raise `CapabilityError`, so no arbitrary arguments reach a script.
 - **Workers cannot mutate workflow state or choose transitions**; only the runtime/orchestrator does.
-- **Bounded loops**: per-state `max_attempts`, global `max_total_iterations`, one Aider repair pass per
-  implementation attempt, and bounded evidence output (`MAX_FAILURE_OUTPUT_CHARS`, 600s command timeout).
+- **Bounded loops**: per-state `max_attempts`, shared `budgets` (for example `implement-cycle` across run-tests and review),
+  global `max_total_iterations`, one fix attempt per `implement` re-entry, and bounded evidence output
+  (`MAX_FAILURE_OUTPUT_CHARS`, 600s command timeout).
 - **Secrets** live in `.env` (never committed); `.env.example` is the template.
 
 ---
@@ -1014,7 +1110,7 @@ make lint          # ruff check engine/
 | `test_registry.py`, `test_workflow_loader.py`, `test_validator.py` | canonical loading and cross-reference validation, per-agent models |
 | `test_runtime_assembler.py`, `test_copilot_assembler.py`, `test_writer.py` | generated output for each platform, idempotency (`check` mode), manifest pruning |
 | `test_transitions.py`, `test_state_manager.py` | pure transition/retry logic; atomic state persistence |
-| `test_executor_mock.py` | full workflow via `MockBackend` (happy path, retry, global cap, repair, review remediation, resume) with `subprocess.run` patched |
+| `test_executor_mock.py` | full workflow via `MockBackend` (happy path, verification loop and budget exhaustion, review routing to implement, global cap, resume) with `subprocess.run` patched |
 | `test_action_executor.py`, `test_capabilities.py` | commit/push/PR actions, capability → argv resolution |
 | `test_integrations_*.py` | `jira.py`, `git.py`, `github.py` helper scripts |
 
@@ -1029,7 +1125,7 @@ Tests load `canonical/` from the repo root (`conftest.py` also puts `engine/` an
 |---------|-----------------------|
 | `ERROR: models.<slug>: no model configured` on `init` | add the agent to `platform-extras/<platform>/models.yaml` |
 | `Backend configuration not found: .jira2pr/config/runtime.yaml` | package was generated for another platform; re-run `jira2pr init --platform runtime` |
-| Workflow ends `escalated` | read `state/<TICKET>.yaml` → `escalations`, and `context/<TICKET>/*-feedback.json`; fix, then `jira2pr resume <TICKET>` |
+| Workflow ends `escalated` | read `state/<TICKET>.yaml` → `escalations` and `retry_counts`, and `context/<TICKET>/*-feedback.json`. The escalation state tells you which counter ran out: `run-tests` or `review` means the shared `implement-cycle` budget (5) is spent; `implement` means two backend errors or no-change attempts; `review` with a malformed `review.md` means its `max_attempts` (3). Fix, then `jira2pr resume <TICKET>` |
 | Plan rejected: `create target already exists` / `modify target does not exist` | the planner's file paths disagree with the repo; feedback is passed to the retry automatically |
 | Evidence step fails with `No test command configured` | set `verification.test_command`/`lint_command` in `.jira2pr/config/runtime.yaml` (defaults are `make test` / `make lint`) |
 | `aider` not found | install Aider and ensure it is on `PATH` for the process running `jira2pr` |
@@ -1087,8 +1183,7 @@ Verified against the repository state at the time of writing; reconcile before r
 | `copilot` platform | `CopilotAssembler` reads models per agent via `registry.platform_models("copilot")` (same as `runtime.py`); `jira2pr init --platform copilot` works. The generated shell has not been exercised in a live Copilot session |
 | `bugfix` and `scope-creep` workflows | Files are empty (the loader skips them with a warning), yet the Copilot assembler renders a prompt per workflow and the README advertises `/bugfix` |
 | `--platform aider` | Rejected; Aider is the runtime platform's backend. `README.md` and `platform-extras/runtime/README.md.tpl` still say `--platform aider` and `config/aider.yaml` and need updating |
-| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`) passes (216 tests). `MockBackend` implements all five `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests |
-| OpenCode | Not supported; quarantined in `_opencode_quarantined.py` |
+| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`). 229 pass. `test_model_baked_into_frontmatter` checks that every agent's frontmatter model matches `platform-extras/copilot/models.yaml`. Models are per-platform, so no test pins a model name. `MockBackend` implements all `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests || Implement ⇄ run-tests ⇄ review loop | Implemented in the runtime engine (`kind: verification`, shared `budgets:` in the DSL, feedback addressed to the target state, `fix_repository()` hook). Aider uses its `--auto-test` loop per fix attempt. Copilot: the protocol instructs the agent to run the test and lint commands for verification states, but this path has not been exercised in a live session || OpenCode | Not supported; quarantined in `_opencode_quarantined.py` |
 | `docs/` vs project instructions | The root project instructions mention `scripts/` and `examples-autogenerated/`; the current layout uses `engine/` and no checked-in generated examples |
 | `produce_structured()` | Used by the supervisor invoker only; `plan.yaml` is produced through `produce_artifact()` and validated structurally |
 | Context strategy | Implemented in `runtime/workflow/context_strategy.py`; repo map via `git ls-files` + tree-sitter for non-editing workers, Aider's repo map for editing workers |

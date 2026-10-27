@@ -12,5 +12,5 @@ install: ## Install jira2pr from this checkout
 test: ## Run the full unit test suite
 	cd $(ENGINE) && $(PYTHON) -m pytest tests/ -q
 
-lint: ## Lint the code using ruff
+lint: ## Lint the code using ruff (FIX=1 to auto-fix)
 	$(PYTHON) -m ruff check $(if $(FIX),--fix,) $(ENGINE)

@@ -10,7 +10,13 @@ initial_state: jira-ingest
 # workflows/shared/execution-policy.yaml. Exceeding it escalates to the same
 # terminal as any other escalation (see terminal_outcomes.escalated there).
 retry:
-  max_total_iterations: 20
+  max_total_iterations: 30
+
+# Shared budgets. Each failed run-tests verification and each review
+# changes_requested sends implement back into its cycle, and both draw from
+# this budget. The budget is cumulative for the whole run.
+budgets:
+  implement-cycle: 5
 
 states:
   jira-ingest:
@@ -51,13 +57,26 @@ states:
     consumes:
       - plan.yaml
       - decisions/*.md
+      - review.md
     produces: []
     updates:
       - workflow-state.md
     validation:
-      success_criteria: implementation
+      supervisor: false
     retry:
       max_attempts: 2
+    transitions:
+      success: run-tests
+      failure: implement
+      escalate: human-review
+
+  # Deterministic verification (no LLM). Runs the configured test and lint
+  # commands. On failure the output is handed to implement as feedback, and
+  # the coder fixes it. The max_attempts budget bounds implement <-> run-tests.
+  run-tests:
+    kind: verification
+    retry:
+      budget: implement-cycle
     transitions:
       success: review
       failure: implement
@@ -71,10 +90,14 @@ states:
     produces:
       - review.md
     retry:
+      # max_attempts bounds malformed review.md (invalid_output, self-loop).
+      # changes_requested draws from the shared implement-cycle budget.
       max_attempts: 3
+      budget: implement-cycle
     transitions:
       success: submit
-      failure: review
+      failure: implement
+      invalid_output: review
       escalate: human-review
 
   submit:

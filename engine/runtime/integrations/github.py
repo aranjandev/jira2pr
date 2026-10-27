@@ -13,7 +13,6 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 # ─── .env loader ─────────────────────────────────────────────────────────────
 
@@ -112,7 +111,7 @@ def get_bitbucket_username() -> str:
 
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-def http_request(method: str, url: str, headers: dict, payload: Optional[dict] = None) -> tuple[int, dict]:
+def http_request(method: str, url: str, headers: dict, payload: dict | None = None) -> tuple[int, dict]:
     """
     Perform an HTTP request. Returns (status_code, parsed_json_body).
     payload is serialised to JSON automatically.

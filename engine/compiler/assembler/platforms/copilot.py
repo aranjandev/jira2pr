@@ -142,14 +142,22 @@ class CopilotAssembler(PlatformAssembler):
                 if state.max_attempts is not None
                 else registry.execution_policy.default_max_attempts
             )
+            if state.budget is not None:
+                attempts = f"shared `{state.budget}` ({workflow.budgets[state.budget]})"
+            if state.kind == "verification":
+                lines.append(f"| `{state.name}` | — (deterministic verification) | — | {attempts} |")
+                continue
             lines.append(
                 f"| `{state.name}` | `{state.worker}` | `{state.success_criteria}` | {attempts} |"
             )
         lines.append("")
         lines.append(
-            "For each non-terminal state: invoke the named worker agent, then invoke "
-            "`supervisor` to evaluate its output against the state's success criteria "
-            f"(see `{agents_dir}/instructions/workflow-protocol.instructions.md` for the full "
+            "For each non-terminal state with a worker: invoke the named worker agent. Unless the "
+            "state sets `validation.supervisor: false`, invoke `supervisor` to evaluate its output "
+            "against the state's success criteria. For a "
+            "verification state (no worker): run the project's test and lint commands and treat a "
+            "zero exit code as success; on failure, route back to `implement` with the output as "
+            f"feedback (see `{agents_dir}/instructions/workflow-protocol.instructions.md` for the full "
             f"protocol and `{core_dir}/artifacts/` for artifact schemas). Persist the outcome to "
             f"`{core_dir}/state/<TICKET-KEY>.yaml` before transitioning to the next state."
         )

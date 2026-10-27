@@ -99,6 +99,7 @@ class MockBackend(LLMBackend):
         self._artifact_responder = artifact_responder
         self._decision_responder = decision_responder
         self.calls: list[dict] = []
+        self.fix_count = 0
 
     def produce_artifact(
         self,
@@ -204,7 +205,7 @@ class MockBackend(LLMBackend):
             }
         )
 
-    def remediate_review(
+    def fix_repository(
         self,
         *,
         model: str,
@@ -217,8 +218,13 @@ class MockBackend(LLMBackend):
     ) -> None:
         self.calls.append(
             {
-                "op": "remediate_review",
+                "op": "fix_repository",
                 "model": model,
                 "files": [str(path) for path in edit_files],
             }
         )
+
+        for path in edit_files:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.fix_count += 1
+            path.write_text(f"# fixed by MockBackend (fix {self.fix_count})\n", encoding="utf-8")

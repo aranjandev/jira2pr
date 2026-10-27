@@ -3,15 +3,17 @@
 Retry/escalation semantics (documented in
 `canonical/workflows/shared/execution-policy.yaml`):
 
-- `retry.max_attempts` only bounds *self-looping* failures, i.e. states whose
-  `transitions.failure` target is the state itself (jira-ingest, plan,
-  implement all retry themselves this way). Exhausting the bound escalates
-  instead of retrying again.
-- States whose failure transition points at a *different* state (e.g.
-  `review` failing routes to `implement`) are plain forward routing, not a
-  retry loop — nothing to exhaust. Any effective bound on how many times that
-  cycle can repeat comes from the downstream self-looping state's own
-  max_attempts (e.g. `implement`'s), not from `review`'s.
+- `retry.max_attempts` bounds *cycle* failures. A state whose failure target is
+  itself (jira-ingest, plan, implement, review) retries itself. A state that
+  declares an explicit `retry.max_attempts` but fails into a different state
+  (e.g. `run-tests` -> `implement`, `review` -> `implement`) is a counted cycle
+  edge: each failure consumes its own budget, and exhaustion escalates.
+- States whose failure transition points at a *different* state and that do not
+  declare `max_attempts` are plain forward routing, not a retry loop. Any bound on
+  such a cycle then comes from the downstream state's own max_attempts.
+- A state with `retry.budget: <name>` draws its failures from the workflow-level
+  budget `<name>` (`budgets:`), shared with any other state naming it. Budgets
+  are cumulative for the run and are not reset on forward progress.
 """
 
 from __future__ import annotations
@@ -37,9 +39,11 @@ def next_state(
 ) -> TransitionResult:
     """Compute the next state name given a supervisor *outcome*.
 
-    *outcome* is one of "success", "failure", "escalate".
+    *outcome* is one of "success", "failure", "invalid_output", "escalate".
+    "invalid_output" is a failure caused by unusable worker output. It routes to
+    ``transitions.invalid_output`` when declared, otherwise it behaves as "failure".
     """
-    if outcome not in ("success", "failure", "escalate"):
+    if outcome not in ("success", "failure", "invalid_output", "escalate"):
         raise ValueError(f"Unknown outcome: {outcome!r}")
 
     state = workflow.states.get(current_state_name)
@@ -60,23 +64,34 @@ def next_state(
         target = state.transitions.escalate or _fallback_escalation_state(workflow, policy)
         return TransitionResult(next_state=target, retry_counts=counts)
 
-    # outcome == "failure"
+    # outcome is "failure" or "invalid_output"
     failure_target = state.transitions.failure
+    if outcome == "invalid_output" and state.transitions.invalid_output is not None:
+        failure_target = state.transitions.invalid_output
     if failure_target is None:
         raise ValueError(f"State {current_state_name!r} has no failure transition")
 
     is_self_loop = failure_target == current_state_name
-    if not is_self_loop:
-        # Plain forward routing (e.g. review -> implement) — not a retry.
-        return TransitionResult(next_state=failure_target, retry_counts=counts)
 
-    attempts_so_far = counts.get(current_state_name, 0) + 1
-    counts[current_state_name] = attempts_so_far
-    max_attempts = (
-        state.max_attempts if state.max_attempts is not None else policy.default_max_attempts
-    )
+    # A failure from a state that names a shared budget consumes that budget,
+    # regardless of its target (e.g. run-tests and review -> implement share
+    # "implement-cycle"). Unusable output keeps the state's own counter.
+    if outcome == "failure" and state.budget is not None:
+        counter_key = state.budget
+        limit = workflow.budgets[state.budget]
+    else:
+        # A state with an explicit max_attempts that fails into another state is
+        # a bounded cycle edge. Without one, cross-state failures are plain routing.
+        is_counted_cycle = is_self_loop or state.max_attempts is not None
+        if not is_counted_cycle:
+            return TransitionResult(next_state=failure_target, retry_counts=counts)
+        counter_key = current_state_name
+        limit = state.max_attempts if state.max_attempts is not None else policy.default_max_attempts
 
-    if attempts_so_far >= max_attempts and policy.on_exhaustion == "escalate":
+    attempts_so_far = counts.get(counter_key, 0) + 1
+    counts[counter_key] = attempts_so_far
+
+    if attempts_so_far >= limit and policy.on_exhaustion == "escalate":
         target = state.transitions.escalate or _fallback_escalation_state(workflow, policy)
         return TransitionResult(
             next_state=target, retry_counts=counts, escalated_due_to_retry_exhaustion=True
