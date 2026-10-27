@@ -589,6 +589,13 @@ def _resume_task_id(context_dir: Path, state_name: str, task_ids: list[str]) -> 
     return resume_from
 
 
+def _read_feedback(context_dir: Path, state_name: str) -> dict | None:
+    path = feedback_path(context_dir, state_name)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def _has_verification_feedback(context_dir: Path, state_name: str) -> bool:
     """True when pending feedback reports failed tests or lint.
 
@@ -605,6 +612,7 @@ def _has_verification_feedback(context_dir: Path, state_name: str) -> bool:
 def _invoke_fix_pass(
     *,
     project: RuntimeProject,
+    ticket_key: str,
     worker_slug: str,
     tasks: list[RepositoryTask],
     read_files: list[Path],
@@ -634,6 +642,14 @@ def _invoke_fix_pass(
         worker_slug,
         len(edit_files),
     )
+
+    context_dir = project.context_dir(ticket_key=ticket_key)
+    evidence_files = [
+        context_dir / name
+        for name in ("test-results.txt", "lint-results.txt")
+        if (context_dir / name).is_file()
+    ]
+    read_files = [*read_files, *evidence_files]
 
     scope = capture_scope(repo_root)
 
@@ -809,6 +825,7 @@ def _invoke_repository_worker(
     ):
         _invoke_fix_pass(
             project=project,
+            ticket_key=ticket_key,
             worker_slug=worker_slug,
             tasks=tasks,
             read_files=read_files,
@@ -1214,6 +1231,10 @@ def _invoke_coder_attempt(
         )
     )
 
+    context_dir = project.context_dir(ticket_key=ticket_key)
+    pending_verification = _has_verification_feedback(context_dir, state.name)
+    prior_feedback = _read_feedback(context_dir, state.name) if pending_verification else None
+
     before = _snapshot_files(target_paths)
 
     try:
@@ -1236,6 +1257,14 @@ def _invoke_coder_attempt(
         ) from exc
 
     if _snapshot_files(target_paths) == before:
+        if pending_verification and prior_feedback is not None:
+            # The repair failed to change anything, so the verification failure
+            # is still the problem. Keep its details for the next attempt.
+            raise WorkerOutputError(
+                source="verification",
+                reason=f"{prior_feedback.get('reason', '')} The repair made no changes.".strip(),
+                details=list(prior_feedback.get("details", [])),
+            )
         raise WorkerOutputError(
             source="empty-diff",
             reason=(

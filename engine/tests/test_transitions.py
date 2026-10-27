@@ -31,16 +31,21 @@ def test_success_advances_to_next_state(workflow, policy):
 
 
 def test_self_loop_failure_retries_until_exhaustion(workflow, policy):
-    # plan: max_attempts=2, failure target is itself -> a real retry loop.
+    # plan: max_attempts=3, failure target is itself -> a real retry loop.
     result = transitions.next_state(workflow, "plan", "failure", {}, policy)
     assert result.next_state == "plan"
     assert result.retry_counts == {"plan": 1}
     assert not result.escalated_due_to_retry_exhaustion
 
     result2 = transitions.next_state(workflow, "plan", "failure", result.retry_counts, policy)
-    assert result2.next_state == "human-review"
+    assert result2.next_state == "plan"
     assert result2.retry_counts == {"plan": 2}
-    assert result2.escalated_due_to_retry_exhaustion
+    assert not result2.escalated_due_to_retry_exhaustion
+
+    result3 = transitions.next_state(workflow, "plan", "failure", result2.retry_counts, policy)
+    assert result3.next_state == "human-review"
+    assert result3.retry_counts == {"plan": 3}
+    assert result3.escalated_due_to_retry_exhaustion
 
 
 def test_review_failure_routes_to_implement_and_counts_attempts(workflow, policy):

@@ -775,8 +775,8 @@ loop until the current state is terminal:
 |-------|--------|-----------|
 | `jira-ingest` | jira-reader | supervisor (criteria `jira-ingest`) |
 | `plan` | planner | structural validator, then supervisor (criteria `planning`) |
-| `implement` | coder | the coder's own completion, with three failure checks. A backend error (Aider timeout or non-zero exit) counts as a failure against `implement`'s `max_attempts` (2). So does a task that changes a file outside its allowed set (the change is reverted), and a task whose file is unchanged after its edit. Each check runs after the task, so the attempt stops early. No supervisor. Otherwise the next state, `run-tests`, judges the result |
-| `run-tests` | none (`kind: verification`) | **deterministic** test + lint evidence. Pass → `review`. Fail → `implement` with the test output as feedback |
+| `implement` | coder | the coder's own completion, with three failure checks. A backend error (Aider timeout or non-zero exit) counts as a failure against `implement`'s `max_attempts` (4). So does a task that changes a file outside its allowed set (the change is reverted), and a task whose file is unchanged after its edit. Each check runs after the task, so the attempt stops early. No supervisor. Otherwise the next state, `run-tests`, judges the result |
+| `run-tests` | none (`kind: verification`) | **deterministic** evidence. First, the optional `lint_fix_command` (default `uv run ruff check --fix`) runs with the plan's changed files as arguments, so it only touches those files. Then the test and lint commands run. Pass → `review`. Fail → `implement` with the test output as feedback |
 | `review` | reviewer | the reviewer's trailing `review-verdict` block: `approve` → success, `escalate` → escalate, `changes_requested` → failure to `implement` with the reviewer's reason as feedback. A missing or malformed block is `invalid_output` and re-runs `review` |
 | `submit` | pr-author | action execution (`git.commit`, `git.push`, `pr.create`/`pr.update`) driven by a trailing `pr-actions` block |
 
@@ -807,7 +807,9 @@ outside `plan.yaml`) is the last check on scope.
 When `implement` is re-entered with failure feedback, the runtime chooses a mode from the feedback's `source`:
 
 - `verification` (failing tests or lint from `run-tests`): one `fix_repository()` call over all plan-authorized files,
-  using Aider's test-repair prompt and `--auto-test`.
+  using Aider's test-repair prompt and `--auto-test`. The test and lint result files are read-only context for the repair.
+  If the repair changes nothing, the attempt fails as `verification` again, with the original test and lint details kept.
+  Tasks are not re-run, so a completed task is never flagged as a no-op.
 - `review` (`changes_requested`): the normal per-task edit path over all tasks. The coder prompt tells the coder to
   address the findings in the feedback file and in `review.md`.
 - `llm-error`, `empty-diff`, or `out-of-scope-edit` (task-level failures): the retry resumes at the failed task. Tasks
@@ -815,7 +817,8 @@ When `implement` is re-entered with failure feedback, the runtime chooses a mode
   it run as normal. Re-running an earlier task would make it see its own finished work and report no change.
 
 The feedback file, `implement-feedback.json`, is part of the read-only context in both modes. `run-tests` verifies the
-result again. The feedback file is cleared when `implement` succeeds.
+result again. The feedback file is cleared when `implement` succeeds. When the run escalates, the feedback stays with the
+failing state, so the file describes the latest failure and its `resume_from` task.
 
 ## Implement ⇄ run-tests ⇄ review loop
 
@@ -829,7 +832,7 @@ The loop is declared in the workflow DSL, not in code. Each failing edge goes ba
   (`budgets: {implement-cycle: 5}`). The fifth such failure escalates to `human-review`. The budget is cumulative
   for the run and is not reset on forward progress.
 - `review`'s `max_attempts: 3` bounds malformed `review.md` (`invalid_output`, a self-loop). It is separate from the shared budget.
-- `implement` (`max_attempts: 2`) bounds its own failures: backend errors (`llm-error`), out-of-scope edits (`out-of-scope-edit`), and tasks whose file is unchanged after the edit (`empty-diff`). See "Counting retry attempts".
+- `implement` (`max_attempts: 4`) bounds its own failures: backend errors (`llm-error`), out-of-scope edits (`out-of-scope-edit`), and tasks whose file is unchanged after the edit (`empty-diff`). See "Counting retry attempts".
 - The backend's `fix_repository()` may run its own in-session test loop. Aider uses `--auto-test`.
   The runtime still re-verifies after each fix, so a backend cannot mark a run as passing on its own.
 
@@ -863,8 +866,8 @@ The canonical `feature` workflow counts as follows:
 | Failure | Counter | Limit |
 |---------|---------|-------|
 | `jira-ingest` invalid output (self-loop) | `jira-ingest` | 2 |
-| `plan` invalid output (self-loop) | `plan` | 2 |
-| `implement` backend error (`llm-error`), out-of-scope edit (`out-of-scope-edit`), or unchanged task file (`empty-diff`) | `implement` | 2 |
+| `plan` invalid output (self-loop) | `plan` | 3 |
+| `implement` backend error (`llm-error`), out-of-scope edit (`out-of-scope-edit`), or unchanged task file (`empty-diff`) | `implement` | 4 |
 | `run-tests` verification failed (`→ implement`) | `implement-cycle` | 5, shared |
 | `review` `changes_requested` (`→ implement`) | `implement-cycle` | 5, shared |
 | `review` malformed `review.md` (`invalid_output`, self-loop) | `review` | 3 |
@@ -946,6 +949,7 @@ execution:                     # Aider repo-map budget per mode
   repository: {map_tokens: 5120}
 verification:
   test_command: make test      # edit to match the target project
+  lint_fix_command: uv run ruff check --fix   # optional autofix; the plan's files are appended as arguments; empty disables
   lint_command: make lint
 ```
 
@@ -1204,8 +1208,7 @@ Verified against the repository state at the time of writing; reconcile before r
 | `copilot` platform | `CopilotAssembler` reads models per agent via `registry.platform_models("copilot")` (same as `runtime.py`); `jira2pr init --platform copilot` works. The generated shell has not been exercised in a live Copilot session |
 | `bugfix` and `scope-creep` workflows | Files are empty (the loader skips them with a warning), yet the Copilot assembler renders a prompt per workflow and the README advertises `/bugfix` |
 | `--platform aider` | Rejected; Aider is the runtime platform's backend. `README.md` and `platform-extras/runtime/README.md.tpl` now use `--platform runtime`. `config/aider.yaml` references in the runtime template are still stale |
-| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`). 235 pass. `test_model_baked_into_frontmatter` checks that every agent's frontmatter model matches `platform-extras/copilot/models.yaml`. Models are per-platform, so no test pins a model name. `MockBackend` implements all `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests || Implement ⇄ run-tests ⇄ review loop | Implemented in the runtime engine (`kind: verification`, shared `budgets:` in the DSL, feedback addressed to the target state). `fix_repository()` (Aider's `--auto-test` loop) runs only for verification feedback. Review findings and attempt failures use the coder edit path. Copilot: the protocol instructs the agent to run the test and lint commands for verification states, but this path has not been exercised in a live session || OpenCode | Not supported; quarantined in `_opencode_quarantined.py` || `docs/` vs project instructions | The root project instructions mention `scripts/` and `examples-autogenerated/`; the current layout uses `engine/` and no checked-in generated examples |
-| `produce_structured()` | Used by the supervisor invoker only; `plan.yaml` is produced through `produce_artifact()` and validated structurally |
+| Test suite | `uv run --with pytest python3 -m pytest tests -q` (from `engine/`). 239 pass. `test_model_baked_into_frontmatter` checks that every agent's frontmatter model matches `platform-extras/copilot/models.yaml`. Models are per-platform, so no test pins a model name. `MockBackend` implements all `LLMBackend` modes by output file name, and executor tests patch `subprocess.run` (see `tests/test_executor_mock.py`). `tests/test_runtime_assembler.py` replaced the legacy Aider assembler tests || Implement ⇄ run-tests ⇄ review loop | Implemented in the runtime engine (`kind: verification`, shared `budgets:` in the DSL, feedback addressed to the target state). `fix_repository()` (Aider's `--auto-test` loop) runs only for verification feedback. Review findings and attempt failures use the coder edit path. Copilot: the protocol instructs the agent to run the test and lint commands for verification states, but this path has not been exercised in a live session || OpenCode | Not supported; quarantined in `_opencode_quarantined.py` || `docs/` vs project instructions | The root project instructions mention `scripts/` and `examples-autogenerated/`; the current layout uses `engine/` and no checked-in generated examples || `produce_structured()` | Used by the supervisor invoker only; `plan.yaml` is produced through `produce_artifact()` and validated structurally |
 | Context strategy | Implemented in `runtime/workflow/context_strategy.py`; repo map via `git ls-files` + tree-sitter for non-editing workers, Aider's repo map for editing workers |
 
 Suggested next steps, in order: (1) refresh the stale README/templates for the runtime platform;

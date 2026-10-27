@@ -111,9 +111,9 @@ def test_retry_then_escalation(project, fake_subprocess):
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-2")
     assert state.status == "escalated"
     assert state.current_state == "human-review"
-    assert state.retry_counts == {"plan": 2}
+    assert state.retry_counts == {"plan": 3}
     assert state.escalations[0]["state"] == "plan"
-    assert [h["outcome"] for h in state.history] == ["success", "failure", "failure"]
+    assert [h["outcome"] for h in state.history] == ["success", "failure", "failure", "failure"]
 
 
 def test_global_iteration_cap_forces_escalation(project, fake_subprocess):
@@ -257,16 +257,22 @@ class FlakyBackend(MockBackend):
 
 
 def test_empty_diff_counts_as_implement_failure_and_escalates(project, fake_subprocess):
-    # implement allows 2 attempts. Both produce no change, so it escalates.
+    # implement allows 4 attempts (canonical max_attempts). All produce no change, so it escalates.
     backend = NoEditBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-11")
     assert state.status == "escalated"
     assert state.current_state == "human-review"
-    assert state.retry_counts == {"implement": 2}
+    assert state.retry_counts == {"implement": 4}
     implement_history = [h for h in state.history if h["state"] == "implement"]
-    assert [h["outcome"] for h in implement_history] == ["failure", "failure"]
+    assert [h["outcome"] for h in implement_history] == ["failure"] * 4
     assert all("no changes" in h["notes"] for h in implement_history)
     assert "run-tests" not in [h["state"] for h in state.history]
+    # After escalation, the feedback file still describes the latest failure.
+    feedback = json.loads((project.context_dir("PROJ-11") / "implement-feedback.json").read_text())
+    assert feedback["attempt"] == 4
+    assert feedback["source"] == "empty-diff"
+    assert feedback["resume_from"] == "T1"
+    assert "made no changes" in feedback["reason"]
 
 
 def test_backend_error_counts_as_implement_failure_then_recovers(project, fake_subprocess):
@@ -335,3 +341,27 @@ def test_backend_error_resumes_at_failed_task(project, fake_subprocess):
     assert backend.edit_calls == 3
     edited = [c["files"][0] for c in backend.calls if c["op"] == "edit_repository"]
     assert len(edited) == 2 and edited[0] != edited[1]
+
+
+class NoFixBackend(MockBackend):
+    """Accepts repair calls but never changes a file."""
+
+    def fix_repository(self, **kwargs):
+        self.calls.append({"op": "fix_repository", "files": [str(p) for p in kwargs["edit_files"]]})
+
+
+def test_failed_repair_keeps_verification_feedback(project, fake_subprocess):
+    # Tests fail on every run, and repair never changes anything. Tasks run once,
+    # then every retry stays a repair so the verification details are kept.
+    fake_subprocess.test_exit_codes = [1] * 10
+    backend = NoFixBackend()
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-15")
+    assert state.status == "escalated"
+    assert state.retry_counts["implement"] == 4
+    ops = [c["op"] for c in backend.calls]
+    assert ops.count("edit_repository") == 2
+    assert ops.count("fix_repository") == 4
+    feedback = json.loads((project.context_dir("PROJ-15") / "implement-feedback.json").read_text())
+    assert feedback["source"] == "verification"
+    assert "The repair made no changes." in feedback["reason"]
+    assert "tests=FAIL" in feedback["reason"]

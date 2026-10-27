@@ -46,7 +46,7 @@ states:
     validation:
       success_criteria: planning
     retry:
-      max_attempts: 2
+      max_attempts: 3
     transitions:
       success: implement
       failure: plan
@@ -64,7 +64,7 @@ states:
     validation:
       supervisor: false
     retry:
-      max_attempts: 2
+      max_attempts: 4
     transitions:
       success: run-tests
       failure: implement

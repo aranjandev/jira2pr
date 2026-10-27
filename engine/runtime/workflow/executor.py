@@ -138,6 +138,11 @@ class WorkflowExecutor:
             "",
         )
 
+        lint_fix_command = verification.get(
+            "lint_fix_command",
+            "",
+        )
+
         repo_root = (
             self._project.core_dir.parent.resolve()
         )
@@ -166,6 +171,7 @@ class WorkflowExecutor:
             changed_files=changed_files,
             test_command=test_command,
             lint_command=lint_command,
+            lint_fix_command=lint_fix_command,
         )
 
         logger.info(
@@ -678,24 +684,27 @@ class WorkflowExecutor:
                 #
                 # Feedback is addressed to the transition target, so a
                 # failure routed to implement (from run-tests or review)
-                # is read by the coder on its next attempt.
+                # is read by the coder on its next attempt. When the run
+                # escalates to a terminal state, the feedback stays with the
+                # failing state so the file always describes the latest failure.
                 # ------------------------------------------------------
 
-                if (
-                    outcome in ("failure", "invalid_output")
-                    and feedback is not None
-                    and not workflow.states[transition.next_state].terminal
-                ):
+                if outcome in ("failure", "invalid_output") and feedback is not None:
+                    feedback_state = (
+                        current.name
+                        if workflow.states[transition.next_state].terminal
+                        else transition.next_state
+                    )
                     feedback_file = write_feedback(
                         context_dir=context_dir,
-                        state_name=transition.next_state,
+                        state_name=feedback_state,
                         attempt=attempt,
                         feedback=feedback,
                     )
 
                     logger.info(
                         "Saved retry feedback for state '%s': %s",
-                        transition.next_state,
+                        feedback_state,
                         feedback_file,
                     )
 

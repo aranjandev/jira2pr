@@ -19,6 +19,7 @@ LLM context windows.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -123,6 +124,38 @@ def planned_changed_files(
 
     return changed_files
 
+def apply_lint_autofix(
+    *,
+    command: str,
+    changed_files: list[Path],
+    repo_root: Path,
+    timeout: int = DEFAULT_COMMAND_TIMEOUT_SECONDS,
+) -> None:
+    """Run an auto-fixer (for example ``uv run ruff check --fix``) before lint is checked.
+
+    The planned files are appended as arguments, so the fixer only sees the
+    plan's files. Issues it cannot fix remain, and the lint check reports them.
+    """
+    if not command.strip() or not changed_files:
+        return
+
+    files = " ".join(shlex.quote(str(path)) for path in changed_files)
+    result = _run_verification_command(
+        command=f"{command} {files}",
+        repo_root=repo_root,
+        timeout=timeout,
+        label="lint autofix",
+    )
+
+    if result.exit_code == 127:
+        logger.warning(
+            "Lint autofix command not found: %s. Skipping autofix; lint will still run.",
+            command,
+        )
+    else:
+        logger.info("Lint autofix finished with exit code %d", result.exit_code)
+
+
 def collect_implementation_evidence(
     *,
     project: RuntimeProject,
@@ -130,6 +163,7 @@ def collect_implementation_evidence(
     changed_files: list[Path],
     test_command: str,
     lint_command: str,
+    lint_fix_command: str = "",
     timeout: int = DEFAULT_COMMAND_TIMEOUT_SECONDS,
 ) -> ImplementationEvidence:
     """Collect diff, test, and lint evidence for an implementation.
@@ -165,6 +199,14 @@ def collect_implementation_evidence(
     normalized_changed_files = _normalize_repository_files(
         repo_root=repo_root,
         files=changed_files,
+    )
+
+    # Deterministic autofix first, so the diff, tests, and lint all see the fixed code.
+    apply_lint_autofix(
+        command=lint_fix_command,
+        changed_files=normalized_changed_files,
+        repo_root=repo_root,
+        timeout=timeout,
     )
 
     _collect_git_diff(

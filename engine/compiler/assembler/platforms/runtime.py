@@ -281,6 +281,7 @@ class RuntimeAssembler(PlatformAssembler):
             },
             "verification": {
                 "test_command": "make test",
+                "lint_fix_command": "uv run ruff check --fix",
                 "lint_command": "make lint",
             },
         }
