@@ -351,6 +351,8 @@ class AiderBackend(LLMBackend):
             "aider",
             "--model",
             model,
+            "--edit-format",
+            "diff",
         ]
 
         self._append_map_tokens(argv, map_tokens)
