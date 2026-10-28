@@ -20,7 +20,7 @@ Use repository context to identify the actual files that must change.
 
 ### Repository Paths
 
-When `repository-map.txt` is provided, treat its `Repository Files` section as the authoritative inventory of existing tracked repository paths.
+When `repository-map.txt` is provided, treat its `Repository Files` section as the authoritative inventory of existing non-hidden tracked repository paths. Dot-prefixed folders are omitted from that section except `.github/`; do not infer that an unlisted hidden path does not exist.
 
 For `edit_mode: modify` or `edit_mode: delete`, use only paths listed in `Repository Files`.
 

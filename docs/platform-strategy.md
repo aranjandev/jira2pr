@@ -507,7 +507,7 @@ runtime/workflow/
 ├── executor.py             # WorkflowExecutor: the state-machine loop
 ├── feedback.py             # WorkerFeedback passed to the next attempt
 ├── loader.py               # RuntimeProject: loads .jira2pr/ into memory
-├── repository_context.py   # git ls-files + tree-sitter repository map
+├── repository_context.py   # git ls-files + tree-sitter/ast/config repository map
 ├── review.py               # parses the reviewer's `review-verdict` block
 ├── state_manager.py        # atomic read/write of state/<TICKET>.yaml
 ├── supervisor_invoker.py   # supervisor evaluation → success|failure|escalate
@@ -1103,7 +1103,7 @@ state/<TICKET>.yaml                          # WorkflowState (runtime-only write
 state/archive/<TICKET>.yaml                  # archived state
 artifacts/<TICKET>/requirements.md|plan.yaml|review.md|pr-description.md
 context/<TICKET>/jira-read context, git-status context
-context/<TICKET>/repository map              # git ls-files + tree-sitter (non-editing workers)
+context/<TICKET>/repository map              # git ls-files + tree-sitter/ast/config (non-editing workers)
 context/<TICKET>/implementation-diff.patch   # evidence: diff of plan-authorized files only
 context/<TICKET>/test-results.txt            # evidence: includes `exit_code:`
 context/<TICKET>/lint-results.txt

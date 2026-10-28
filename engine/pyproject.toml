@@ -13,8 +13,8 @@ dependencies = [
     "aider>=0.2.6",
     "litellm>=1.103.2",
     "mcp",
+    "tree-sitter-language-pack>=1.22.1",
     "tree-sitter>=0.26.0",
-    "tree-sitter-python>=0.25.0",
 ]
 
 [project.scripts]

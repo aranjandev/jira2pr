@@ -7,32 +7,53 @@ implementation.
 The default provider uses:
 
 - ``git ls-files`` for the authoritative tracked-file inventory
-- Tree-sitter for source-code structure extraction
+- Tree-sitter (``tree-sitter-language-pack``) for Python structure extraction
+- ``ast`` for Python docstrings, signatures, and module-level constants
+- PyYAML, ``json``, and ``tomllib`` for top-level keys of config files
 
 The public provider abstraction is intentionally generic so another
 implementation, such as an MCP repository mapper, can be introduced later
 without changing ContextStrategy or worker invocation.
 
-The generated repository map always includes every tracked file path.
-Supported source files additionally include structural information such as
-classes, functions, methods, and imports.
+The generated repository map includes every non-hidden tracked file path.
+Dot-prefixed folders are omitted, except ``.github/``, which holds workflow
+configuration. Supported source files additionally include structural
+information such as classes, functions, methods, imports, and docstrings.
 """
 
 from __future__ import annotations
 
+import ast
+import json
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from runtime.logging_config import get_logger
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: TOML summaries are skipped.
+    tomllib = None
 
 logger = get_logger("workflow.repository_context")
 
 DEFAULT_GIT_TIMEOUT_SECONDS = 30
 DEFAULT_OUTPUT_FILENAME = "repository-map.txt"
+DEFAULT_MAX_STRUCTURE_CHARS = 60_000
+MAX_CONFIG_FILE_BYTES = 256 * 1024
+MAX_CONFIG_KEYS = 50
+MAX_DOCSTRING_CHARS = 120
+MAX_SIGNATURE_CHARS = 160
+ALLOWED_HIDDEN_DIRS = frozenset({".github"})
+CONFIG_SUFFIXES = frozenset({".yaml", ".yml", ".json"}) | (
+    frozenset({".toml"}) if tomllib is not None else frozenset()
+)
 
 
 class RepositoryContextError(RuntimeError):
@@ -92,8 +113,10 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
     All tracked repository paths are discovered through ``git ls-files`` and
     written into the map.
 
-    Python files are additionally parsed with Tree-sitter to expose useful
-    structural information.
+    Python files are parsed with Tree-sitter for structure and with ``ast``
+    for docstrings and signatures. Config files contribute their top-level
+    keys. Structural sections share ``max_structure_chars``; the file
+    inventory is never truncated.
 
     Other languages can be added later by registering additional language
     parsers without changing the public provider interface.
@@ -103,8 +126,10 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
         self,
         *,
         git_timeout: int = DEFAULT_GIT_TIMEOUT_SECONDS,
+        max_structure_chars: int = DEFAULT_MAX_STRUCTURE_CHARS,
     ) -> None:
         self._git_timeout = git_timeout
+        self._max_structure_chars = max_structure_chars
 
     @property
     def name(self) -> str:
@@ -123,9 +148,11 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
                 f"Repository root does not exist: {repo_root}"
             )
 
-        tracked_files = self._git_ls_files(
-            repo_root
-        )
+        tracked_files = [
+            path
+            for path in self._git_ls_files(repo_root)
+            if _is_mapped_path(path)
+        ]
 
         if not tracked_files:
             raise RepositoryContextError(
@@ -280,13 +307,15 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
                 f"tracked_files: {file_count}",
                 "",
                 "The Repository Files section below is the authoritative",
-                "inventory of Git-tracked paths for this repository snapshot.",
+                "inventory of non-hidden Git-tracked paths for this repository",
+                "snapshot. Dot-prefixed folders are omitted, except .github/.",
                 "",
                 "When selecting an existing file, use a path listed in that",
                 "section. Do not infer that an unlisted path already exists.",
                 "",
-                "The Source Structure section summarizes supported source",
-                "files and is intended to help identify where changes belong.",
+                "The Source Structure and Config Structure sections summarize",
+                "supported source and configuration files and are intended to",
+                "help identify where changes belong.",
             ]
         )
 
@@ -316,7 +345,7 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
         repo_root: Path,
         tracked_files: Sequence[Path],
     ) -> str:
-        """Render structural summaries for supported source files."""
+        """Render structural summaries for supported files within budget."""
 
         python_files = [
             path
@@ -324,16 +353,89 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
             if path.suffix == ".py"
         ]
 
-        if not python_files:
-            return ""
-
-        parser = _create_python_parser()
-
-        sections = [
-            "## Source Structure",
+        config_files = [
+            path
+            for path in tracked_files
+            if path.suffix.lower() in CONFIG_SUFFIXES
         ]
 
-        parsed_count = 0
+        if not python_files and not config_files:
+            return ""
+
+        parser = _create_python_parser() if python_files else None
+
+        python_blocks = self._python_blocks(
+            repo_root=repo_root,
+            python_files=python_files,
+            parser=parser,
+        )
+
+        config_blocks = self._config_blocks(
+            repo_root=repo_root,
+            config_files=config_files,
+        )
+
+        python_kept, used = _fit_blocks(
+            python_blocks,
+            self._max_structure_chars,
+        )
+
+        config_kept, _ = _fit_blocks(
+            config_blocks,
+            self._max_structure_chars - used,
+        )
+
+        omitted = (
+            len(python_blocks)
+            - len(python_kept)
+            + len(config_blocks)
+            - len(config_kept)
+        )
+
+        logger.debug(
+            "Structure summaries: python=%d/%d config=%d/%d omitted=%d",
+            len(python_kept),
+            len(python_blocks),
+            len(config_kept),
+            len(config_blocks),
+            omitted,
+        )
+
+        sections: list[str] = []
+
+        if python_kept:
+            sections.append(
+                "\n\n".join(
+                    ["## Source Structure", *python_kept]
+                )
+            )
+
+        if config_kept:
+            sections.append(
+                "\n\n".join(
+                    ["## Config Structure", *config_kept]
+                )
+            )
+
+        if omitted:
+            sections.append(
+                f"{omitted} file summar"
+                f"{'y' if omitted == 1 else 'ies'} omitted to stay within "
+                f"the {self._max_structure_chars} character structure budget."
+            )
+
+        return "\n\n".join(sections)
+
+    def _python_blocks(
+        self,
+        *,
+        repo_root: Path,
+        python_files: Sequence[Path],
+        parser,
+    ) -> list[str]:
+        """Render one structural block per parseable Python file."""
+
+        blocks: list[str] = []
 
         for relative_path in python_files:
             absolute_path = (
@@ -369,27 +471,52 @@ class TreeSitterRepositoryContextProvider(RepositoryContextProvider):
             if summary is None:
                 continue
 
-            parsed_count += 1
-
-            sections.append(
+            blocks.append(
                 _render_python_summary(
                     relative_path=relative_path,
                     summary=summary,
                 )
             )
 
-        logger.debug(
-            "Tree-sitter summarized %d/%d Python file(s)",
-            parsed_count,
-            len(python_files),
-        )
+        return blocks
 
-        if parsed_count == 0:
-            return ""
+    def _config_blocks(
+        self,
+        *,
+        repo_root: Path,
+        config_files: Sequence[Path],
+    ) -> list[str]:
+        """Render one block per config file with parseable top-level keys."""
 
-        return "\n\n".join(
-            sections
-        )
+        blocks: list[str] = []
+
+        for relative_path in config_files:
+            absolute_path = repo_root / relative_path
+
+            if not absolute_path.is_file():
+                continue
+
+            keys = _summarize_config_file(absolute_path)
+
+            if not keys:
+                continue
+
+            blocks.append(
+                _render_config_summary(
+                    relative_path=relative_path,
+                    keys=keys,
+                )
+            )
+
+        return blocks
+
+
+@dataclass(frozen=True)
+class PythonSymbolDetail:
+    """Signature and docstring summary for one Python symbol."""
+
+    signature: str | None
+    docstring: str | None
 
 
 @dataclass(frozen=True)
@@ -400,37 +527,32 @@ class PythonFileSummary:
     functions: tuple[str, ...]
     methods: tuple[str, ...]
     imports: tuple[str, ...]
+    module_docstring: str | None = None
+    constants: tuple[str, ...] = ()
+    details: Mapping[str, PythonSymbolDetail] = field(
+        default_factory=dict
+    )
 
 
 def _create_python_parser():
     """Create a Tree-sitter parser configured for Python."""
 
     try:
-        import tree_sitter_python
-        from tree_sitter import Language, Parser
+        from tree_sitter_language_pack import get_parser
 
     except ImportError as exc:
         raise RepositoryContextError(
-            "Tree-sitter Python support is not installed. "
-            "Install it with: "
-            "uv add tree-sitter tree-sitter-python"
+            "Tree-sitter language pack is not installed. "
+            "Install it with: uv add tree-sitter-language-pack"
         ) from exc
 
     try:
-        language = Language(
-            tree_sitter_python.language()
-        )
-
-        parser = Parser(
-            language
-        )
+        return get_parser("python")
 
     except Exception as exc:
         raise RepositoryContextError(
             f"Unable to initialize Tree-sitter Python parser: {exc}"
         ) from exc
-
-    return parser
 
 
 def _summarize_python_file(
@@ -466,15 +588,24 @@ def _summarize_python_file(
         inside_class=False,
     )
 
+    module_docstring, constants, details = _extract_python_ast_details(
+        source
+    ) or (None, (), {})
+
     if not (
         classes
         or functions
         or methods
         or imports
+        or constants
+        or module_docstring
     ):
         return None
 
     return PythonFileSummary(
+        module_docstring=module_docstring,
+        constants=constants,
+        details=details,
         classes=tuple(
             _unique_preserving_order(
                 classes
@@ -636,6 +767,244 @@ def _compact_whitespace(
     )
 
 
+def _is_mapped_path(path: Path) -> bool:
+    """Return False when a path lives under a hidden (dot-prefixed) folder."""
+
+    return not any(
+        part.startswith(".") and part not in ALLOWED_HIDDEN_DIRS
+        for part in path.parts[:-1]
+    )
+
+
+def _fit_blocks(
+    blocks: Sequence[str],
+    budget: int,
+) -> tuple[list[str], int]:
+    """Keep leading blocks that fit within budget.
+
+    Returns the kept blocks and the number of characters they consume.
+    """
+
+    kept: list[str] = []
+    used = 0
+
+    for block in blocks:
+        cost = len(block) + 2
+
+        if used + cost > budget:
+            break
+
+        kept.append(block)
+        used += cost
+
+    return kept, used
+
+
+def _summarize_config_file(path: Path) -> tuple[str, ...] | None:
+    """Return top-level keys of a YAML, JSON, or TOML mapping file."""
+
+    try:
+        if path.stat().st_size > MAX_CONFIG_FILE_BYTES:
+            return None
+
+        text = path.read_text(encoding="utf-8")
+
+    except (OSError, UnicodeError) as exc:
+        logger.warning("Unable to read config file %s: %s", path, exc)
+        return None
+
+    suffix = path.suffix.lower()
+
+    try:
+        if suffix == ".json":
+            data = json.loads(text)
+
+        elif suffix == ".toml":
+            data = tomllib.loads(text)
+
+        else:
+            data = next(yaml.safe_load_all(text), None)
+
+    except (ValueError, yaml.YAMLError) as exc:
+        logger.warning("Unable to parse config file %s: %s", path, exc)
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    return tuple(
+        str(key)
+        for key in list(data)[:MAX_CONFIG_KEYS]
+    )
+
+
+def _render_config_summary(
+    *,
+    relative_path: Path,
+    keys: Sequence[str],
+) -> str:
+    """Render top-level keys for one config file."""
+
+    return "\n".join(
+        [
+            f"### {relative_path.as_posix()}",
+            f"keys: {', '.join(keys)}",
+        ]
+    )
+
+
+def _extract_python_ast_details(
+    source: bytes,
+) -> tuple[str | None, tuple[str, ...], dict[str, PythonSymbolDetail]] | None:
+    """Collect docstrings, signatures, and constants using the ast module.
+
+    Returns None when the source cannot be parsed by the running Python
+    version, so callers fall back to the Tree-sitter-only summary.
+    """
+
+    try:
+        module = ast.parse(source)
+
+    except (SyntaxError, ValueError) as exc:
+        logger.debug("ast could not parse Python source: %s", exc)
+        return None
+
+    constants: list[str] = []
+
+    for node in module.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+
+        else:
+            continue
+
+        for target in targets:
+            if (
+                isinstance(target, ast.Name)
+                and _is_constant_name(target.id)
+                and target.id not in constants
+            ):
+                constants.append(target.id)
+
+    details: dict[str, PythonSymbolDetail] = {}
+    _collect_python_definitions(module.body, details)
+
+    return (
+        _first_line(ast.get_docstring(module)),
+        tuple(constants),
+        details,
+    )
+
+
+def _collect_python_definitions(
+    nodes: Sequence[ast.AST],
+    details: dict[str, PythonSymbolDetail],
+) -> None:
+    """Record the first signature and docstring seen for each symbol name."""
+
+    for node in nodes:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            details.setdefault(
+                node.name,
+                PythonSymbolDetail(
+                    signature=_format_signature(node),
+                    docstring=_first_line(ast.get_docstring(node)),
+                ),
+            )
+            # Nested functions are not summarized; skip their bodies.
+            continue
+
+        if isinstance(node, ast.ClassDef):
+            details.setdefault(
+                node.name,
+                PythonSymbolDetail(
+                    signature=None,
+                    docstring=_first_line(ast.get_docstring(node)),
+                ),
+            )
+            _collect_python_definitions(node.body, details)
+            continue
+
+        _collect_python_definitions(
+            [
+                child
+                for child in ast.iter_child_nodes(node)
+                if isinstance(child, (ast.stmt, ast.excepthandler))
+            ],
+            details,
+        )
+
+
+def _format_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Return the parameter list and return annotation of a function."""
+
+    arguments = ast.unparse(node.args)
+    returns = (
+        f" -> {ast.unparse(node.returns)}"
+        if node.returns is not None
+        else ""
+    )
+
+    return _truncate(f"({arguments}){returns}", MAX_SIGNATURE_CHARS)
+
+
+def _first_line(docstring: str | None) -> str | None:
+    """Return the first non-empty line of a docstring, truncated."""
+
+    if not docstring:
+        return None
+
+    for line in docstring.splitlines():
+        stripped = line.strip()
+
+        if stripped:
+            return _truncate(stripped, MAX_DOCSTRING_CHARS)
+
+    return None
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Shorten text to limit characters, marking truncation with '...'."""
+
+    if len(text) <= limit:
+        return text
+
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _is_constant_name(name: str) -> bool:
+    """Return True for UPPER_CASE names such as MAX_RETRIES."""
+
+    return name == name.upper() and any(char.isalpha() for char in name)
+
+
+def _render_symbol_lines(
+    names: Sequence[str],
+    details: Mapping[str, PythonSymbolDetail],
+) -> list[str]:
+    """Render symbol names with optional signature and docstring."""
+
+    lines: list[str] = []
+
+    for name in names:
+        text = f"  - {name}"
+        detail = details.get(name)
+
+        if detail is not None:
+            if detail.signature:
+                text += detail.signature
+
+            if detail.docstring:
+                text += f": {detail.docstring}"
+
+        lines.append(text)
+
+    return lines
+
+
 def _unique_preserving_order(
     values: Sequence[str],
 ) -> list[str]:
@@ -670,6 +1039,22 @@ def _render_python_summary(
         f"### {relative_path.as_posix()}",
     ]
 
+    if summary.module_docstring:
+        lines.append(f"docstring: {summary.module_docstring}")
+
+    if summary.constants:
+        lines.extend(
+            [
+                "",
+                "constants:",
+            ]
+        )
+
+        lines.extend(
+            f"  - {name}"
+            for name in summary.constants
+        )
+
     if summary.classes:
         lines.extend(
             [
@@ -679,8 +1064,7 @@ def _render_python_summary(
         )
 
         lines.extend(
-            f"  - {name}"
-            for name in summary.classes
+            _render_symbol_lines(summary.classes, summary.details)
         )
 
     if summary.functions:
@@ -692,8 +1076,7 @@ def _render_python_summary(
         )
 
         lines.extend(
-            f"  - {name}"
-            for name in summary.functions
+            _render_symbol_lines(summary.functions, summary.details)
         )
 
     if summary.methods:
@@ -705,8 +1088,7 @@ def _render_python_summary(
         )
 
         lines.extend(
-            f"  - {name}"
-            for name in summary.methods
+            _render_symbol_lines(summary.methods, summary.details)
         )
 
     if summary.imports:
