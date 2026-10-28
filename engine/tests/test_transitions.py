@@ -77,6 +77,16 @@ def test_run_tests_and_review_share_implement_cycle_budget(workflow, policy):
     assert result.escalated_due_to_retry_exhaustion
 
 
+def test_per_task_counter_name_is_independent(workflow, policy):
+    # implement's own failures count under the per-task name, not the state name.
+    result = transitions.next_state(
+        workflow, "implement", "failure", {"implement:T1": 3}, policy, counter_name="implement:T4"
+    )
+    assert result.next_state == "implement"
+    assert result.retry_counts == {"implement:T1": 3, "implement:T4": 1}
+    assert not result.escalated_due_to_retry_exhaustion
+
+
 def test_review_invalid_output_retries_review_not_implement(workflow, policy):
     # A malformed review.md is the reviewer's problem, not the coder's.
     result = transitions.next_state(workflow, "review", "invalid_output", {}, policy)

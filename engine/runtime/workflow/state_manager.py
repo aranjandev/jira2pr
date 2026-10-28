@@ -59,6 +59,8 @@ class WorkflowState:
     escalations: list[dict] = field(default_factory=list)
     history: list[dict] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
+    # Review findings still needing a change: {state, file, instruction, status}.
+    open_findings: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -77,6 +79,7 @@ class WorkflowState:
             escalations=list(data.get("escalations") or []),
             history=list(data.get("history") or []),
             metadata=dict(data.get("metadata") or {}),
+            open_findings=list(data.get("open_findings") or []),
         )
 
     def record_history(self, state: str, attempt: int, outcome: str, notes: str = "") -> None:

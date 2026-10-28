@@ -48,7 +48,15 @@ from runtime.logging_config import get_logger
 from runtime.workflow.context_strategy import (
     ContextStrategy,
 )
-from runtime.workflow.feedback import WorkerOutputError, feedback_path
+from runtime.workflow.feedback import (
+    FINDING_ADDRESSED,
+    OPEN_FINDING_STATUSES,
+    WorkerOutputError,
+    feedback_path,
+    open_findings,
+    read_findings,
+    set_finding_status,
+)
 from runtime.workflow.loader import (
     RuntimeProject,
 )
@@ -613,6 +621,7 @@ def _invoke_fix_pass(
     *,
     project: RuntimeProject,
     ticket_key: str,
+    state_name: str,
     worker_slug: str,
     tasks: list[RepositoryTask],
     read_files: list[Path],
@@ -677,6 +686,15 @@ def _invoke_fix_pass(
             ),
         )
 
+    for path in edit_files:
+        set_finding_status(
+            context_dir=context_dir,
+            state_name=state_name,
+            file=path.resolve().relative_to(repo_root.resolve()).as_posix(),
+            status=FINDING_ADDRESSED,
+            only_from=OPEN_FINDING_STATUSES,
+        )
+
 
 def _write_task_context(
     project: RuntimeProject,
@@ -684,6 +702,7 @@ def _write_task_context(
     state: StateSpec,
     ticket_key: str,
     task: RepositoryTask,
+    review_findings: list[str] | None = None,
 ) -> Path:
     """Write focused read-only context for one repository-editing task."""
 
@@ -708,6 +727,8 @@ def _write_task_context(
             "verifies": list(task.verifies),
         },
     }
+    if review_findings:
+        data["review_findings"] = list(review_findings)
 
     path.write_text(
         yaml.safe_dump(
@@ -826,6 +847,7 @@ def _invoke_repository_worker(
         _invoke_fix_pass(
             project=project,
             ticket_key=ticket_key,
+            state_name=state.name,
             worker_slug=worker_slug,
             tasks=tasks,
             read_files=read_files,
@@ -849,7 +871,27 @@ def _invoke_repository_worker(
             resume_task,
         )
 
+    context_dir = project.context_dir(ticket_key=ticket_key)
+    all_findings = read_findings(context_dir, state.name)
+    pending_findings = open_findings(all_findings)
+    if all_findings:
+        logger.info(
+            "Review findings: %d open of %d; only tasks for open findings will run",
+            len(pending_findings),
+            len(all_findings),
+        )
+    open_files = {finding["file"] for finding in pending_findings}
+
     for task in tasks:
+        if all_findings and task.file_path not in open_files:
+            completed_tasks.add(task.id)
+            logger.info(
+                "Skipping task %s: no open review finding names %s",
+                task.id,
+                task.file_path,
+            )
+            continue
+
         if skipping:
             if task.id == resume_task:
                 skipping = False
@@ -877,6 +919,11 @@ def _invoke_repository_worker(
             state=state,
             ticket_key=ticket_key,
             task=task,
+            review_findings=[
+                finding["instruction"]
+                for finding in pending_findings
+                if finding["file"] == task.file_path
+            ],
         )
 
         task_read_files = _build_task_read_files(
@@ -958,6 +1005,13 @@ def _invoke_repository_worker(
                 resume_from=task.id,
             )
 
+        set_finding_status(
+            context_dir=context_dir,
+            state_name=state.name,
+            file=task.file_path,
+            status=FINDING_ADDRESSED,
+            only_from=OPEN_FINDING_STATUSES,
+        )
         completed_tasks.add(task.id)
 
         logger.info(

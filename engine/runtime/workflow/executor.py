@@ -28,12 +28,16 @@ from runtime.workflow.feedback import (
     WorkerFeedback,
     WorkerOutputError,
     clear_feedback,
+    open_findings_summary,
+    reopen_addressed_findings,
     write_feedback,
+    write_findings,
 )
 from runtime.workflow.loader import RuntimeProject
 from runtime.workflow.review import (
     ReviewDecisionError,
     load_review_decision,
+    planned_file_paths,
 )
 from runtime.workflow.state_manager import (
     StateManager,
@@ -276,10 +280,17 @@ class WorkflowExecutor:
 
         try:
             decision = load_review_decision(
-                review_path
+                review_path,
+                allowed_files=planned_file_paths(
+                    self._project.artifacts_dir(ticket_key) / "plan.yaml"
+                ),
             )
         except ReviewDecisionError as exc:
             reason = str(exc)
+            logger.warning(
+                "Review artifact rejected (invalid_output): %s",
+                reason,
+            )
 
             feedback = WorkerFeedback(
                 source="review-validation",
@@ -354,6 +365,7 @@ class WorkflowExecutor:
                 source="review",
                 reason=decision.reason,
                 details=("Blocking findings are in the review artifact: review.md",),
+                findings=tuple((item.file, item.instruction) for item in decision.findings),
             ),
             None,
         )
@@ -673,6 +685,11 @@ class WorkflowExecutor:
                     outcome,
                     state.retry_counts,
                     policy,
+                    counter_name=(
+                        f"{current.name}:{feedback.resume_from}"
+                        if feedback is not None and feedback.resume_from
+                        else None
+                    ),
                 )
 
                 state.retry_counts = (
@@ -707,6 +724,35 @@ class WorkflowExecutor:
                         feedback_state,
                         feedback_file,
                     )
+
+                    if feedback.findings:
+                        findings_file = write_findings(
+                            context_dir=context_dir,
+                            state_name=feedback_state,
+                            findings=[
+                                {"file": file, "instruction": instruction}
+                                for file, instruction in feedback.findings
+                            ],
+                        )
+                        logger.info(
+                            "Saved %d review finding(s) for state '%s': %s",
+                            len(feedback.findings),
+                            feedback_state,
+                            findings_file,
+                        )
+
+                if outcome == "failure" and current.kind == "verification":
+                    # Tests or lint failed, so changes already marked addressed
+                    # are no longer trusted until the coder fixes them again.
+                    reopen_addressed_findings(
+                        context_dir=context_dir,
+                        state_name=transition.next_state,
+                    )
+
+                state.open_findings = open_findings_summary(
+                    context_dir=context_dir,
+                    state_names=list(workflow.states),
+                )
 
                 # ------------------------------------------------------
                 # Runtime action capabilities

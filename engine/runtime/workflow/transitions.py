@@ -36,8 +36,13 @@ def next_state(
     outcome: str,
     retry_counts: dict[str, int],
     policy: ExecutionPolicy,
+    counter_name: str | None = None,
 ) -> TransitionResult:
     """Compute the next state name given a supervisor *outcome*.
+
+    *counter_name* names the counter for a state's own cycle failures. It
+    defaults to the state name. The runtime passes ``<state>:<task>`` so each
+    implementation task gets its own attempt budget.
 
     *outcome* is one of "success", "failure", "invalid_output", "escalate".
     "invalid_output" is a failure caused by unusable worker output. It routes to
@@ -85,7 +90,7 @@ def next_state(
         is_counted_cycle = is_self_loop or state.max_attempts is not None
         if not is_counted_cycle:
             return TransitionResult(next_state=failure_target, retry_counts=counts)
-        counter_key = current_state_name
+        counter_key = counter_name or current_state_name
         limit = state.max_attempts if state.max_attempts is not None else policy.default_max_attempts
 
     attempts_so_far = counts.get(counter_key, 0) + 1

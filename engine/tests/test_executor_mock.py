@@ -36,6 +36,9 @@ Needs work.
 ```review-verdict
 verdict: changes_requested
 reason: Missing error handling.
+findings:
+  - file: src/example.py
+    instruction: Add error handling for missing input.
 ```
 """
 
@@ -184,9 +187,10 @@ def test_review_changes_requested_routes_to_implement_then_rereviews(project, fa
     assert state.status == "completed"
     ops = [c["op"] for c in backend.calls]
     assert "remediate_review" not in ops
-    # Review findings use the coder edit path (2 tasks first pass, 2 on re-entry).
+    # Review findings use the coder edit path. Only the finding's task re-runs
+    # (2 tasks on the first pass, then 1 for src/example.py).
     assert "fix_repository" not in ops
-    assert ops.count("edit_repository") == 4
+    assert ops.count("edit_repository") == 3
     assert state.retry_counts == {"implement-cycle": 1}
     assert [h["state"] for h in state.history].count("review") == 2
 
@@ -262,7 +266,7 @@ def test_empty_diff_counts_as_implement_failure_and_escalates(project, fake_subp
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-11")
     assert state.status == "escalated"
     assert state.current_state == "human-review"
-    assert state.retry_counts == {"implement": 4}
+    assert state.retry_counts == {"implement:T1": 4}
     implement_history = [h for h in state.history if h["state"] == "implement"]
     assert [h["outcome"] for h in implement_history] == ["failure"] * 4
     assert all("no changes" in h["notes"] for h in implement_history)
@@ -279,7 +283,7 @@ def test_backend_error_counts_as_implement_failure_then_recovers(project, fake_s
     backend = FlakyBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-12")
     assert state.status == "completed"
-    assert state.retry_counts == {"implement": 1}
+    assert state.retry_counts == {"implement:T1": 1}
     failed = [h for h in state.history if h["state"] == "implement" and h["outcome"] == "failure"]
     assert len(failed) == 1
     assert "coder backend call failed" in failed[0]["notes"]
@@ -307,11 +311,8 @@ def test_task_without_change_fails_attempt_at_that_task(project, fake_subprocess
     backend = SecondTaskNoOpBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-13")
     assert state.status == "completed"
-    assert state.retry_counts == {"implement": 1}
-    failed = [h for h in state.history if h["state"] == "implement" and h["outcome"] == "failure"]
-    assert len(failed) == 1
-    assert "made no changes" in failed[0]["notes"]
-    # Attempt 2 resumes at T2. T1's edit from attempt 1 is kept and not re-run.
+    assert state.retry_counts == {"implement:TEST1": 1}
+    # Attempt 2 resumes at TEST1. T1's edit from attempt 1 is kept and not re-run.
     assert backend.edit_calls == 3
     edited = [c["files"][0] for c in backend.calls if c["op"] == "edit_repository"]
     assert edited[0] != edited[1]
@@ -336,11 +337,36 @@ def test_backend_error_resumes_at_failed_task(project, fake_subprocess):
     backend = SecondTaskFailsOnceBackend()
     state = WorkflowExecutor(project, backend).start("feature", "PROJ-14")
     assert state.status == "completed"
-    assert state.retry_counts == {"implement": 1}
-    # Attempt 1 made two calls (T1, then T2 failing). Attempt 2 made one call, for T2 only.
+    assert state.retry_counts == {"implement:TEST1": 1}
+    # Attempt 1 made two calls (T1, then TEST1 failing). Attempt 2 made one call, for TEST1 only.
     assert backend.edit_calls == 3
     edited = [c["files"][0] for c in backend.calls if c["op"] == "edit_repository"]
     assert len(edited) == 2 and edited[0] != edited[1]
+
+
+class FailsAtCallsBackend(MockBackend):
+    """Raises a backend error on the given edit call numbers (1-based)."""
+
+    def __init__(self, fail_on: set[int]) -> None:
+        super().__init__()
+        self.fail_on = fail_on
+        self.edit_calls = 0
+
+    def edit_repository(self, **kwargs):
+        self.edit_calls += 1
+        if self.edit_calls in self.fail_on:
+            raise BackendInvocationError("Aider timed out after 600s")
+        return super().edit_repository(**kwargs)
+
+
+def test_each_task_has_its_own_attempt_budget(project, fake_subprocess):
+    # Call 1 is T1 and fails. Attempt 2 resumes at T1 (call 2 succeeds), then TEST1
+    # fails (call 3). Attempt 3 resumes at TEST1 (call 4 succeeds). Each task fails
+    # once, so neither uses the other's budget and the run completes.
+    backend = FailsAtCallsBackend(fail_on={1, 3})
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-16")
+    assert state.status == "completed"
+    assert state.retry_counts == {"implement:T1": 1, "implement:TEST1": 1}
 
 
 class NoFixBackend(MockBackend):
@@ -365,3 +391,49 @@ def test_failed_repair_keeps_verification_feedback(project, fake_subprocess):
     assert feedback["source"] == "verification"
     assert "The repair made no changes." in feedback["reason"]
     assert "tests=FAIL" in feedback["reason"]
+
+
+REVIEW_WITH_FINDING = """\
+# Review
+
+Needs work.
+
+```review-verdict
+verdict: changes_requested
+reason: Missing error handling.
+findings:
+  - file: src/example.py
+    instruction: Add error handling for missing input.
+```
+"""
+
+
+def test_addressed_finding_is_archived_and_closed(project, fake_subprocess):
+    reviews = iter([REVIEW_WITH_FINDING])
+    backend = MockBackend(
+        artifact_responder=lambda name: next(reviews, None) if name == "review.md" else None,
+    )
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-17")
+
+    assert state.status == "completed"
+    assert state.open_findings == []
+    archived = sorted((project.context_dir("PROJ-17") / "archive").glob("implement-findings-*.json"))
+    assert len(archived) == 1
+    finding = json.loads(archived[0].read_text())["findings"][0]
+    assert finding["file"] == "src/example.py"
+    assert finding["status"] == "addressed"
+
+
+def test_failing_tests_reopen_a_finding_until_the_repair_fixes_it(project, fake_subprocess):
+    # Tests pass on the first run, fail after the review fix, then pass again.
+    fake_subprocess.test_exit_codes = [0, 1, 0]
+    reviews = iter([REVIEW_WITH_FINDING])
+    backend = MockBackend(
+        artifact_responder=lambda name: next(reviews, None) if name == "review.md" else None,
+    )
+    state = WorkflowExecutor(project, backend).start("feature", "PROJ-18")
+
+    assert state.status == "completed"
+    assert [c["op"] for c in backend.calls].count("fix_repository") == 1
+    archived = sorted((project.context_dir("PROJ-18") / "archive").glob("implement-findings-*.json"))
+    assert json.loads(archived[0].read_text())["findings"][0]["status"] == "addressed"

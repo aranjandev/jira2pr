@@ -154,7 +154,13 @@ Example:
 ```review-verdict
 verdict: changes_requested
 reason: "The implementation does not correctly preserve first-file-wins semantics."
+findings:
+  - file: tools/deck_board_analysis/main.py
+    instruction: "Discard worklist inputs that belong only to discarded duplicate rows."
 ```
+
+`changes_requested` requires `findings`. Each `file` must be an exact `file_path` from `plan.yaml`, and each
+`instruction` says what to change in that file.
 
 For an approved implementation:
 

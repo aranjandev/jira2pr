@@ -27,15 +27,71 @@ class ReviewDecisionError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class ReviewFinding:
+    """A blocking issue the coder must fix in one planned file."""
+
+    file: str
+    instruction: str
+
+
+@dataclass(frozen=True)
 class ReviewDecision:
     verdict: str
     reason: str
+    findings: tuple[ReviewFinding, ...] = ()
+
+
+def planned_file_paths(plan_path: Path) -> frozenset[str]:
+    """Return the file_path of every task in plan.yaml."""
+
+    data = yaml.safe_load(plan_path.read_text(encoding="utf-8")) or {}
+    return frozenset(
+        str(task["file_path"])
+        for task in data.get("tasks") or []
+        if isinstance(task, dict) and task.get("file_path")
+    )
+
+
+def _parse_findings(
+    raw: object,
+    allowed_files: frozenset[str] | None,
+) -> tuple[ReviewFinding, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ReviewDecisionError("review-verdict findings must be a list")
+
+    findings: list[ReviewFinding] = []
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ReviewDecisionError(f"finding {index} must be a mapping with file and instruction")
+
+        file = item.get("file")
+        instruction = item.get("instruction")
+        if not isinstance(file, str) or not file.strip():
+            raise ReviewDecisionError(f"finding {index} must name a non-empty file")
+        if not isinstance(instruction, str) or not instruction.strip():
+            raise ReviewDecisionError(f"finding {index} must include a non-empty instruction")
+
+        normalized = file.strip().removeprefix("./")
+        if allowed_files is not None and normalized not in allowed_files:
+            raise ReviewDecisionError(
+                f"finding {index} names {normalized!r}, which is not a file_path in plan.yaml"
+            )
+        findings.append(ReviewFinding(file=normalized, instruction=instruction.strip()))
+
+    return tuple(findings)
 
 
 def load_review_decision(
     review_path: Path,
+    allowed_files: frozenset[str] | None = None,
 ) -> ReviewDecision:
-    """Parse the trailing review-verdict block from review.md."""
+    """Parse the trailing review-verdict block from review.md.
+
+    When ``allowed_files`` is given, every finding must name one of them.
+    A ``changes_requested`` verdict must include at least one finding.
+    """
 
     if not review_path.is_file():
         raise ReviewDecisionError(
@@ -87,7 +143,14 @@ def load_review_decision(
             "review-verdict must contain a non-empty reason"
         )
 
+    findings = _parse_findings(data.get("findings"), allowed_files)
+    if verdict == "changes_requested" and not findings:
+        raise ReviewDecisionError(
+            "changes_requested must include at least one finding with file and instruction"
+        )
+
     return ReviewDecision(
         verdict=verdict,
         reason=reason.strip(),
+        findings=findings,
     )

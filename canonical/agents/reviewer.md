@@ -43,7 +43,12 @@ or:
 ```review-verdict
 verdict: changes_requested
 reason: "Brief explanation of the blocking findings."
+findings:
+  - file: path/exactly/as/listed/in/plan.yaml
+    instruction: "The specific change the coder must make in that file."
 ```
+
+For `changes_requested`, `findings` is required. Give one entry per file that needs a change. Each `file` must be the exact `file_path` of a task in `plan.yaml`, copied without changes. Each `instruction` must say what to change in that file. Do not name files that the plan does not list.
 
 or:
 
