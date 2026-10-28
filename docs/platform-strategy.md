@@ -787,8 +787,16 @@ loads `plan.yaml`, checks `dependencies`, and for each task calls `edit_reposito
 
 ```text
 read-only:  coder.md + project instructions + repo map + a small per-task context file
+            + the current files edited by the task's dependencies (task.dependencies → their file_path)
 editable:   exactly one repository file (task.file_path)
 ```
+
+Dependency files let a dependent task (for example, a test task that depends on an implementation task) read the code it
+builds on. Files that do not exist yet, and the task's own editable file, are skipped.
+
+The coder prompt (`canonical/agents/coder.md`) asks for testable code: new behavior goes in named, importable functions,
+not inline in entry points such as `main()`. A test task tests the function the earlier task defines, and names any
+missing function or file instead of guessing it.
 
 This keeps context small and edit-format compliance high for local models.
 
