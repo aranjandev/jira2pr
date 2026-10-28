@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
@@ -746,17 +747,50 @@ def _write_task_context(
     return path
 
 
+def _dependency_read_files(
+    *,
+    task: RepositoryTask,
+    tasks: Sequence[RepositoryTask],
+    repo_root: Path,
+    target_path: Path,
+) -> list[Path]:
+    """Return current files edited by a task's dependencies.
+
+    Dependent tasks (for example, tests for an earlier implementation task)
+    need to see the code they build on. Files that do not exist yet, and the
+    task's own editable target, are skipped.
+    """
+
+    dependency_ids = set(task.dependencies)
+    result: list[Path] = []
+
+    for dependency in tasks:
+        if dependency.id not in dependency_ids:
+            continue
+
+        path = (repo_root.resolve() / dependency.file_path).resolve()
+
+        if path == target_path or not path.is_file():
+            continue
+
+        result.append(path)
+
+    return result
+
+
 def _build_task_read_files(
     *,
     read_files: list[Path],
     task_context_path: Path,
+    dependency_files: Sequence[Path] = (),
 ) -> list[Path]:
     """Build focused read-only context for one repository-editing task.
 
     The full ``plan.yaml`` is removed because the runtime has already selected
     the task being executed. The small task-specific context file replaces it,
     reducing model context and discouraging the coder from implementing later
-    tasks prematurely.
+    tasks prematurely. Files edited by the task's dependencies are included so
+    the task can build on the code those dependencies produced.
     """
 
     task_read_files: list[Path] = []
@@ -767,6 +801,7 @@ def _build_task_read_files(
 
         task_read_files.append(path)
 
+    task_read_files.extend(dependency_files)
     task_read_files.append(task_context_path)
 
     # Remove duplicates while preserving order.
@@ -929,6 +964,12 @@ def _invoke_repository_worker(
         task_read_files = _build_task_read_files(
             read_files=read_files,
             task_context_path=task_context_path,
+            dependency_files=_dependency_read_files(
+                task=task,
+                tasks=tasks,
+                repo_root=repo_root,
+                target_path=target_path,
+            ),
         )
 
         logger.info(

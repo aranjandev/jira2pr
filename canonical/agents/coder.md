@@ -32,6 +32,9 @@ You may receive:
 - Reuse existing utilities and patterns.
 - Keep diffs as small as possible.
 - Implement tests specified in the plan.
+- Write testable code: put new behavior in a named, importable function with explicit inputs and a clear return value. Do not leave logic inline in an entry point such as `main()` when a test must exercise it.
+- When a task tests code from an earlier task, read that code first and test the function it actually defines. If the behavior a test needs is not reachable through a named function, extract it into one in the implementation task rather than guessing a name.
+- If the code a test needs is missing from context, name the missing function or file in your response instead of guessing it.
 
 ## Constraints
 
