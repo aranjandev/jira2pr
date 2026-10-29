@@ -1,14 +1,24 @@
 ---
-description: "Full feature workflow — start fresh from a JIRA ticket, or resume an in-progress feature from a PR link. Reads the ticket (or PR state), plans implementation, writes code, self-reviews, and submits a Pull Request."
+description: "Run the feature workflow end-to-end from a JIRA ticket."
 agent: "orchestrator"
-argument-hint: "JIRA ticket URL/key (e.g., PROJ-123) or PR URL/number (e.g., #42) to resume"
+argument-hint: "JIRA ticket key (e.g., PROJ-123) or URL"
 ---
-# Feature Workflow
 
-Implement a feature end-to-end, or resume one that was interrupted.
+# /feature
 
-Follow the canonical workflow defined in `agent-workflows/feature.md`, starting from **Phase 0: Bootstrap**.
+Execute the `feature` workflow defined in `.jira2pr/workflows/feature.workflow.yaml`, starting from `jira-ingest`.
 
-- If a **JIRA ticket** is provided: fresh start from Phase 1.
-- If a **PR link or number** is provided: fetch the PR state document, determine the current phase, and resume from the next phase.
-- If **neither** is provided: ask the user for a JIRA ticket key/URL or a PR link/number.
+## States
+
+| State | Worker | Success Criteria | Max Attempts |
+|-------|--------|-------------------|---------------|
+| `jira-ingest` | `jira-reader` | `jira-ingest` | 2 |
+| `plan` | `planner` | `planning` | 3 |
+| `implement` | `coder` | `None` | 4 |
+| `run-tests` | — (deterministic verification) | — | shared `implement-cycle` (5) |
+| `review` | `reviewer` | `None` | shared `implement-cycle` (5) |
+| `submit` | `pr-author` | `None` | 1 |
+| `done` | — | terminal (outcome: success) | — |
+| `human-review` | — | terminal (outcome: escalated) | — |
+
+For each non-terminal state with a worker: invoke the named worker agent. Unless the state sets `validation.supervisor: false`, invoke `supervisor` to evaluate its output against the state's success criteria. For a verification state (no worker): run the project's test and lint commands and treat a zero exit code as success; on failure, route back to `implement` with the output as feedback (see `.github/instructions/workflow-protocol.instructions.md` for the full protocol and `.jira2pr/artifacts/` for artifact schemas). Persist the outcome to `.jira2pr/state/<TICKET-KEY>.yaml` before transitioning to the next state.

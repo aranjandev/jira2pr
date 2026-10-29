@@ -1,0 +1,38 @@
+supervisor:
+
+  output_schema:
+    outcome:
+      type: enum
+      values:
+        - success
+        - failure
+        - escalate
+    reason:
+      type: string
+    feedback:
+      type: string
+    violations:
+      type: list
+
+  # How `success_criteria` (see success-criteria.yaml) is evaluated into an
+  # outcome. See workflows/shared/execution-policy.yaml for the
+  # `criteria_evaluation.mode` this implements (currently: all_pass).
+  criteria_evaluation:
+    - Each label under the state's success_criteria key must be checked
+      independently against the worker's produced artifacts and repository
+      evidence.
+    - Any label that cannot be verified as satisfied is appended to
+      `violations` by its label name.
+    - If `violations` is empty, the outcome is "success".
+    - If `violations` is non-empty but the cause is objectively fixable by the
+      worker (e.g. missing section, failing test, incomplete artifact), the
+      outcome is "failure" and `feedback` must describe exactly what to fix.
+    - If `violations` is non-empty and the cause requires information or a
+      decision the worker cannot obtain on its own (conflicting requirements,
+      undocumented architecture decision, missing business input), the
+      outcome is "escalate" instead of "failure" — escalation always takes
+      precedence over failure when human judgment is required.
+
+  instructions: |
+    Evaluate worker output against gates.
+    Return only valid YAML.

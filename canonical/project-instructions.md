@@ -52,26 +52,33 @@
 - JIRA credentials:
   - `JIRA_API_TOKEN` — Personal access token for JIRA REST API
   - `JIRA_BASE_URL` — Base URL of your JIRA instance (e.g., `https://yourcompany.atlassian.net`)
-
 <!-- AGENTS_SECTION:AUTO_GENERATED -->
 
 ## How Agents Contribute to Code
 
-> This section is managed by the jira2pr agent setup. Do not remove or modify it — agents rely on it to understand available tools and agents.
+> This section is managed by jira2pr. Do not remove or modify it. Agents rely on it to understand available agents and workflows.
 
-Agents in this project follow a structured, phase-driven workflow: they read a JIRA ticket, plan and implement the change, self-review, and submit a Pull Request. All agent behaviour is coordinated through the files under `{{AGENTS_DIR}}/`.
+Agents in this project execute **workflows**, deterministic state machines defined in `{{CORE_DIR}}/workflows/*.workflow.yaml` (for example, `feature`). Each state defines its worker, consumed and produced artifacts, success criteria, retry policy, and transitions.
 
-The **state file** (`{{AGENTS_DIR}}/state/<TICKET-KEY>.md`) is the single source of truth for workflow context. The PR body is a rendered view derived from it and updated at each phase boundary via `update-pull-request`. All agents write to state first, then render to the PR — never the other way around.
+Workflow execution depends on the platform:
 
-**Phase lifecycle:** `Planning` → `Implementing` → `Reviewing` → `Submitting` → `Ready`. The orchestrator drives all phase transitions via its embedded state machines (feature, bugfix, scope-creep). The pr-author acts only in the final phase: it commits and pushes code, finalizes the PR (marking it `Ready`), archives the state file, and registers the artifact.
+1. **Agent-driven platforms** such as Copilot and OpenCode use the **orchestrator** agent. It invokes the worker for the current state, asks the **supervisor** to evaluate the result, applies the workflow-defined transition, and persists state.
+2. **Runtime-driven platforms** such as Aider do not use an orchestrator agent. The jira2pr runtime invokes workers and the **supervisor**, applies workflow-defined transitions, and persists state.
+
+The **supervisor** has the same role in both models: evaluate completed worker output against the state's success criteria and return `success`, `failure`, or `escalate`. It does not define the next state; transitions come from the workflow YAML.
+
+Workflow state is the single source of truth and lives at `{{CORE_DIR}}/state/<TICKET-KEY>.yaml`, independent of the execution platform. Artifacts produced during execution (`requirements.md`, `plan.yaml`, `review.md`, etc.) are stored under `{{CORE_DIR}}/artifacts/<TICKET-KEY>/`.
+
+**Example feature lifecycle:** `jira-ingest` → `plan` → `implement` → `review` → `submit` → `done` (or `human-review` on escalation). The selected workflow YAML is authoritative. Retries are bounded per state; exhausting retries escalates rather than looping indefinitely.
 
 ### State & Artifact Architecture
 
-| Layer | File | Audience | Skill | Role |
-|-------|------|----------|-------|------|
-| **State file** | `{{AGENTS_DIR}}/state/<TICKET-KEY>.md` | Agents — source of truth | `manage-state` | Written first at every phase transition |
-| **PR body** | GitHub PR (live) | Human reviewers — rendered view | `update-pull-request` | Re-rendered from state after each phase transition |
+| Layer | Location | Owner |
+|-------|----------|-------|
+| **Workflow state** | `{{CORE_DIR}}/state/<TICKET-KEY>.yaml` | workflow executor; workers read, never write |
+| **Artifacts** | `{{CORE_DIR}}/artifacts/<TICKET-KEY>/<name>.md` | worker assigned to the current state |
+| **PR body** | GitHub PR | `pr-author` during `submit` |
 
-The state file is committed to git alongside code changes so context survives session restarts. At workflow completion the pr-author archives it to `{{AGENTS_DIR}}/state/archive/<TICKET-KEY>.md`. The artifact registry at `{{AGENTS_DIR}}/artifacts/REGISTRY.md` receives exactly one append-only entry per completed workflow via the `register-artifact` skill.
+The state file is committed with the workflow changes so execution can resume across sessions. On completion, it is archived to `{{CORE_DIR}}/state/archive/<TICKET-KEY>.yaml`.
 
 <!-- AGENTS_SECTION:DYNAMIC_TABLES -->

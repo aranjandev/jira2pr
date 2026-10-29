@@ -1,0 +1,10 @@
+# canonical/platform-extras/runtime/models.yaml
+
+models:
+  coder: github_copilot/claude-haiku-5.5 # ollama_chat/qwen3-coder:30b # github_copilot/claude-haiku-5.5
+  jira-reader: github_copilot/gpt-6-luna
+  planner: github_copilot/claude-sonnet-5.5
+  pr-author: github_copilot/gpt-6-luna
+  researcher: github_copilot/gpt-6-luna
+  reviewer: github_copilot/gpt-6.1-sol
+  supervisor: github_copilot/claude-haiku-5.5

@@ -1,0 +1,107 @@
+# Jira2PR Plan Schema
+#
+# The planner must produce plan.yaml using this structure.
+#
+# Rules:
+# - Output must be valid YAML.
+# - Include only files required to satisfy the requirements.
+# - Every task operates on exactly one repository file.
+# - Tasks must be ordered by dependency.
+# - Task IDs must be unique.
+# - file_path values must be relative to the repository root.
+# - edit_mode must be one of: create, modify, delete.
+# - dependencies contains task IDs that must complete before this task.
+# - Use [] when a list has no entries.
+# - Do not add fields that are not defined by this schema.
+
+version: 1
+
+# Concise description of the implementation approach.
+summary: ""
+
+# Ordered implementation units.
+tasks:
+
+  - id: T1
+
+    # Path relative to the repository root.
+    file_path: ""
+
+    # One of: create | modify | delete
+    edit_mode: modify
+
+    # Concrete instructions for the coder.
+    # Describe WHAT must change and relevant constraints.
+    # Do not include unrelated refactoring or optional improvements.
+    instructions: ""
+
+    # IDs of tasks that must complete before this task.
+    # Use [] when there are no dependencies.
+    dependencies: []
+
+  - id: T2
+
+    # Path relative to the repository root.
+    file_path: ""
+
+    # One of: create | modify | delete
+    edit_mode: create
+
+    # Concrete instructions for the coder.
+    # Describe WHAT must change and relevant constraints.
+    # Do not include unrelated refactoring or optional improvements.
+    instructions: ""
+
+    # IDs of tasks that must complete before this task.
+    # Use [] when there are no dependencies.
+    dependencies: []
+
+
+# Tests that must be created or modified as part of the implementation.
+#
+# Every test entry operates on exactly one repository file.
+tests:
+
+  - id: TEST1
+
+    # Repository-relative test file path.
+    file_path: ""
+
+    # One of: create | modify
+    edit_mode: modify
+
+    # Concrete instructions describing the tests the coder must add.
+    instructions: ""
+
+    # Behaviors or requirements this test verifies.
+    verifies:
+      - ""
+
+    # Implementation task IDs that must be completed before adding this test.
+    dependencies: []
+
+  - id: TEST2
+
+    # Repository-relative test file path.
+    file_path: ""
+
+    # One of: create | modify
+    edit_mode: create
+
+    # Concrete instructions describing the tests the coder must add.
+    instructions: ""
+
+    # Behaviors or requirements this test verifies.
+    verifies:
+      - ""
+
+    # Implementation task IDs that must be completed before adding this test.
+    dependencies: []
+
+
+# Implementation constraints that apply across tasks.
+constraints: []
+
+# Explicitly excluded work.
+# Use [] when there is nothing to declare.
+out_of_scope: []

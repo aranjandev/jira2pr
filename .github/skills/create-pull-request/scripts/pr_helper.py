@@ -168,20 +168,45 @@ def create_github_pr(owner_repo: str, token: str, title: str, body: str,
     print(f"PR_NUMBER={resp['number']}")
 
 
+def bitbucket_headers(token: str) -> dict:
+    username = get_bitbucket_username()
+    credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
+    return {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/json",
+    }
+
+
+def get_bitbucket_default_branch(owner_repo: str, token: str) -> str:
+    status, resp = http_request(
+        "GET",
+        f"https://api.bitbucket.org/2.0/repositories/{owner_repo}",
+        bitbucket_headers(token),
+    )
+    if status != 200:
+        print(f"ERROR: Bitbucket API returned HTTP {status}", file=sys.stderr)
+        print(json.dumps(resp, indent=2), file=sys.stderr)
+        sys.exit(1)
+
+    name = (resp.get("mainbranch") or {}).get("name", "")
+    if not name:
+        print("ERROR: Could not determine Bitbucket repository default branch", file=sys.stderr)
+        sys.exit(1)
+    return name
+
+
 def create_bitbucket_pr(owner_repo: str, token: str, title: str, body: str,
                         base: str, branch: str):
+    if not base:
+        base = get_bitbucket_default_branch(owner_repo, token)
+
     payload = {
         "title": title,
         "description": body,
         "source": {"branch": {"name": branch}},
         "destination": {"branch": {"name": base}},
     }
-    username = get_bitbucket_username()
-    credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {credentials}",
-        "Content-Type": "application/json",
-    }
+    headers = bitbucket_headers(token)
     status, resp = http_request(
         "POST",
         f"https://api.bitbucket.org/2.0/repositories/{owner_repo}/pullrequests",

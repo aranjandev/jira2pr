@@ -1,0 +1,85 @@
+# Capability bindings describe how a capability is resolved.
+#
+# Bindings intentionally identify logical handlers rather than
+# filesystem paths or platform-specific tools.
+#
+# Platform adapters map handlers to concrete implementations.
+#
+# Examples:
+#
+#   jira
+#       -> .jira2pr/runtime/integrations/jira.py      (Copilot package)
+#       -> runtime.integrations.jira                  (Aider runtime)
+#       -> Jira MCP server                            (future platform)
+#
+# Binding kinds:
+#
+#   native
+#       Capability is fulfilled by platform-native tooling.
+#
+#   script
+#       Capability is fulfilled by a named runtime handler.
+#       Platform adapters resolve the handler to an actual
+#       implementation.
+
+capabilities:
+
+  jira.read:
+    description: Fetch and parse a JIRA issue
+    type: context
+    binding:
+      kind: script
+      handler: jira
+
+  web.search:
+    description: Search external documentation and websites
+    type: context
+    binding:
+      kind: native
+
+  diff.read:
+    description: Read repository diff
+    type: context
+    binding:
+      kind: native
+
+  test.results:
+    description: Read latest test execution results
+    type: context
+    binding:
+      kind: native
+
+  git.status:
+    description: Read git status and branch information
+    type: context
+    binding:
+      kind: script
+      handler: git
+
+  git.commit:
+    description: Create git commits
+    type: action
+    binding:
+      kind: script
+      handler: git
+
+  git.push:
+    description: Push commits
+    type: action
+    binding:
+      kind: script
+      handler: git
+
+  pr.update:
+    description: Create or update pull requests
+    type: action
+    binding:
+      kind: script
+      handler: github
+
+  pr.create:
+    description: Create a new pull request
+    type: action
+    binding:
+      kind: script
+      handler: github
