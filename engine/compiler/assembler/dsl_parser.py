@@ -50,6 +50,25 @@ def as_str_tuple(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in value if item)
 
 
+def _parse_iteration_cap(raw: Any) -> tuple[int | None, int | None]:
+    """Return ``(base, per_task)`` for ``retry.max_total_iterations``.
+
+    Accepts a plain integer (fixed cap, ``per_task`` is None) or a mapping
+    ``{base: int, per_task: int}`` where the effective cap is
+    ``base + per_task * task_count``.
+    """
+    if raw is None:
+        return None, None
+    if isinstance(raw, dict):
+        base = raw.get("base")
+        per_task = raw.get("per_task")
+        return (
+            int(base) if base is not None else None,
+            int(per_task) if per_task is not None else None,
+        )
+    return int(raw), None
+
+
 def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
     """Parse one ``*.workflow.yaml`` file. Returns None if the file is empty."""
     if path.stat().st_size == 0:
@@ -90,16 +109,15 @@ def parse_workflow_file(path: Path, root: Path) -> WorkflowSpec | None:
         source_path = str(path.relative_to(root))
     except ValueError:
         source_path = str(path)
-    workflow_max_total_iterations = (raw.get("retry") or {}).get("max_total_iterations")
+    base_cap, per_task_cap = _parse_iteration_cap((raw.get("retry") or {}).get("max_total_iterations"))
     return WorkflowSpec(
         name=name,
         version=int(raw.get("version", 1)),
         initial_state=raw["initial_state"],
         states=states,
         source_path=source_path,
-        max_total_iterations=(
-            int(workflow_max_total_iterations) if workflow_max_total_iterations is not None else None
-        ),
+        max_total_iterations=base_cap,
+        max_total_iterations_per_task=per_task_cap,
         budgets={str(k): int(v) for k, v in (raw.get("budgets") or {}).items()},
     )
 

@@ -37,7 +37,8 @@ def test_run_tests_is_deterministic_verification():
     assert states["run-tests"].worker is None
     assert states["run-tests"].budget == "implement-cycle"
     assert reg.workflows["feature"].budgets == {"implement-cycle": 5}
-    assert reg.workflows["feature"].max_total_iterations == 30
+    assert reg.workflows["feature"].max_total_iterations == 10
+    assert reg.workflows["feature"].max_total_iterations_per_task == 2
     assert states["implement"].kind == "worker"
     assert states["implement"].supervised is False
     assert states["review"].supervised is True

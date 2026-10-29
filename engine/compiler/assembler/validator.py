@@ -100,6 +100,16 @@ def validate(
                 f"(found: {workflow.max_total_iterations})"
             )
 
+        if (
+            workflow.max_total_iterations_per_task is not None
+            and workflow.max_total_iterations_per_task < 0
+        ):
+            errors.append(
+                f"{src}: retry.max_total_iterations.per_task must be "
+                f"zero or a positive integer "
+                f"(found: {workflow.max_total_iterations_per_task})"
+            )
+
         for name, size in workflow.budgets.items():
             if size < 1:
                 errors.append(f"{src}: budgets.{name} must be at least 1 (found: {size})")

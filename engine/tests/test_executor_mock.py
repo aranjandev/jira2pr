@@ -13,7 +13,11 @@ from assembler.registry import CanonicalRegistry
 from assembler.writer import FileWriter
 from runtime.backends.base import BackendInvocationError
 from runtime.backends.mock import DEFAULT_PLAN, MockBackend
-from runtime.workflow.executor import WorkflowExecutor
+from runtime.workflow.executor import (
+    WorkflowExecutor,
+    effective_iteration_cap,
+    plan_task_count,
+)
 from runtime.workflow.loader import RuntimeProject
 from runtime.workflow.state_manager import StateManager
 
@@ -122,7 +126,11 @@ def test_retry_then_escalation(project, fake_subprocess):
 def test_global_iteration_cap_forces_escalation(project, fake_subprocess):
     # Every state succeeds, so no per-state retry cap can trip. Only the
     # workflow-level max_total_iterations should stop the run.
-    project.workflows["feature"] = replace(project.workflows["feature"], max_total_iterations=3)
+    project.workflows["feature"] = replace(
+        project.workflows["feature"],
+        max_total_iterations=3,
+        max_total_iterations_per_task=None,
+    )
 
     state = WorkflowExecutor(project, MockBackend()).start("feature", "PROJ-5")
     assert state.status == "escalated"
@@ -130,6 +138,36 @@ def test_global_iteration_cap_forces_escalation(project, fake_subprocess):
     assert state.total_iterations == 3
     assert state.retry_counts == {}
     assert "iteration cap" in state.escalations[-1]["reason"]
+
+
+def test_effective_iteration_cap_scales_with_plan_size(project):
+    workflow = project.workflows["feature"]
+    policy = project.execution_policy
+    assert effective_iteration_cap(workflow, policy, 0) == 10
+    assert effective_iteration_cap(workflow, policy, 2) == 14
+    assert effective_iteration_cap(workflow, policy, 30) == 70
+
+
+def test_fixed_iteration_cap_ignores_plan_size(project):
+    workflow = replace(project.workflows["feature"], max_total_iterations_per_task=None)
+    assert effective_iteration_cap(workflow, project.execution_policy, 30) == 10
+
+
+def test_plan_task_count_counts_tasks_and_tests(tmp_path):
+    plan = tmp_path / "plan.yaml"
+    plan.write_text(
+        "tasks:\n  - id: T1\n    file_path: a.py\n"
+        "tests:\n  - id: T2\n    file_path: test_a.py\n",
+        encoding="utf-8",
+    )
+    assert plan_task_count(plan) == 2
+    assert plan_task_count(tmp_path / "missing.yaml") == 0
+
+
+def test_plan_task_count_tolerates_malformed_plan(tmp_path):
+    plan = tmp_path / "plan.yaml"
+    plan.write_text("tasks: [\n", encoding="utf-8")
+    assert plan_task_count(plan) == 0
 
 
 def test_malformed_supervisor_output_treated_as_failure(project, fake_subprocess):

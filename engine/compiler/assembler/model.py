@@ -82,6 +82,9 @@ class WorkflowSpec:
     states: dict[str, StateSpec]
     source_path: str = ""
     max_total_iterations: int | None = None  # None -> use ExecutionPolicy.max_total_iterations
+    # Extra iterations granted per plan task once plan.yaml exists. The
+    # effective cap is max_total_iterations + this * task_count.
+    max_total_iterations_per_task: int | None = None
     # Named budgets shared by several states, e.g. {"implement-cycle": 5}.
     budgets: dict[str, int] = field(default_factory=dict)
 

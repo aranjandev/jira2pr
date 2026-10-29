@@ -12,6 +12,11 @@ implement and review.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
+from assembler.model import ExecutionPolicy, WorkflowSpec
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow import transitions
@@ -51,6 +56,46 @@ from runtime.workflow.worker_invoker import (
 )
 
 logger = get_logger("workflow.executor")
+
+
+def plan_task_count(plan_path: Path) -> int:
+    """Count implementation and test tasks in plan.yaml; 0 before it exists."""
+
+    if not plan_path.exists():
+        return 0
+
+    try:
+        data = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        # A malformed plan from a failed attempt is handled by plan validation.
+        return 0
+
+    if not isinstance(data, dict):
+        return 0
+
+    return sum(
+        1
+        for key in ("tasks", "tests")
+        for task in data.get(key) or []
+        if isinstance(task, dict)
+    )
+
+
+def effective_iteration_cap(
+    workflow: WorkflowSpec,
+    policy: ExecutionPolicy,
+    task_count: int,
+) -> int:
+    """Return base + per_task * task_count, or the fixed cap when no per_task is set."""
+
+    base = (
+        workflow.max_total_iterations
+        if workflow.max_total_iterations is not None
+        else policy.max_total_iterations
+    )
+    if workflow.max_total_iterations_per_task is None:
+        return base
+    return base + workflow.max_total_iterations_per_task * task_count
 
 
 class WorkflowExecutor:
@@ -451,10 +496,13 @@ class WorkflowExecutor:
             # Global iteration limit
             # ----------------------------------------------------------
 
-            max_total_iterations = (
-                workflow.max_total_iterations
-                if workflow.max_total_iterations is not None
-                else policy.max_total_iterations
+            max_total_iterations = effective_iteration_cap(
+                workflow,
+                policy,
+                plan_task_count(
+                    self._project.artifacts_dir(ticket_key)
+                    / "plan.yaml"
+                ),
             )
 
             if (

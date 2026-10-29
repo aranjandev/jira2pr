@@ -861,7 +861,8 @@ Defined by `workflows/shared/execution-policy.yaml` and each state's `retry` / `
   `max_attempts` explicitly. Exhaustion escalates (`on_exhaustion: escalate`). If a state declares neither `max_attempts`
   nor `budget`, the policy default (`default_max_attempts`, 1) applies to self-loops only.
 - `retry.budget: <name>` draws a state's failures from a shared workflow budget (`budgets:`) instead of its own counter.
-- `retry.max_total_iterations` (workflow override, else policy default) bounds total state visits.
+- `retry.max_total_iterations` (workflow override, else policy default) bounds total state visits. A `{base, per_task}`
+  override scales the cap with plan size: `base + per_task × N`, where N counts the tasks and tests in `plan.yaml`.
 - `escalate` always routes to the terminal `human-review` state (status `escalated`).
 - `done` is the terminal success state (status `completed`).
 
@@ -896,12 +897,64 @@ The canonical `feature` workflow counts as follows:
 
 The `attempt` number in logs, history, and feedback files is the visit number of the state in the run. It is not the
 counter value. A shared budget therefore does not make `attempt` look like a per-state retry count. Total visits are
-also capped by `max_total_iterations` (30 in the canonical workflow). A full implement → run-tests → review cycle costs
-3 visits, and each counted cycle adds 3. Five shared cycles plus the first pass need about 22 visits. The remaining
-headroom covers `plan` and `jira-ingest` retries.
+also capped by `max_total_iterations` (10 + 2 × plan task count in the canonical workflow). A full implement → run-tests → review cycle costs
+3 visits, and each counted cycle adds 3. Five shared cycles plus the first pass need about 22 visits, which requires a plan of at least 6 tasks (10 + 2 × 6 = 22). Smaller plans hit the cap before the shared budget is exhausted, which is intended. The remaining headroom covers `plan` and `jira-ingest` retries.
 
 Other exceptions, such as missing plan files, dependency errors, and Aider precondition errors, are not counted. They
 stop the run.
+
+### Worked example: how the budgets interact
+
+Canonical settings: `max_total_iterations: {base: 10, per_task: 2}`, `budgets: implement-cycle: 5`, `implement`
+`max_attempts: 4`, and `jira-ingest` `max_attempts: 2`. The cap is checked before every state visit. A visit is
+blocked once `total_iterations` has reached the cap.
+
+**Cap for this plan:** the planner writes 3 tasks: `T1` (implement `a.py`), `T2` (implement `b.py`), and `T3` (test
+`test_a.py`). N = 3, so the cap is 10 + 2 × 3 = **16**.
+
+**Run A: a few recoverable failures, then success**
+
+| Visit | State | What happens | Counter changes | Total |
+|---|---|---|---|---|
+| 1 | jira-ingest | Succeeds | — | 1 |
+| 2 | plan | Succeeds | — | 2 |
+| 3 | implement | `T1`, `T2` edited. `T3` fails with `llm-error` and routes back to `implement`. | `implement:T3` = 1 | 3 |
+| 4 | implement | Resumes at `T3`, which passes. | — | 4 |
+| 5 | run-tests | Tests fail and route to `implement` | `implement-cycle` = 1 | 5 |
+| 6 | implement | Fix pass from the test output | — | 6 |
+| 7 | run-tests | Pass | — | 7 |
+| 8 | review | `changes_requested` naming `a.py` and routes to `implement` | `implement-cycle` = 2 | 8 |
+| 9 | implement | Only the `T1` (`a.py`) task reruns | — | 9 |
+| 10 | run-tests | Pass | — | 10 |
+| 11 | review | `approve` | — | 11 |
+| 12 | submit | Succeeds, then `done` | — | 12 |
+
+The run completes with 12 of 16 visits used and 2 of 5 shared cycles used. Each failure costs one visit, and that
+visit counts toward the cap as well as toward its own counter.
+
+**Run B: `jira-ingest` returns invalid output twice**
+
+1. Visit 1: invalid output. The failure is a self-loop, so `jira-ingest` = 1 (limit 2) and the run retries.
+2. Visit 2: invalid output again. `jira-ingest` = 2 reaches the limit, so the run escalates to `human-review`.
+
+Two visits are used and the run escalates.
+
+**Run C: the cap binds before the shared budget**
+
+Without failures, the run takes 6 visits (jira-ingest, plan, implement, run-tests, review, submit). Each
+`implement → run-tests → review` cycle costs 3 more visits. With a cap of 16, the first pass uses 5 visits, and three
+full cycles bring the total to 14. The fourth cycle then starts, and the cap stops the run after two of its visits.
+The run escalates with 4 of the 5 `implement-cycle` units used.
+
+So with a 3-task plan, the cap, not `implement-cycle`, is the limit that matters. A larger plan raises the cap by 2
+per task, which lets more cycles run.
+
+| Knob | Counts | When it's exhausted |
+|---|---|---|
+| `retry.max_total_iterations` (`base`, `per_task`) | Every state visit | Escalates before the next visit once `total_iterations` ≥ base + per_task × N |
+| `budgets.implement-cycle` | `run-tests` failures and `review` `changes_requested` | The failure that reaches 5 escalates |
+| `implement` `max_attempts: 4` | Each task's failures (`implement:<task>`) | The 4th failure on the same task escalates |
+| `jira-ingest` `max_attempts: 2` | Invalid `jira-ingest` output | The 2nd invalid output escalates |
 
 ## State file
 
@@ -1042,7 +1095,9 @@ version: 1
 workflow: feature
 initial_state: jira-ingest
 retry:
-  max_total_iterations: 30        # optional override of the policy default (40)
+  max_total_iterations:           # optional; integer, or {base, per_task} to scale with plan size
+    base: 10
+    per_task: 2
 budgets:
   implement-cycle: 5              # shared by every state that sets retry.budget
 states:

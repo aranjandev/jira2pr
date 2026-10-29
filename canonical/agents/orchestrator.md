@@ -14,7 +14,8 @@ sub-agent and act only on the outcome it returns.
 - `workflow`: the `*.workflow.yaml` for the requested workflow —
   `initial_state`, per-state `worker`/`consumes`/`produces`/
   `validation.success_criteria`/`retry.max_attempts`/`transitions`, and an
-  optional top-level `retry.max_total_iterations` override.
+  optional top-level `retry.max_total_iterations` override, either an integer or `{base, per_task}`
+  (cap = base + per_task × plan task count).
 - `state`: the persisted `<TICKET-KEY>.yaml` — `workflow`, `status`,
   `current_state`, `retry_counts`, `total_iterations`, `artifacts`,
   `decisions`, `escalations`, `history`.
@@ -43,7 +44,7 @@ merge steps.
     - stop
 
 - step: check_global_cap  # bounds oscillation between ANY states, not just self-retries
-  cap: workflow.retry.max_total_iterations or {{DEFAULT_MAX_TOTAL_ITERATIONS}}
+  cap: workflow.retry.max_total_iterations.base + workflow.retry.max_total_iterations.per_task × plan task count (tasks + tests in plan.yaml; 0 before plan.yaml exists), or workflow.retry.max_total_iterations when it is a plain integer, or {{DEFAULT_MAX_TOTAL_ITERATIONS}} when unset
   if: state.total_iterations >= cap
   then:
     - escalate(current.name, reason: "global iteration cap exceeded")

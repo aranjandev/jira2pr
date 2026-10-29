@@ -117,7 +117,8 @@ def test_cross_state_failure_without_max_attempts_is_plain_routing(policy):
 
 
 def test_workflow_level_max_total_iterations_parsed(workflow):
-    assert workflow.max_total_iterations == 30
+    assert workflow.max_total_iterations == 10
+    assert workflow.max_total_iterations_per_task == 2
 
 
 def test_explicit_escalate_outcome(workflow, policy):

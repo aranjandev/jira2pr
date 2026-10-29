@@ -9,8 +9,12 @@ initial_state: jira-ingest
 # oscillating, overriding the shared default in
 # workflows/shared/execution-policy.yaml. Exceeding it escalates to the same
 # terminal as any other escalation (see terminal_outcomes.escalated there).
+# The cap is base + per_task * N, where N is the number of tasks in plan.yaml
+# (implementation and test). Before plan.yaml exists, only base applies.
 retry:
-  max_total_iterations: 30
+  max_total_iterations:
+    base: 10
+    per_task: 2
 
 # Shared budgets. Each failed run-tests verification and each review
 # changes_requested sends implement back into its cycle, and both draw from
