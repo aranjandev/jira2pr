@@ -15,8 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from assembler.model import ExecutionPolicy, WorkflowSpec
+
 from runtime.backends.base import LLMBackend
 from runtime.logging_config import get_logger
 from runtime.workflow import transitions
