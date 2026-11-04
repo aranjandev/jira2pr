@@ -43,6 +43,7 @@ def validate(
     - capability references and types
     - delegation targets
     - artifact schemas
+    - platform override files
     - workflow reachability
     - platform-specific agent model mappings
 
@@ -241,6 +242,32 @@ def validate(
                 f"'{agent.artifact_schema}' does not exist under "
                 "canonical/artifacts/"
             )
+
+    # ------------------------------------------------------------------
+    # Platform overrides
+    # ------------------------------------------------------------------
+
+    overrides = registry.overrides_dir(platform)
+
+    if overrides is not None:
+        for path in sorted((overrides / "agents").glob("*.md")):
+            if path.stem not in agent_slugs:
+                errors.append(
+                    f"overrides/{platform}/agents/{path.name}: "
+                    f"'{path.stem}' is not a known agent"
+                )
+
+        canonical_artifacts = {
+            p.name for p in registry.artifact_schema_files()
+        }
+
+        for path in sorted((overrides / "artifacts").glob("*")):
+            if path.name not in canonical_artifacts:
+                errors.append(
+                    f"overrides/{platform}/artifacts/{path.name}: "
+                    "no canonical artifact schema with this name under "
+                    "canonical/artifacts/"
+                )
 
     # ------------------------------------------------------------------
     # Platform model mapping

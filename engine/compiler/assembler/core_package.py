@@ -31,7 +31,7 @@ def assemble_core(registry: CanonicalRegistry, writer: FileWriter, platform: str
         destination,
     )
 
-    for schema_file in registry.artifact_schema_files():
+    for schema_file in registry.artifact_schema_files(platform):
         writer.copy(schema_file, f"{CORE_PREFIX}/artifacts/{schema_file.name}")
 
     writer.copy(

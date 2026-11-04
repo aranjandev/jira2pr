@@ -108,19 +108,50 @@ class CanonicalRegistry:
     def agent(self, slug: str) -> AgentSpec | None:
         return next((a for a in self.agents if a.slug == slug), None)
 
-    def agent_body(self, slug: str) -> str:
-        """Read the canonical agent markdown body."""
-        path = self.canonical_dir / "agents" / f"{slug}.md"
+    def overrides_dir(self, platform: str | None) -> Path | None:
+        """Return the overrides/<platform>/ directory, or None."""
+        if platform is None:
+            return None
+        d = self.canonical_dir / "overrides" / platform
+        return d if d.is_dir() else None
+
+    def agent_path(self, slug: str, platform: str | None = None) -> Path:
+        """Resolve the agent markdown file, preferring a platform override."""
+        overrides = self.overrides_dir(platform)
+        if overrides is not None:
+            override = overrides / "agents" / f"{slug}.md"
+            if override.is_file():
+                return override
+        return self.canonical_dir / "agents" / f"{slug}.md"
+
+    def agent_body(self, slug: str, platform: str | None = None) -> str:
+        """Read the agent markdown body, preferring a platform override."""
+        path = self.agent_path(slug, platform)
         if not path.exists():
             raise FileNotFoundError(f"Canonical agent file not found: {path}")
         return path.read_text()
 
-    def artifact_schema_files(self) -> list[Path]:
-        """List all artifact schema markdown/yaml files (excludes REGISTRY.md)."""
+    def artifact_schema_files(self, platform: str | None = None) -> list[Path]:
+        """List all artifact schema markdown/yaml files (excludes REGISTRY.md).
+
+        A same-named file under overrides/<platform>/artifacts/ replaces the
+        canonical one.
+        """
         d = self.canonical_dir / "artifacts"
         if not d.is_dir():
             return []
-        return sorted(p for p in itertools.chain(d.glob("*.md"), d.glob("*.yaml")) if p.name != "REGISTRY.md")
+        files = {
+            p.name: p
+            for p in itertools.chain(d.glob("*.md"), d.glob("*.yaml"))
+            if p.name != "REGISTRY.md"
+        }
+        overrides = self.overrides_dir(platform)
+        if overrides is not None:
+            for name in files:
+                override = overrides / "artifacts" / name
+                if override.is_file():
+                    files[name] = override
+        return sorted(files.values(), key=lambda p: p.name)
 
     def artifact_schema_body(self, filename: str) -> str:
         path = self.canonical_dir / "artifacts" / filename

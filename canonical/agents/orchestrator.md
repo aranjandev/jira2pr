@@ -57,7 +57,12 @@ merge steps.
   - produced = invoke(current.worker, consumes: current.consumes)
 
 - step: invoke_supervisor
-  - result = invoke(supervisor, criteria: current.validation.success_criteria, input: produced)
+  if: current.validation.supervisor == false
+  then:
+    # the state opted out of supervision; the worker's completion is success
+    - result = {outcome: success, reason: "supervisor evaluation is disabled for this state"}
+  else:
+    - result = invoke(supervisor, criteria: current.validation.success_criteria, input: produced)
   # result.outcome is one of: success | failure | escalate
   # you never judge produced yourself — only result.outcome counts
 
